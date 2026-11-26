@@ -74,6 +74,7 @@ import useConversationPreview from '../components/useConversationPreview'
 const loadWorkshopConversation = () => import('../components/workshop/WorkshopConversation')
 const WorkshopConversation = React.lazy(loadWorkshopConversation)
 import { WorkshopOutcomes, WorkshopStatus } from '../components/workshop/WorkshopChrome'
+import GridPrintButton from '../components/workshop/GridPrintButton'
 import { workshopNamesSlate } from '../../api/common/workshop-notes.mjs'
 import { MAX_BOARDS, slateBoards } from '../../api/common/slate-boards.mjs'
 import CommentDrawer from '../components/CommentDrawer'
@@ -1424,6 +1425,9 @@ export default function Canvas() {
               <LineToolStatus phone={phone} onCancel={() => slate.current?.v2?.cancelLineTool?.()} />}
             {workshopSlate && workshop.active && !phone &&
               <WorkshopStatus board={boards.find(board => board.error || board.saving || board.failure) ?? current} conversationOpen={conversationVisible} onReview={() => setNativeChatOpen(true)} />}
+            {/* A grid sheet's Print / Export PDF: this page or all pages, as its notes are drawn (gridPrint.js). */}
+            {workshopSlate && !asEmbed && boards.filter(board => board.model?.kind === 'grid').slice(0, 1).map(board =>
+              <GridPrintButton key={board.boardId} board={board} engine={slate.current?.v2} />)}
           </div>
           {/* On a phone the strip has a row of its own under the canvas, so it covers no card. */}
           {workshopSlate && workshop.active && phone &&

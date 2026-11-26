@@ -18,6 +18,7 @@ const renderer = createStillRenderer({
   model: () => import('slateboxjs/workshops/model'),
   boards: () => import('slateboxjs/boards'),
   nest: () => import('slateboxjs/boards/nest'),
+  grid: () => import('slateboxjs/boards/grid'),
   behaviour: () => import('slateboxjs/workshops/behaviour'),
   Slate: () => import('slateboxjs').then((module) => module.Slate),
 })

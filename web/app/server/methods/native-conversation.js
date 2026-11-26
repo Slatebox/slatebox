@@ -6,6 +6,7 @@ import {resolvePresentationSlate} from './creative-slates'
 import {sharedSaveConditions} from './native-slate-save.mjs'
 import {CREDIT_REFUSALS,existingDrawingRequest,nativeCanvasDraft,nativeRequestKind} from '../../imports/api/common/native-canvas-conversation.mjs'
 import {builderBoard,builderBrief,builderDescription,builderSaid} from '../../imports/api/common/builder-freeform.mjs'
+import {gridDescription} from '../../imports/api/common/builder-grid.mjs'
 import {noteRequest,noteRequestProblem} from '../../imports/api/common/note-requests.mjs'
 import {workshopFromLaneBrief} from '../../imports/api/common/native-lane-brief.mjs'
 import {businessBoardFromBrief,businessBoardSaid} from '../../imports/api/common/business-board-brief.mjs'
@@ -54,6 +55,9 @@ Meteor.methods({
     // A smart component described on a builder slate with no board yet is a board of lanes, whatever its words
     // (builder-freeform.mjs): drafted by the agent, or started here.
     const freeform=asked==='draw' && builderDescription(board,message)
+    // A composed page to print ("snappable congruent pieces to compose new printable materials") is a grid sheet: a page of
+    // cells and a tray of tiles (builder-grid.mjs), not lanes.
+    const grid=freeform && gridDescription(message)
     const kind=freeform ? 'lanes' : asked
     if(kind==='draw') throw new Meteor.Error('invalid-turn','Drawing requests use canvasConversation.preview.')
     // A library entry (Add a retro): any editor may add one, beside the boards the slate holds, up to 8
@@ -82,14 +86,14 @@ Meteor.methods({
       // agent, starts the board here instead (builderBoard): a description always makes a board.
       let asked=null
       if(ai && message.trim().length>=10) {
-        try {asked=await Meteor.callAsync('workshops.draft',builderBrief(message),'component',undefined,shareId)}
+        try {asked=await Meteor.callAsync('workshops.draft',builderBrief(message),grid ? 'grid' : 'component',undefined,shareId)}
         catch(e) {
           if(e?.error==='busy' || e?.details?.pay || CREDIT_REFUSALS.includes(e?.error)) throw e
           console.warn('[nativeCanvas.preview] builder draft fell back to a starter:',e?.error || e?.message)
         }
       }
       let repairs
-      ;({workshop:generated,drafted,repairs}=builderBoard(asked,message))
+      ;({workshop:generated,drafted,repairs}=grid ? builderBoard(asked,message,{kind:'grid'}) : builderBoard(asked,message))
       if(repairs.length) console.info('[nativeCanvas.preview] builder draft repaired:',repairs.join('; '))
       if(asked && !drafted) console.warn('[nativeCanvas.preview] builder draft failed the quality gate; started from the words')
       // A visitor who is not signed in is told signing in lets the agent draft it (builderSaid).
@@ -113,7 +117,7 @@ Meteor.methods({
       generated=await Meteor.callAsync('workshops.draft',prompt,kind==='lanes'?'lanes':'map',undefined,shareId)
     }
     let draft
-    try {draft=nativeCanvasDraft(board,message,id,generated,samples,freeform ? {kind:'lanes'} : {})}
+    try {draft=nativeCanvasDraft(board,message,id,generated,samples,freeform ? {kind:grid ? 'grid' : 'lanes'} : {})}
     catch(e){throw new Meteor.Error('invalid-turn',e.message)}
     // A library launch plan launches on the day the request names (“… launching in March”), not on the sample's third Friday.
     if(draft.component) draft={...draft,workshop:datedLaunchPlan(draft.workshop,message)}
@@ -131,7 +135,7 @@ Meteor.methods({
       ...(kind==='board' && {said:businessBoardSaid(draft.workshop)}),
       // A described smart component: what was made, and how it behaves (its rulebook's lines: a drafted board's lane
       // limits too, which it carries as capacities, not rules).
-      ...(freeform && {said:builderSaid(draft.workshop,{drafted,guest}),title:draft.workshop.title,rules:rulebook().lines(draft.workshop),smart:true}),
+      ...(freeform && {said:builderSaid(draft.workshop,{drafted,guest,message}),title:draft.workshop.title,rules:rulebook().lines(draft.workshop),smart:true}),
       ...(draft.replace && {replace:true}), ...(draft.beside && {beside:true,title:draft.workshop.title}),
       // A library entry: which one, and how it behaves (the lines of its "How this board behaves" note).
       ...(draft.component && {component:draft.component,title:draft.workshop.title,rules:draft.workshop.behaviour ? rulebook().lines(draft.workshop) : []}),

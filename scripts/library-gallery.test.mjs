@@ -44,7 +44,7 @@ test('the list filters by kind and category, and a visitor sees published items 
   await env.run(env.person('owner'), 'library.submit', { kind: 'slate', shareId: 'many', summary: 'Many notes' }, { confirmed: true })
 
   const all = await env.run(visitor, 'library.list', listInput({}))
-  assert.equal(all.total, 20)
+  assert.equal(all.total, 21)
   const slates = await env.run(visitor, 'library.list', listInput({ kind: 'slate' }))
   assert.deepEqual(slates.items.map(item => item.id), [slateId])
   const decide = await env.run(visitor, 'library.list', listInput({ kind: 'component', category: 'decide' }))
@@ -62,7 +62,7 @@ test('the list filters by kind and category, and a visitor sees published items 
   const waiting = env.world.library.items.docs.find(doc => doc.status === 'submitted')
   await assert.rejects(env.run(visitor, 'library.get', { itemId: waiting.slug }), { status: 404 })
   // The count line reads the stats.
-  assert.equal(countLine(await env.run(visitor, 'library.stats', {})), '19 smart components, 1 slate, 0 presentations')
+  assert.equal(countLine(await env.run(visitor, 'library.stats', {})), '20 smart components, 1 slate, 0 presentations')
 })
 
 test('a guest opens a copy of a published slate: a private slate of theirs, its provenance kept; copies count once per signed-in person', async (t) => {
@@ -129,7 +129,7 @@ test('slatebox.com\'s ?copy=1 runs once: the page reads the flag, then puts the 
 
 test('the gallery\'s words: tabs, chips, author, provenance, uses, license, version, and the URL its filters live in', () => {
   assert.deepEqual(KIND_TABS.map(tab => tab.label), ['All', 'Smart components', 'Slates', 'Presentations'])
-  assert.deepEqual(CATEGORY_CHIPS.map(chip => chip.label), ['All', 'Plan', 'Decide', 'Meetings', 'Track', 'Map'])
+  assert.deepEqual(CATEGORY_CHIPS.map(chip => chip.label), ['All', 'Plan', 'Decide', 'Meetings', 'Track', 'Map', 'Make & print'])
   assert.equal(countLine({ components: { total: 1 }, slates: 2, presentations: 1 }), '1 smart component, 2 slates, 1 presentation')
   assert.equal(authorLine({ origin: 'builtin', authorName: 'Slatebox' }), 'Built by Slatebox')
   assert.equal(authorLine({ origin: 'user', authorName: 'Ada Lee' }), 'By Ada Lee')

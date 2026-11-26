@@ -11,6 +11,7 @@ import { said } from './plain-words.mjs'
 import { useBoardChat } from './lane-conversation.mjs'
 import { planChat } from './plan-chat.mjs'
 import { nestChat } from './nest-chat.mjs'
+import { gridChat } from './grid-chat.mjs'
 
 const N = '(\\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|twelve)'
 const words = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve']
@@ -215,6 +216,10 @@ export function proposeBoardChange(board, message, selection = null, actor = nul
   const nest = nestChat(board, text, actor, String(message ?? ''))
   if (nest?.reply) return { reply: nest.reply }
   if (nest?.edits) return make(board, nest.edits, actor)
+  // A grid sheet's own sentences (grid-chat.mjs): its page and grid, tiles, pages, rules, and print (an action the page runs).
+  const grid = gridChat(board, text, selection)
+  if (grid?.reply) return { reply: grid.reply, ...(grid.action && { action: grid.action }) }
+  if (grid?.edits) return make(board, grid.edits, actor)
   const answer = takesRules(board) || businessKind(board) ? question(board, text) : null
   if (answer) return answer
   if (/\?$/.test(text)) return null

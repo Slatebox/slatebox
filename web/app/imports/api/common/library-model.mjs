@@ -7,8 +7,8 @@
 
 export const LIBRARY_KINDS = Object.freeze(['component', 'slate', 'presentation', 'integration'])
 // The engine catalogue's groups less "All", which is a filter, not a category (slateboxjs/catalog catalogGroups).
-export const LIBRARY_CATEGORIES = Object.freeze(['plan', 'decide', 'meetings', 'track', 'map'])
-export const CATEGORY_LABELS = Object.freeze({ plan: 'Plan', decide: 'Decide', meetings: 'Meetings', track: 'Track', map: 'Map' })
+export const LIBRARY_CATEGORIES = Object.freeze(['plan', 'decide', 'meetings', 'track', 'map', 'make'])
+export const CATEGORY_LABELS = Object.freeze({ plan: 'Plan', decide: 'Decide', meetings: 'Meetings', track: 'Track', map: 'Map', make: 'Make & print' })
 export const KIND_LABELS = Object.freeze({ component: 'smart component', slate: 'slate', presentation: 'presentation', integration: 'integration' })
 // An integration's categories: the agent gallery's chips (enterprise/common/gallery.mjs GROUPS, same ids and words).
 export const INTEGRATION_CATEGORIES = Object.freeze(['work', 'business', 'research', 'web'])

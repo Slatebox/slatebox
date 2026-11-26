@@ -64,7 +64,7 @@ test("a visitor reads published items over HTTP, cached and readable from any or
   const call = await env.world.serve(t);
   const stats = await call("/api/v1/library/stats");
   assert.equal(stats.status, 200);
-  assert.deepEqual(stats.body.components, { builtin: 19, community: 0, total: 19 });
+  assert.deepEqual(stats.body.components, { builtin: 20, community: 0, total: 20 });
   assert.equal(stats.headers.get("cache-control"), "public, max-age=60, s-maxage=300");
   assert.equal(stats.headers.get("access-control-allow-origin"), "*");
   assert.equal(stats.headers.get("vary"), "Authorization");
@@ -73,13 +73,13 @@ test("a visitor reads published items over HTTP, cached and readable from any or
   assert.equal(preflight.headers.get("access-control-allow-methods"), "GET");
   assert.equal(preflight.headers.get("access-control-allow-credentials"), null);
   const list = await call("/api/v1/library?kind=component&limit=5");
-  assert.deepEqual([list.status, list.body.items.length, list.body.total, list.body.next], [200, 5, 19, "5"]);
-  assert.equal((await call("/api/v1/library?cursor=15&kind=component")).body.items.length, 4);
+  assert.deepEqual([list.status, list.body.items.length, list.body.total, list.body.next], [200, 5, 20, "5"]);
+  assert.equal((await call("/api/v1/library?cursor=15&kind=component")).body.items.length, 5);
   const retro = await call("/api/v1/library/retro");
   assert.deepEqual([retro.status, retro.body.item.authorName, retro.body.item.status], [200, "Slatebox", undefined]);
   assert.equal(retro.body.version.content.kind, "component");
   const exported = await call("/api/v1/library/export");
-  assert.equal(exported.body.items.length, 19);
+  assert.equal(exported.body.items.length, 20);
   assert.equal(exported.headers.get("cache-control"), "public, max-age=60, s-maxage=120");
   // With a token: the same answer, never cached.
   const { token } = await env.world.mint(["slates:read"]);
@@ -392,7 +392,7 @@ test("the library permission has its words, and instance.describe tells a review
   assert.equal(tokenPermissions.find((item) => item.scope === "library:review").label, "Review library submissions (administrators)");
   const root = await env.world.principalFor(["slates:read"], "admin");
   const ada = await env.world.principalFor(["slates:read"], "owner");
-  assert.deepEqual((await env.run(root, "instance.describe", {})).library, { categories: ["plan", "decide", "meetings", "track", "map"], reviewer: true });
+  assert.deepEqual((await env.run(root, "instance.describe", {})).library, { categories: ["plan", "decide", "meetings", "track", "map", "make"], reviewer: true });
   assert.equal((await env.run(ada, "instance.describe", {})).library.reviewer, false);
   assert.equal((await env.run({ kind: "visitor", userId: null, scopes: [] }, "instance.describe", {})).library, undefined);
 });

@@ -103,7 +103,7 @@ function useLibraryItems() {
 // A board's shape, as a small drawing for an item that has no looping picture: columns, piles, a tree, a square or a timeline.
 function ShapeGlyph({ kind, layout }) {
   const ink = 'currentColor'
-  const shape = kind === 'launch-plan' || kind === 'hiring-plan' ? 'timeline' : kind === 'nest' ? (layout ?? 'tree') : kind === 'map' ? 'map' : 'columns'
+  const shape = kind === 'launch-plan' || kind === 'hiring-plan' ? 'timeline' : kind === 'nest' ? (layout ?? 'tree') : kind === 'map' ? 'map' : kind === 'grid' ? 'page' : 'columns'
   return <Box aria-hidden="true" sx={{ aspectRatio: '16 / 9', width: '100%', borderRadius: '6px', bgcolor: '#faf8f2', color: '#5b6b63', display: 'grid', placeItems: 'center' }}>
     <svg viewBox="0 0 64 36" width="70%" height="70%" fill="none" stroke={ink} strokeWidth="1.6" strokeLinecap="round">
       {shape === 'columns' && <><rect x="4" y="4" width="16" height="28" rx="2" /><rect x="24" y="4" width="16" height="28" rx="2" /><rect x="44" y="4" width="16" height="28" rx="2" />
@@ -112,6 +112,8 @@ function ShapeGlyph({ kind, layout }) {
         <rect x="8" y="11" width="16" height="5" rx="1" fill={ink} opacity=".35" /><rect x="8" y="19" width="16" height="5" rx="1" fill={ink} opacity=".35" /><rect x="40" y="11" width="16" height="5" rx="1" fill={ink} opacity=".35" /></>}
       {shape === 'tree' && <><rect x="24" y="3" width="16" height="7" rx="1.5" /><rect x="6" y="26" width="16" height="7" rx="1.5" /><rect x="42" y="26" width="16" height="7" rx="1.5" /><path d="M32 10 V18 H14 V26 M32 18 H50 V26" /></>}
       {shape === 'matrix' && <><path d="M32 3 V33 M6 18 H58" /><rect x="10" y="7" width="10" height="5" rx="1" fill={ink} opacity=".35" /><rect x="42" y="22" width="10" height="5" rx="1" fill={ink} opacity=".35" /></>}
+      {shape === 'page' && <><rect x="20" y="2" width="24" height="32" rx="1.5" /><rect x="23" y="5" width="18" height="5" rx="1" fill={ink} opacity=".35" />
+        <rect x="23" y="12" width="8" height="8" rx="1" /><rect x="33" y="12" width="8" height="8" rx="1" /><rect x="23" y="22" width="8" height="8" rx="1" fill={ink} opacity=".35" /></>}
       {shape === 'timeline' && <><path d="M4 30 H60" /><rect x="6" y="6" width="22" height="6" rx="2" fill={ink} opacity=".35" /><rect x="22" y="16" width="26" height="6" rx="2" fill={ink} opacity=".35" /><path d="M52 4 V30" strokeDasharray="2 2" /></>}
       {shape === 'map' && <><circle cx="10" cy="18" r="5" /><circle cx="32" cy="8" r="5" /><circle cx="32" cy="28" r="5" /><circle cx="54" cy="18" r="5" /><path d="M15 16 L27 10 M15 20 L27 26 M37 8 L49 16 M37 28 L49 20" /></>}
     </svg>

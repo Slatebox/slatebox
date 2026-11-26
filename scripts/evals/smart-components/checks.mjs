@@ -4,9 +4,14 @@
 import 'slateboxjs/workshops/behaviour'
 import { validateWorkshop } from 'slateboxjs/workshops/model'
 import { componentQuality, componentStarter } from '../../../web/app/imports/api/common/builder-freeform.mjs'
+import { gridQuality, gridStarter } from '../../../web/app/imports/api/common/builder-grid.mjs'
 
-/** Checks a preview: [] when it is a valid, drafted, rendered-ready component, else the reasons. */
-export function previewProblems(preview, prompt) {
+/**
+ * Checks a preview: [] when it is a valid, drafted, rendered-ready component, else the reasons. `expect.kind` 'grid': a
+ * printable page (a grid sheet) is what the words ask for, not lanes.
+ */
+export function previewProblems(preview, prompt, expect = {}) {
+  if (expect.kind === 'grid') return gridPreviewProblems(preview, prompt)
   const problems = []
   if (preview.mode !== 'play' || preview.format !== 'lanes') problems.push(`not a board of lanes (mode ${preview.mode}, format ${preview.format})`)
   const workshop = preview.canvas?.workshop
@@ -32,5 +37,23 @@ export function previewProblems(preview, prompt) {
 export function qualityProblems(preview, prompt) {
   let workshop
   try { workshop = validateWorkshop(preview.canvas?.workshop) } catch (error) { return ['no valid board: ' + error.message] }
-  return componentQuality(workshop, { message: prompt })
+  // A grid sheet is held to its own gate (builder-grid.mjs gridQuality).
+  return workshop.kind === 'grid' ? gridQuality(workshop, { message: prompt }) : componentQuality(workshop, { message: prompt })
+}
+
+/** A printable page's preview: a grid sheet that passes validateWorkshop, drafted by the agent (not the starter), with a page 1 composed. */
+function gridPreviewProblems(preview, prompt) {
+  const problems = []
+  if (preview.mode !== 'play' || preview.format !== 'grid') problems.push(`not a grid sheet (mode ${preview.mode}, format ${preview.format})`)
+  let valid = null
+  try { valid = validateWorkshop(preview.canvas?.workshop) } catch (error) { problems.push('workshop fails validateWorkshop: ' + error.message) }
+  if (preview.provider !== 'ai') problems.push('the agent draft was not used (fell back to the starter board)')
+  if (valid) {
+    const starter = validateWorkshop(gridStarter(prompt))
+    if (valid.title === starter.title && JSON.stringify(valid.cards) === JSON.stringify(starter.cards)) problems.push('the sheet is the starter, not a draft')
+    if (valid.kind !== 'grid') problems.push('not a grid sheet')
+    if (!valid.cards.some((card) => card.laneId === valid.lanes[1]?.id)) problems.push('page 1 is not composed')
+    if (!preview.said || !/^Drafted “/.test(preview.said)) problems.push('the reply does not say what was drafted')
+  }
+  return { problems, workshop: valid }
 }

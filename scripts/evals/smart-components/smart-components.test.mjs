@@ -17,16 +17,19 @@ import 'slateboxjs/workshops/behaviour'
 import { rulebook, validateWorkshop, workshopToSlate } from 'slateboxjs/workshops/model'
 import '../../../web/app/imports/api/common/library.mjs'
 import { builderBrief, builderDescription, builderTitle, componentQuality, componentStarter, placeholderLabel } from '../../../web/app/imports/api/common/builder-freeform.mjs'
+import { gridDescription, gridQuality, gridStarter } from '../../../web/app/imports/api/common/builder-grid.mjs'
 import { previewAsksForCards, previewHeading, previewSaidLine } from '../../../web/app/imports/api/common/conversation-preview.mjs'
 import { textToolCall } from '../../../web/app/server/methods/ai/text-tool-call.mjs'
 import { normalizeProviderResponse } from '../../../web/app/server/methods/ai/provider.mjs'
 import { authorTool, laneDraftCheck, normalizeLaneDraft, parseLaneDraft } from '../../../web/app/server/methods/workshop-lane-draft.mjs'
 import { previewProblems, qualityProblems } from './checks.mjs'
 import { PROMPTS } from './prompts.mjs'
-import { GOOD, RECORDED } from './recorded.mjs'
+import { GOOD, GOOD_GRID, RECORDED, gridDraftOf } from './recorded.mjs'
 import { completion, startReplay } from './replay.mjs'
 
 const byId = Object.fromEntries(PROMPTS.map((p) => [p.id, p.prompt]))
+// A composed page to print is a grid sheet (owner's choice, 2026-11-25), never lanes.
+const isPage = Object.fromEntries(PROMPTS.map((p) => [p.prompt, p.expect?.kind === 'grid']))
 const OWNER = byId['owner-printable-pieces']
 const builderSlate = { library: { mode: 'build' }, nodes: [], options: {} }
 let replay
@@ -40,8 +43,26 @@ function plainWords(text) {
   assert.doesNotMatch(text, /\bOperations? \d|\{|\[|at .+\.m?js|undefined|null/, text)
 }
 
+/** A preview from the builder path for a printable page: a valid grid sheet, page 1 composed, drawn as notes, its rules said. */
+function isGridSheet(preview, prompt) {
+  assert.equal(preview.mode, 'play')
+  assert.equal(preview.format, 'grid')
+  const workshop = validateWorkshop(preview.canvas.workshop)
+  assert.equal(workshop.kind, 'grid')
+  assert.deepEqual(workshop.lanes.slice(0, 2).map((lane) => lane.label), ['Tiles', workshop.lanes[1].label])
+  assert.ok(workshop.cards.some((card) => card.laneId === workshop.lanes[1].id), 'page 1 is composed')
+  assert.ok(workshop.cards.some((card) => card.tile?.stamp), 'the tray has stamps')
+  assert.deepEqual(preview.rules, rulebook().lines(workshop))
+  assert.equal(preview.rules[0], 'Tiles snap to free cells; none overlap.')
+  plainWords(preview.said.replace(/“[^”]*”/g, '“…”'))
+  assert.match(preview.said, /^(?:Drafted|Started) “[^”]+”: an? (?:Letter|A4) (?:portrait|landscape) page, \d+ by \d+ cells, \d+ tiles? to drag\./)
+  if (prompt) assert.ok(builderBrief(prompt).length <= 1200)
+  return workshop
+}
+
 /** A preview from the builder path is a smart component: a valid board of lanes, drawn as notes, its rules said. */
 function isComponent(preview, prompt) {
+  if (prompt && isPage[prompt]) return isGridSheet(preview, prompt)
   assert.equal(preview.mode, 'play')
   assert.equal(preview.format, 'lanes')
   const workshop = validateWorkshop(preview.canvas.workshop)
@@ -64,13 +85,16 @@ function isComponent(preview, prompt) {
 test('every free-form prompt in the eval set takes the builder path on a builder slate, with a brief the draft accepts', () => {
   assert.ok(PROMPTS.length >= 40, 'forty or more prompts')
   assert.equal(new Set(PROMPTS.map((p) => p.id)).size, PROMPTS.length)
-  for (const { id, prompt } of PROMPTS) {
+  for (const { id, prompt, expect } of PROMPTS) {
     assert.equal(builderDescription(builderSlate, prompt), true, id)
+    // A printable page goes to the grid sheet; everything else stays a board of lanes.
+    assert.equal(gridDescription(prompt), expect?.kind === 'grid', id)
     const brief = builderBrief(prompt)
     assert.ok(brief.length >= 10 && brief.length <= 1200, id)
     assert.ok(builderTitle(prompt).length <= 80, id)
   }
-  for (const tag of ['owner', 'vague', 'odd', 'non-english', 'rambling', 'limits', 'printable', 'snap']) assert.ok(PROMPTS.some((p) => p.tags.includes(tag)), tag)
+  for (const tag of ['owner', 'vague', 'odd', 'non-english', 'rambling', 'limits', 'printable', 'snap', 'grid']) assert.ok(PROMPTS.some((p) => p.tags.includes(tag)), tag)
+  assert.ok(PROMPTS.filter((p) => p.expect?.kind === 'grid').length >= 6, 'the owner’s prompt and five more are printable pages')
 })
 
 test('every prompt makes a valid smart component with no agent at all: the starter named after the words', async () => {
@@ -80,8 +104,14 @@ test('every prompt makes a valid smart component with no agent at all: the start
     assert.equal(sent.length, 0, id)
     assert.equal(preview.provider, 'direct', id)
     const workshop = isComponent(preview, prompt)
-    assert.deepEqual(workshop, validateWorkshop(componentStarter(prompt, { now: new Date(workshop.behaviour.rules[0].set.at) })), id)
     assert.match(preview.said, /^Started “/, id)
+    if (isPage[prompt]) {
+      // A printable page: the starter kit its words pick, a finished example page that passes the sheet's own gate.
+      assert.deepEqual(workshop, validateWorkshop(gridStarter(prompt, { now: new Date(workshop.behaviour.rules[0].set.at) })), id)
+      assert.deepEqual(gridQuality(workshop, { message: prompt }), [], id)
+      continue
+    }
+    assert.deepEqual(workshop, validateWorkshop(componentStarter(prompt, { now: new Date(workshop.behaviour.rules[0].set.at) })), id)
     // Built from the words, it passes the same quality gate a draft must: named pieces, no repeats, behavior.
     assert.deepEqual(componentQuality(workshop, { message: prompt }), [], id)
     assert.doesNotMatch(JSON.stringify(workshop.cards), /"Piece [A-D]"/, id)
@@ -90,6 +120,20 @@ test('every prompt makes a valid smart component with no agent at all: the start
 
 test('every prompt keeps a good draft from the agent as it was drafted', async () => {
   for (const { id, prompt } of PROMPTS) {
+    if (isPage[prompt]) {
+      // A printable page: a good draft_grid answer for its words (its starter's page, drafted and retitled).
+      const draft = gridDraftOf(validateWorkshop(gridStarter(prompt)), 'Drafted page for ' + id)
+      const { preview, error, sent } = await replay.turn(prompt, [{ name: 'draft_grid', args: draft }])
+      assert.ifError(error)
+      assert.equal(sent.length, 1, id)
+      assert.equal(preview.provider, 'ai', id)
+      assert.equal(isGridSheet(preview, prompt).title, draft.title, id)
+      assert.equal(sent[0].messages.at(-1).content, builderBrief(prompt), id)
+      assert.equal(sent[0].tools[0].function.name, 'draft_grid')
+      assert.match(sent[0].messages[0].content, /^Build a reusable page composer from the person's description/)
+      assert.deepEqual(sent[0].tools[0].function.parameters.properties.rules.items.properties.kind.enum, ['allow', 'max', 'needs', 'span'])
+      continue
+    }
     const { preview, error, sent } = await replay.turn(prompt, [{ args: GOOD }])
     assert.ifError(error)
     assert.equal(sent.length, 1, id)
@@ -123,7 +167,7 @@ for (const item of RECORDED) {
     assert.equal(preview.provider, item.expect.outcome === 'drafted' ? 'ai' : 'direct')
     assert.match(preview.said, item.expect.outcome === 'drafted' ? /^Drafted “/ : /^Started “/)
     // The live eval's own check agrees: a drafted board passes it, a starter is named as the fallback it is.
-    const checked = previewProblems(preview, prompt)
+    const checked = previewProblems(preview, prompt, PROMPTS.find((p) => p.prompt === prompt).expect)
     if (item.expect.outcome === 'drafted') assert.deepEqual(checked.problems, [])
     else assert.ok(checked.problems.some((p) => /fell back to the starter/.test(p)))
     // Whatever was answered, what the person gets passes the quality gate (a draft, or the starter from the words).
@@ -139,9 +183,12 @@ for (const item of RECORDED) {
       const asked = sent[1].messages.at(-1)
       assert.equal(asked.role, 'user')
       assert.match(asked.content, item.expect.retry)
-      assert.match(asked.content, /Return a complete draft_workshop tool call\./)
-      // what was wrong, in words: each problem one plain sentence (a draft can have more than one)
-      for (const sentence of asked.content.split('Return a complete')[0].replace('draft_workshop', 'the tool').split(/(?<=\.) (?=[A-Z])/)) plainWords(sentence)
+      const tool = isPage[prompt] ? 'draft_grid' : 'draft_workshop'
+      assert.match(asked.content, new RegExp('Return a complete ' + tool + ' tool call\\.'))
+      // what was wrong, in words: each problem one plain sentence (a draft can have more than one); a page's retry
+      // restates its instructions first (workshop.draft.repair), then the problem
+      const problem = isPage[prompt] ? asked.content.split('Repair the previous draft. ')[1] : asked.content
+      for (const sentence of problem.split('Return a complete')[0].replace(tool, 'the tool').split(/(?<=\.) (?=[A-Z])/)) if (sentence.trim()) plainWords(sentence)
     }
   })
 }
@@ -188,25 +235,35 @@ test('a draft\'s repairs touch only unambiguous slips; anything else is refused 
 })
 
 test('the owner\'s words end to end: a builder slate gets a smart component, never the twenty "Operation N" lines', async () => {
-  for (const answers of [[{ args: GOOD }], [{ text: '<atem:function_calls>\n<atem:invoke name="draft_workshop">\n<atem:parameter name="version">1</atem:parameter>\n<atem:parameter name="title">Kit</atem:parameter>\n<atem:parameter name="lanes">[{"id":"a","label":"A"},{"id":"b","label":"B"}]</atem:parameter>\n<atem:parameter name="cards">[{"id":"c","label":"C","laneId":"a"}]</atem:parameter>\n</atem:invoke>\n</atem:function_calls>' }], [{ args: '{}' }, { text: 'no' }], []]) {
+  // The owner's words are a printable page: a draft_grid call, as sent or written as text, a call with nothing in it, none.
+  const text = (draft) => ['<atem:function_calls>', '<atem:invoke name="draft_grid">', ...Object.entries(draft).map(([key, value]) => `<atem:parameter name="${key}">${typeof value === 'string' ? value : JSON.stringify(value)}</atem:parameter>`), '</atem:invoke>', '</atem:function_calls>'].join('\n')
+  for (const answers of [[{ name: 'draft_grid', args: GOOD_GRID }], [{ text: text(GOOD_GRID) }], [{ name: 'draft_grid', args: '{}' }, { text: 'no' }], []]) {
     const { preview, error } = await replay.turn(OWNER, answers)
     assert.ifError(error)
-    isComponent(preview, OWNER)
+    isGridSheet(preview, OWNER)
     assert.doesNotMatch(JSON.stringify(preview), /Operation \d+ count/)
+  }
+  // A lane board's own words still make a board of lanes, as before.
+  for (const answers of [[{ args: GOOD }], [{ text: '<atem:function_calls>\n<atem:invoke name="draft_workshop">\n<atem:parameter name="version">1</atem:parameter>\n<atem:parameter name="title">Kit</atem:parameter>\n<atem:parameter name="lanes">[{"id":"a","label":"A"},{"id":"b","label":"B"}]</atem:parameter>\n<atem:parameter name="cards">[{"id":"c","label":"C","laneId":"a"}]</atem:parameter>\n</atem:invoke>\n</atem:function_calls>' }], [{ args: '{}' }, { text: 'no' }], []]) {
+    const { preview, error } = await replay.turn(byId['terse-blocks'], answers)
+    assert.ifError(error)
+    isComponent(preview, byId['terse-blocks'])
   }
 })
 
 test('the preview says what was made once: no doubled full stop, and no "add your cards" for a board that brings its pieces', async () => {
-  const { preview } = await replay.turn(OWNER, [{ args: GOOD }])
-  // The heading names the agent (never "AI") and what was made: a smart component.
-  assert.equal(previewHeading(preview), 'Agent preview · Smart component · Snap-together printable kit')
+  const { preview } = await replay.turn(OWNER, [{ name: 'draft_grid', args: GOOD_GRID }])
+  // The heading names the agent (never "AI") and what was made: a smart component (the owner's words: a printable page).
+  assert.equal(previewHeading(preview), 'Agent preview · Smart component · Printable page kit')
   const line = previewSaidLine(preview)
   assert.equal(line, preview.said)
   assert.doesNotMatch(line, /\.\.$/)
   assert.equal(previewAsksForCards(preview), false)
   // A starter is a preview made here; a board of lanes with no cards asks for them; a sentence without a stop gets one.
   const { preview: guest } = await replay.turn(OWNER, [], { as: 'guest' })
-  assert.equal(previewHeading(guest), 'Preview · Smart component · Snappable congruent pieces to compose new printable materials')
+  assert.equal(previewHeading(guest), 'Preview · Smart component · Printable page kit')
+  const { preview: lanes } = await replay.turn(byId['terse-blocks'], [{ args: GOOD }])
+  assert.equal(previewHeading(lanes), 'Agent preview · Smart component · Snap-together printable kit')
   assert.equal(previewAsksForCards({ format: 'lanes', canvas: { workshop: { cards: [] } } }), true)
   assert.equal(previewSaidLine({ said: 'Added a retro' }), 'Keep this to add a retro.')
   assert.equal(previewHeading({ provider: 'ai', format: 'lanes', mode: 'play' }), 'Agent preview · Workshop')

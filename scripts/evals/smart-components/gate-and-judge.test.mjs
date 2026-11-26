@@ -11,6 +11,7 @@ import { test } from 'node:test'
 import 'slateboxjs/workshops/behaviour'
 import { rulebook, validateWorkshop } from 'slateboxjs/workshops/model'
 import { builderBoard, componentQuality, componentStarter, finishedLaneCaps, flowLanes, labelMarker, listedItems, placeholderLabel, repairComponent, statedLimit } from '../../../web/app/imports/api/common/builder-freeform.mjs'
+import { gridQuality, gridStarter } from '../../../web/app/imports/api/common/builder-grid.mjs'
 import { boardText, CALIBRATION, calibrationCases, calibrationSummary, judgeBoard, judgeMessages, judgeRoute, judgeSummary, judgeSurface, parseJudgement, RUBRIC, runCalibration, sameModel } from './judge.mjs'
 import { providerFromPreset } from '../../../web/app/server/ai-control/provider-presets.mjs'
 import { PROMPTS } from './prompts.mjs'
@@ -241,7 +242,17 @@ test('the guest starter: a description that matches no shape gets domain cards, 
   // For every prompt of the eval set and others: no card is one of the description's own content words, unless the
   // description listed it ("kitchen, two bedrooms, bath").
   const own = (message) => new Set(message.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 3))
-  for (const message of [...PROMPTS.map((p) => p.prompt), 'a tool for my band setlist', 'vocabulary flashcards for spanish class', 'track my investment portfolio rebalancing', 'wine tasting notes', 'garden planting schedule', 'sales leads pipeline', 'my monthly budget']) {
+  // A printable page gets a grid sheet (builder-grid.mjs), never this starter: its own kit, held to its own gate, none
+  // of its tiles the description's own words.
+  for (const { prompt: message } of PROMPTS.filter((p) => p.expect?.kind === 'grid')) {
+    const sheet = validateWorkshop(gridStarter(message))
+    const words = own(message)
+    // (A bingo card's Free square is the one the words ask for: "a free space in the middle".)
+    const asked = (label) => label === 'free' && /\bfree space\b/i.test(message)
+    assert.deepEqual(sheet.cards.filter((card) => words.has(card.label.toLowerCase()) && !asked(card.label.toLowerCase())).map((card) => card.label), [], message)
+    assert.deepEqual(gridQuality(sheet, { message }), [], message)
+  }
+  for (const message of [...PROMPTS.filter((p) => p.expect?.kind !== 'grid').map((p) => p.prompt), 'a tool for my band setlist', 'vocabulary flashcards for spanish class', 'track my investment portfolio rebalancing', 'wine tasting notes', 'garden planting schedule', 'sales leads pipeline', 'my monthly budget']) {
     const listed = new Set(listedItems(message).map((item) => item.toLowerCase()))
     const words = own(message)
     const echoed = labels(message).filter((label) => !listed.has(label.toLowerCase()) && words.has(label.toLowerCase()))
@@ -319,7 +330,7 @@ test('the judge asks the configured route, by its protocol, and never names a mo
 
 test('the judge is calibrated on every run: known-bad control boards, each expected at 2 or less', async () => {
   const cases = calibrationCases()
-  assert.deepEqual(cases.map((item) => item.id), ['counted-pieces', 'one-word', 'wrong-domain', 'capped-done', 'echoed-words'])
+  assert.deepEqual(cases.map((item) => item.id), ['counted-pieces', 'one-word', 'wrong-domain', 'capped-done', 'echoed-words', 'grid-numbered-questions'])
   for (const item of cases) {
     assert.equal(item.max, 2, item.id)
     assert.ok(item.workshop.cards.length >= 5, item.id)
@@ -327,8 +338,10 @@ test('the judge is calibrated on every run: known-bad control boards, each expec
   }
   // Two the gate refuses too; the others are what only the judge can catch (the wrong domain, words handed back) or a
   // rule that gets in the way (Done holds 1).
-  const gated = Object.fromEntries(cases.map((item) => [item.id, componentQuality(item.workshop, { message: item.prompt }).length > 0]))
-  assert.deepEqual(gated, { 'counted-pieces': true, 'one-word': true, 'wrong-domain': false, 'capped-done': true, 'echoed-words': false })
+  // A grid sheet is held to its own gate (gridQuality): numbered questions with no words are refused there too.
+  const gated = Object.fromEntries(cases.map((item) => [item.id, (item.workshop.kind === 'grid' ? gridQuality : componentQuality)(item.workshop, { message: item.prompt }).length > 0]))
+  assert.deepEqual(gated, { 'counted-pieces': true, 'one-word': true, 'wrong-domain': false, 'capped-done': true, 'echoed-words': false, 'grid-numbered-questions': true })
+  assert.match(boardText(cases[5].workshop, cases[5].rules), /^Title: Worksheet\nA grid sheet: Letter portrait, 6 rows by 2 columns of cells\n/)
   assert.match(boardText(cases[3].workshop, cases[3].rules), /Done \(holds 1\)/)
   // Every control scored 2 or less: calibrated. One at 3, or one the judge could not score: the run fails.
   const fake = (scores) => async (judge, prompt, workshop) => {

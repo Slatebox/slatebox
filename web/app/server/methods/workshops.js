@@ -20,6 +20,7 @@ import { conceptMapFromDraft, mapInstructions, mapDraftTool } from './workshop-m
 import { promptText } from '../ai-control/prompts/index.mjs'
 import { authorTool, laneDraftCheck, parseLaneDraft } from './workshop-lane-draft.mjs'
 import { componentDraftCheck, componentTool, parseComponentDraft } from './workshop-component-draft.mjs'
+import { gridDraftCheck, gridTool, parseGridDraft } from './workshop-grid-draft.mjs'
 import { slateSaveCore, SlateEvents } from '../slate-save'
 import { readMoveLog, timeInLane, waitedLine } from '../workshop-move-log.mjs'
 import { MAIN_BOARD, boardIdPattern, slateAsBoard } from '../../imports/api/common/slate-boards.mjs'
@@ -80,7 +81,7 @@ async function chatTurn(input, map) {
     const turn = await req({
       // the board conversation's own surface (ai-control/catalogue.mjs: workshop, which follows chat)
       feature: map ? 'map-chat' : 'lane-chat', sdkChat: true, shareId,
-      system: map ? mapChatInstructions() : laneInstructions(),
+      system: map ? mapChatInstructions() : laneInstructions(workshop),
       prompts: [...history, { role: 'user', content: JSON.stringify({ [map ? 'currentMap' : 'currentWorkshop']: workshop, ...(waited && { waited }), ...(selection && {selection}), message }) }],
       functions: [tool], allowPlainText: true, maxResponseValidationRetries: 1,
       validateResponse: ({ message: response, toolCall }) => {
@@ -120,7 +121,9 @@ async function chatTurn(input, map) {
 async function draftWorkshop(brief, format = 'lanes', currentDraft) {
   // 'component': a smart component described on a builder slate (builder-freeform.mjs), a board of plain lanes held
   // to the quality gate (workshop-component-draft.mjs)
-  if (!['lanes', 'map', 'release-plan', 'component'].includes(format)) throw new Meteor.Error('invalid-format', 'Choose a workshop format.')
+  // 'grid': a printable page described on a builder slate (builder-grid.mjs), a grid sheet held to its own quality gate
+  // (workshop-grid-draft.mjs)
+  if (!['lanes', 'map', 'release-plan', 'component', 'grid'].includes(format)) throw new Meteor.Error('invalid-format', 'Choose a workshop format.')
   if (typeof brief !== 'string' || brief.trim().length < 10 || brief.length > 1200) {
     throw new Meteor.Error('invalid-brief', 'Describe the decision in 10 to 1,200 characters.')
   }
@@ -131,7 +134,7 @@ async function draftWorkshop(brief, format = 'lanes', currentDraft) {
   if (currentDraft !== undefined) {
     try {
       base = validateWorkshop(currentDraft)
-      if (format === 'component' || !(format === 'map' && base.lanes[0].station || format === 'release-plan' && base.kind === format)) throw new Error()
+      if (format === 'component' || format === 'grid' || !(format === 'map' && base.lanes[0].station || format === 'release-plan' && base.kind === format)) throw new Error()
     } catch { throw new Meteor.Error('invalid-workshop', 'Review the current workshop rules before asking for a revision.') }
   }
 
@@ -160,6 +163,10 @@ async function draftWorkshop(brief, format = 'lanes', currentDraft) {
       const tool = componentTool()
       return { tool, parse: parseComponentDraft, instructions: promptText('workshop.draft.component'), check: toolCall => componentDraftCheck(toolCall, { tool, message: brief }) }
     },
+    grid: () => {
+      const tool = gridTool()
+      return { tool, parse: args => parseGridDraft(args, { message: brief }), instructions: promptText('workshop.draft.grid'), check: toolCall => gridDraftCheck(toolCall, { tool, message: brief }) }
+    },
   }[format]?.()
   const tool = special?.tool || { ...authorTool, description: promptText('tool.draft_workshop') }
   const parse = special?.parse || parseLaneDraft
@@ -177,7 +184,8 @@ async function draftWorkshop(brief, format = 'lanes', currentDraft) {
       // workshop-component-draft.mjs: a component is also held to the quality gate)
       if (!special || special.check) {
         const check = special ? special.check(toolCall) : laneDraftCheck(toolCall, { tool, parse })
-        if (check) console.warn('[workshops.draft] lane draft refused:', check.retryPrompt.split(' Return a complete')[0].slice(0, 240))
+        // (a page's retry restates its instructions first, then the problem: the problem is what is logged)
+        if (check) console.warn('[workshops.draft] lane draft refused:', check.retryPrompt.split('Repair the previous draft. ').pop().split(' Return a complete')[0].slice(0, 400))
         return check
       }
       try {

@@ -6,7 +6,8 @@ import 'slateboxjs/workshops/rules'
 import { workshopReserve } from 'slateboxjs/workshops/model'
 import { kitFor } from 'slateboxjs/boards'
 import 'slateboxjs/boards/nest'
+import 'slateboxjs/boards/grid'
 
-const BUSINESS = new Set(['launch-plan', 'hiring-plan', 'pipeline', 'budget', 'nest'])
+const BUSINESS = new Set(['launch-plan', 'hiring-plan', 'pipeline', 'budget', 'nest', 'grid'])
 
 export const boardRoom = workshop => workshopReserve(workshop, {}, BUSINESS.has(workshop?.kind) ? kitFor(workshop.kind) : undefined)

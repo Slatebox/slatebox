@@ -111,8 +111,8 @@ test('finding 6: add_rule over exec cannot forge the audit line or the id', () =
   const contract = JSON.parse(app('server/actions/generated/contract.json'))
   const text = JSON.stringify(contract)
   // The rule's body only: its kinds (the lane rules, the plans' time rules, the nested boards' rules, and those of the 2 by 2, the
-  // org chart and goals & owners), then severity; never an id, on or set.
-  assert.match(text, /"kind":\{"enum":\["capacity","path","gate","bin","deadline","overlap","snap","workdays","blackout","cascade","locked","nests","children","depth","rank","emptyDrop","quadrant","parent","contains","sameOwnerAs"\]\},"severity"/)
+  // org chart and goals & owners, and the grid sheet's), then severity; never an id, on or set.
+  assert.match(text, /"kind":\{"enum":\["capacity","path","gate","bin","deadline","overlap","snap","workdays","blackout","cascade","locked","nests","children","depth","rank","emptyDrop","quadrant","parent","contains","sameOwnerAs","tileTypes","tileMax","tileNeeds","tileSpan"\]\},"severity"/)
 })
 
 test('finding 7: a card in the bin is archived, never deleted, in chat', () => {

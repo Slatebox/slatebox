@@ -5,6 +5,8 @@ import { behaviourEditsBetween, restoreWorkshop } from 'slateboxjs/workshops/rul
 import { kitFor, workshopEditsBetween } from 'slateboxjs/boards'
 // The nested boards' kit is its own chunk: loading it gives kitFor('nest') its kit.
 import 'slateboxjs/boards/nest'
+// And the grid sheet's (kitFor('grid')).
+import 'slateboxjs/boards/grid'
 
 // The edits between two boards of a business kind, said by its kit (a nested board's say nest_card,
 // merge_cards, set_field…; the others the shared ones).
@@ -105,7 +107,7 @@ function changeBoard(saved, board, who = null) {
   if (kept) return { refused: { reason: kept } }
   if (!businessKind(saved)) return { workshop: board }
   const anyway = new Set(board.cards.filter(card => workshopFreshOverride(saved, card)).map(card => card.id))
-  const edits = editsBetween(saved, board).map(edit => ['move_card', 'set_task', 'nest_card'].includes(edit.kind) && anyway.has(edit.card?.id ?? edit.card) ? { ...edit, override: true } : edit)
+  const edits = editsBetween(saved, board).map(edit => ['move_card', 'set_task', 'nest_card', 'place_tile'].includes(edit.kind) && anyway.has(edit.card?.id ?? edit.card) ? { ...edit, override: true } : edit)
   if (!edits.length) return sameBoard(saved, board) ? { workshop: board } : { refused: { reason: notTheBoards } }
   const made = applyWorkshopEdits(saved, edits, anyway.size && who ? { actor: { by: who.by, via: 'chat' }, now: who.at } : {})
   if ('refused' in made) {

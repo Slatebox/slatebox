@@ -10,6 +10,12 @@ import { validateWorkshop } from 'slateboxjs/workshops/model'
 import { nativeRequestKind } from './native-canvas-conversation.mjs'
 import { noteRequest, noteRequestProblem } from './note-requests.mjs'
 
+// A grid sheet's builder (builder-grid.mjs): plugged in where it loads, so a page that reads this module for
+// builderDescription never downloads the sheet's rules.
+let gridBuilder = null
+/** Plug in the grid sheet's board and sentence (builder-grid.mjs calls it as it loads). */
+export function useGridBuilder(hooks) { gridBuilder = hooks }
+
 const words = (message) => (typeof message === 'string' ? message.replace(/\s+/g, ' ').trim() : '')
 
 /**
@@ -586,6 +592,11 @@ export function componentStarter(message, { now = new Date(), by = 'Slatebox' } 
  * draft it threw away; `repairs` what was repaired.
  */
 export function builderBoard(draft, message, options = {}) {
+  // A composed page to print (builder-grid.mjs, loaded on the server): a grid sheet, by its own gate and starter.
+  if (options.kind === 'grid') {
+    if (!gridBuilder) throw new Error('Load builder-grid.mjs to build a grid sheet.')
+    return gridBuilder.board(draft, message, options)
+  }
   if (draft) {
     try {
       const valid = validateWorkshop(draft)
@@ -602,7 +613,8 @@ export function builderBoard(draft, message, options = {}) {
  * What the preview says of a board made from a description: drafted by the agent, or started here. `guest`: a visitor
  * not signed in, told plainly that signing in lets the agent draft it from their words.
  */
-export function builderSaid(workshop, { drafted, guest = false }) {
+export function builderSaid(workshop, { drafted, guest = false, message = '' }) {
+  if (workshop.kind === 'grid' && gridBuilder) return gridBuilder.said(workshop, { drafted, guest, message })
   const lanes = workshop.lanes.map((lane) => lane.label)
   const list = lanes.length > 1 ? lanes.slice(0, -1).join(', ') + ' and ' + lanes.at(-1) : lanes[0]
   const pieces = workshop.cards.length

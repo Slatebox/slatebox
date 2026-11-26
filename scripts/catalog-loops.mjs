@@ -40,6 +40,8 @@ export function loopCaption(entry) {
     case 'impact-effort': return behaviourLines(board).find(line => /^Do now holds/.test(line))
     case 'reorg-sandbox': return behaviourLines(board).find(line => /^Open roles/.test(line))
     case 'goals-owners': return behaviourLines(board).find(line => /^A card is owned/.test(line))
+    // A grid sheet: its built-in rule, the first line of its note.
+    case 'printable-page': return behaviourLines(board).find(line => /^Tiles snap/.test(line))
     // A lane board or the pipeline: a line of its own "How this board behaves" note (a limit, the one the loop shows).
     default: return behaviourLines(board).filter(line => / holds \d+\.$/.test(line)).at(-1) ?? 'No rules: any card goes in any column.'
   }
@@ -187,6 +189,24 @@ function matrixLoop(entry, board, caption) {
   return frame(id, body, caption, keyframes)
 }
 
+// A grid sheet: the tray's stamps beside a page of cells; a stamp's copy snaps into a free cell, a second one held over
+// a taken cell is refused and goes back.
+function gridLoop(entry, board, caption) {
+  const id = entry.id, { rows, cols } = board.grid.cells
+  const stamps = board.cards.filter(card => card.tile?.stamp).slice(0, 4)
+  let body = stamps.map((card, i) => `<rect x="6" y="${6 + i * 15}" width="38" height="12" rx="2" fill="${fills[i % 5]}"/><text class="t-${id}" x="9" y="${14 + i * 15}">${esc(card.label.slice(0, 10))}</text>`).join('')
+  body += `<rect x="56" y="3" width="56" height="72" fill="#fff" stroke="#b8bfb6" stroke-width=".6"/>`
+  const w = 48 / cols, h = 64 / rows
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const taken = board.cards.some(card => card.laneId === board.lanes[1].id && card.cell && r >= card.cell.row && r < card.cell.row + (card.cell.rows ?? 1) && c >= card.cell.col && c < card.cell.col + (card.cell.cols ?? 1))
+    body += `<rect${r === 0 && c === 0 ? ` class="d-${id}"` : ''} x="${(60 + c * w).toFixed(1)}" y="${(7 + r * h).toFixed(1)}" width="${(w - 1).toFixed(1)}" height="${(h - 1).toFixed(1)}" rx="1" fill="${taken ? fills[0] : '#f4f1e8'}"/>`
+  }
+  body += `<rect class="m-${id}" x="6" y="21" width="38" height="12" rx="2" fill="${paper}" stroke="${ink}" stroke-width=".6"/>`
+  const keyframes = `@keyframes mv-${id}{0%,10%{transform:translate(0,0)}35%,48%{transform:translate(${(60 + (cols - 1) * w - 6).toFixed(1)}px,${(7 + (rows - 1) * h - 21).toFixed(1)}px)}50%{transform:translate(0,0)}62%,72%{transform:translate(54px,-14px)}90%,100%{transform:translate(0,0)}}.m-${id}{animation-name:mv-${id}}` +
+    `@keyframes dm-${id}{0%,60%,76%,100%{stroke:none}64%,72%{stroke:${refuse};stroke-width:1.2}}.d-${id}{animation-name:dm-${id}}`
+  return frame(id, body, caption, keyframes)
+}
+
 /** The SVG text of one entry's still: the loop's first frame, with no motion. */
 export function stillSvg(entry) {
   still = true
@@ -204,6 +224,7 @@ export function loopSvg(entry) {
   if (board.kind === 'budget') return budgetLoop(entry, board, caption)
   if (board.kind === 'nest' && board.nest.layout === 'matrix') return matrixLoop(entry, board, caption)
   if (board.kind === 'nest') return board.nest.layout === 'clusters' ? pilesLoop(entry, board, caption) : treeLoop(entry, board, caption)
+  if (board.kind === 'grid') return gridLoop(entry, board, caption)
   return lanesLoop(entry, board, caption)
 }
 

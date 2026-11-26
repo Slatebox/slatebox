@@ -13,9 +13,10 @@ const world = () => ({ items: libraryCollection(), versions: libraryCollection()
 test("every catalogue entry is a published built-in item with its board, by Slatebox, locked in its category", async () => {
   const w = world();
   const report = await seedBuiltins(w);
-  assert.equal(catalog.length, 19);
-  assert.equal(report.created.length, 19);
-  assert.equal(w.items.docs.length, 19);
+  // Twenty since the printable page (a grid sheet) joined the catalogue.
+  assert.equal(catalog.length, 20);
+  assert.equal(report.created.length, 20);
+  assert.equal(w.items.docs.length, 20);
   for (const entry of catalog) {
     const item = w.items.docs.find((doc) => doc._id === "builtin-" + entry.id);
     assert.ok(item, entry.id);
@@ -38,7 +39,7 @@ test("seeding again is a no-op: no new version, item or event", async () => {
   await seedBuiltins(w);
   const before = { items: JSON.stringify(w.items.docs), versions: w.versions.docs.length, events: w.events.docs.length };
   const again = await seedBuiltins(w);
-  assert.equal(again.unchanged.length, 19);
+  assert.equal(again.unchanged.length, 20);
   assert.deepEqual([again.created.length, again.updated.length, again.unpublished.length], [0, 0, 0]);
   assert.equal(JSON.stringify(w.items.docs), before.items);
   assert.equal(w.versions.docs.length, before.versions);

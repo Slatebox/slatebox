@@ -76,7 +76,7 @@ export function previewBoardOf(canvas, existing = []) {
 }
 
 /** Business boards are drawn by their kit (slateboxjs/boards); a nest board by its own (slateboxjs/boards/nest). */
-export const KIT_KINDS = ['launch-plan', 'hiring-plan', 'pipeline', 'budget', 'nest']
+export const KIT_KINDS = ['launch-plan', 'hiring-plan', 'pipeline', 'budget', 'nest', 'grid']
 
 /**
  * The sentence under a board preview in the chat: what Keep does, in the board's own words. "Play the route"
@@ -220,7 +220,7 @@ export function previewShown(whole, focus, view, { margin = 24, readable = READA
 }
 
 // ---- What the chat says of a preview (NativeCanvasConversation): pure, so the page and the tests read the same ----
-const BOARD_NAMES = { 'launch-plan': 'Launch plan', pipeline: 'Sales pipeline', budget: 'Budget' }
+const BOARD_NAMES = { 'launch-plan': 'Launch plan', pipeline: 'Sales pipeline', budget: 'Budget', grid: 'Printable page' }
 
 /**
  * The preview's heading: who made it (the agent, or Slatebox from the words) and what it is. A smart component

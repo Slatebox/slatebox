@@ -308,6 +308,8 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
       }
       const answered = !proposal.workshop || proposal.reply !== message
       append({ role: 'user', content: said }, ...(answered ? [{ role: 'assistant', content: proposal.reply }] : []))
+      // A grid sheet's "print page 2" or "export a PDF": the page's own print control runs it (GridPrintButton.jsx).
+      if (proposal.action?.kind === 'print') window.dispatchEvent(new CustomEvent('slatebox:grid-print', { detail: { boardId: target.boardId, pages: proposal.action.pages, pdf: proposal.action.pdf } }))
       // A card proposed as an ordinary note (`toCanvas`) is taken off the lanes by the canvas itself on Keep.
       // The preview is the target board's: focus stays on it until Keep or Discard.
       if (proposal.workshop) target.setPreview({ workshop: proposal.workshop, revision: proposal.revision ?? target.revision, summary: proposal.reply,

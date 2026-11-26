@@ -4,13 +4,16 @@
 // (smart-components.test.mjs) checks every prompt takes the builder path, and the live eval (live.mjs) has the
 // configured agent build each one.
 //
-// Each entry: id (a stable slug), prompt (the words as typed), tags (what kind of request it is).
+// Each entry: id (a stable slug), prompt (the words as typed), tags (what kind of request it is), and `expect.kind` 'grid'
+// for a composed page to print (owner's choice 2026-11-25: "a page-sized grid where equal tiles snap into cells and the
+// composed page exports to print/PDF"): a grid sheet, never lanes (builder-grid.mjs). Every other prompt is a board of lanes.
+const grid = { kind: 'grid' }
 export const PROMPTS = Object.freeze([
-  { id: 'owner-printable-pieces', prompt: 'snappable congruent pieces to compose new printable materials', tags: ['owner', 'pieces'] },
+  { id: 'owner-printable-pieces', prompt: 'snappable congruent pieces to compose new printable materials', tags: ['owner', 'pieces', 'grid'], expect: grid },
   { id: 'classroom-manipulatives', prompt: 'classroom manipulatives for fractions: tiles kids drag into a whole so they can see halves, thirds and quarters', tags: ['education', 'pieces'] },
   { id: 'kanban-wip', prompt: 'a kanban board with WIP limits: no more than 3 in progress and 2 in review', tags: ['work', 'limits'] },
   { id: 'seating-chart', prompt: 'a seating chart where students snap to desks, four desks per table group', tags: ['education', 'snap'] },
-  { id: 'recipe-card-builder', prompt: 'a recipe card builder: drag ingredients and steps onto a card I can print', tags: ['home', 'printable'] },
+  { id: 'recipe-card-builder', prompt: 'a recipe card builder: drag ingredients and steps onto a card I can print', tags: ['home', 'printable', 'grid'], expect: grid },
   { id: 'sprint-retro-voting', prompt: 'sprint retro with voting, went well / to improve / action items, each person gets three votes', tags: ['work', 'retro'] },
   { id: 'lesson-plan-grid', prompt: 'a lesson plan grid for a week: warm-up, main activity, practice and exit ticket each day', tags: ['education', 'grid'] },
   { id: 'bill-of-materials', prompt: 'bill of materials for a small wooden bookshelf, parts move from needed to ordered to in hand', tags: ['making', 'parts'] },
@@ -38,8 +41,8 @@ export const PROMPTS = Object.freeze([
   { id: 'meal-planner', prompt: 'weekly meal planner where I drag meals onto days, one dinner per day', tags: ['home', 'limits'] },
   { id: 'chore-chart', prompt: 'chore chart for three kids, each kid gets at most two chores', tags: ['home', 'limits'] },
   { id: 'storyboard', prompt: 'a storyboard for a 30 second ad: drag scenes into beginning, middle and end', tags: ['creative', 'pieces'] },
-  { id: 'comic-panels', prompt: 'comic strip panel builder with characters and speech bubbles I can arrange and print', tags: ['creative', 'printable'] },
-  { id: 'puzzle-pieces', prompt: 'jigsaw-like puzzle pieces that fit into a 2 by 2 frame', tags: ['games', 'pieces', 'snap'] },
+  { id: 'comic-panels', prompt: 'comic strip panel builder with characters and speech bubbles I can arrange and print', tags: ['creative', 'printable', 'grid'], expect: grid },
+  { id: 'puzzle-pieces', prompt: 'jigsaw-like puzzle pieces that fit into a 2 by 2 frame', tags: ['games', 'pieces', 'snap', 'grid'], expect: grid },
   { id: 'board-game-design', prompt: 'prototype a board game turn: cards move from deck to hand to played to discard, hand limit five', tags: ['games', 'limits'] },
   { id: 'event-schedule', prompt: 'conference schedule builder: drag talks into morning, afternoon and evening slots, three talks per slot', tags: ['events', 'limits'] },
   { id: 'okr-planner', prompt: 'quarterly OKRs: objectives with key results moving from draft to committed to achieved', tags: ['work'] },
@@ -47,9 +50,15 @@ export const PROMPTS = Object.freeze([
   { id: 'bug-triage', prompt: 'bug triage board with severity lanes: critical, major, minor, and wont fix', tags: ['work', 'triage'] },
   { id: 'science-fair', prompt: 'science fair project steps a student drags in order: question, hypothesis, experiment, results, conclusion', tags: ['education', 'order'] },
   { id: 'packing-list', prompt: 'camping packing list: to pack, packed, in the car', tags: ['personal'] },
-  { id: 'worksheet-generator', prompt: 'printable math worksheet maker: drag problem blocks onto a page, a page holds six blocks', tags: ['education', 'printable', 'limits'] },
+  { id: 'worksheet-generator', prompt: 'printable math worksheet maker: drag problem blocks onto a page, a page holds six blocks', tags: ['education', 'printable', 'limits', 'grid'], expect: grid },
   { id: 'mood-board', prompt: 'mood board for a brand refresh with color, type, and imagery sections', tags: ['creative'] },
   { id: 'decision-matrix', prompt: 'pick a laptop: options move from considering to shortlist (max 3) to chosen (just one)', tags: ['decision', 'limits'] },
   { id: 'volunteer-shifts', prompt: 'volunteer shift signup for a food bank, morning and afternoon shifts hold four people each', tags: ['community', 'limits'] },
   { id: 'terse-blocks', prompt: 'lego-like blocks, snap', tags: ['vague', 'pieces'] },
+  // A composed page to print: a grid sheet (spec §9).
+  { id: 'worksheet-builder', prompt: 'a worksheet builder for my 4th grade class: drag question, picture and answer-line blocks onto a letter page, six blocks per page', tags: ['education', 'printable', 'limits', 'grid'], expect: grid },
+  { id: 'flashcard-sheet', prompt: 'a printable flashcard sheet, 8 cards per page, term on each card, for Spanish vocabulary', tags: ['education', 'printable', 'grid', 'non-english'], expect: grid },
+  { id: 'bingo-card-maker', prompt: 'bingo card maker: 5 by 5 squares with a free space in the middle, a title on top, different card for each player', tags: ['games', 'grid'], expect: grid },
+  { id: 'comic-page', prompt: 'a comic page with panels I can arrange, some panels big, with speech bubbles, then print it', tags: ['creative', 'printable', 'grid'], expect: grid },
+  { id: 'sticker-sheet', prompt: 'a sticker sheet for classroom rewards, A4, 3 across', tags: ['education', 'printable', 'grid'], expect: grid },
 ])

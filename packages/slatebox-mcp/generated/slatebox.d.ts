@@ -182,10 +182,10 @@ declare namespace slatebox.ai.bindings {
 declare namespace slatebox.ai.bindings {
   /** Set AI bindings. Sets which model each named part of Slatebox uses: use model (a model id from the Models list, <provider>:<model>), default (the default model), or off (that part answers "turned off by your administrator"). A model that cannot do what the part needs is refused. Only the rows that change are written, each with its own line in the change history; note is optional. Every server picks it up within seconds. Administrators only. @scope ai:admin @confirm @idempotent */
   function set(input: {
-    /** (1–14 items) */
+    /** (1–15 items) */
     changes: Array<{
       /** The part of Slatebox, for example shape or agent.slatebox; default is everything not set. */
-      surface: "default" | "chat" | "chat.route" | "generation" | "presentation" | "vision" | "images" | "shape" | "workshop" | "workshop.draft" | "canvas" | "agent.slatebox" | "library" | "connectors";
+      surface: "default" | "chat" | "chat.route" | "generation" | "presentation" | "vision" | "images" | "shape" | "workshop" | "workshop.draft" | "canvas" | "agent.slatebox" | "library" | "connectors" | "eval";
       use: "default" | "model" | "off";
       /** With use model: <provider>:<model>. (at most 260 characters) */
       model?: string;
@@ -280,9 +280,9 @@ declare namespace slatebox.ai.control {
   function reset(input: {
     target: "binding" | "bindings" | "prompt" | "prompts" | "all";
     /** For target binding: the part of Slatebox. */
-    surface?: "default" | "chat" | "chat.route" | "generation" | "presentation" | "vision" | "images" | "shape" | "workshop" | "workshop.draft" | "canvas" | "agent.slatebox" | "library" | "connectors";
+    surface?: "default" | "chat" | "chat.route" | "generation" | "presentation" | "vision" | "images" | "shape" | "workshop" | "workshop.draft" | "canvas" | "agent.slatebox" | "library" | "connectors" | "eval";
     /** For target prompt: the prompt. */
-    promptId?: "shape.system" | "shape.user" | "shape.retry" | "tool.propose_shapes" | "workshop.map.system" | "workshop.lane.system" | "workshop.chat.retry" | "tool.propose_map_edits" | "tool.propose_workshop_edits" | "workshop.draft.system" | "workshop.draft.component" | "workshop.draft.map" | "workshop.draft.release" | "workshop.draft.rules" | "workshop.draft.retry" | "workshop.draft.repair" | "tool.draft_workshop" | "tool.draft_component" | "tool.draft_concept_map" | "tool.draft_release_plan" | "tool.revise_workshop_rules" | "exec.chat.system" | "exec.chat.fix" | "exec.chat.retry" | "agent.request.notes" | "presentation.segments" | "presentation.art" | "presentation.system" | "presentation.system.dynamic" | "presentation.system.slides" | "presentation.system.template" | "presentation.slate" | "presentation.user" | "presentation.brief" | "presentation.refine" | "tool.create-presentation" | "tool.create-presentation.image-query" | "tool.create-presentation.image-prompt" | "tool.create-presentation.image-why" | "library.refine.system" | "library.refine.request" | "library.refine.retry" | "tool.propose_library_refinement" | "connectors.plan.system" | "connectors.plan.writes" | "connectors.plan.next" | "connectors.plan.tool" | "connectors.layout.system" | "connectors.layout.budget" | "connectors.layout.tool" | "connectors.recipe.github" | "connectors.recipe.linear" | "connectors.recipe.huggingface" | "connectors.recipe.deepwiki" | "connectors.recipe.context7" | "connectors.recipe.wolfram" | "connectors.recipe.firecrawl" | "connectors.recipe.exa";
+    promptId?: "shape.system" | "shape.user" | "shape.retry" | "tool.propose_shapes" | "workshop.map.system" | "workshop.lane.system" | "workshop.chat.retry" | "tool.propose_map_edits" | "tool.propose_workshop_edits" | "workshop.draft.system" | "workshop.draft.component" | "workshop.draft.grid" | "workshop.draft.map" | "workshop.draft.release" | "workshop.draft.rules" | "workshop.draft.retry" | "workshop.draft.repair" | "tool.draft_workshop" | "tool.draft_component" | "tool.draft_grid" | "tool.draft_concept_map" | "tool.draft_release_plan" | "tool.revise_workshop_rules" | "exec.chat.system" | "exec.chat.fix" | "exec.chat.retry" | "agent.request.notes" | "presentation.segments" | "presentation.art" | "presentation.system" | "presentation.system.dynamic" | "presentation.system.slides" | "presentation.system.template" | "presentation.slate" | "presentation.user" | "presentation.brief" | "presentation.refine" | "tool.create-presentation" | "tool.create-presentation.image-query" | "tool.create-presentation.image-prompt" | "tool.create-presentation.image-why" | "library.refine.system" | "library.refine.request" | "library.refine.retry" | "tool.propose_library_refinement" | "connectors.plan.system" | "connectors.plan.writes" | "connectors.plan.next" | "connectors.plan.tool" | "connectors.layout.system" | "connectors.layout.budget" | "connectors.layout.tool" | "connectors.recipe.github" | "connectors.recipe.linear" | "connectors.recipe.huggingface" | "connectors.recipe.deepwiki" | "connectors.recipe.context7" | "connectors.recipe.wolfram" | "connectors.recipe.firecrawl" | "connectors.recipe.exa";
     /** (1–500 characters) */
     reason: string;
   }): Promise<({
@@ -420,7 +420,7 @@ declare namespace slatebox.ai.prompts {
   /** AI prompt. Returns one prompt: the built-in text (version 0), the text served now and where it comes from, every saved version newest first with its author, note and eval results, the values it may use, and the samples a test run can send. Administrators only. @scope ai:admin:read */
   function get(input: {
     /** The prompt, for example shape.system. */
-    id: "shape.system" | "shape.user" | "shape.retry" | "tool.propose_shapes" | "workshop.map.system" | "workshop.lane.system" | "workshop.chat.retry" | "tool.propose_map_edits" | "tool.propose_workshop_edits" | "workshop.draft.system" | "workshop.draft.component" | "workshop.draft.map" | "workshop.draft.release" | "workshop.draft.rules" | "workshop.draft.retry" | "workshop.draft.repair" | "tool.draft_workshop" | "tool.draft_component" | "tool.draft_concept_map" | "tool.draft_release_plan" | "tool.revise_workshop_rules" | "exec.chat.system" | "exec.chat.fix" | "exec.chat.retry" | "agent.request.notes" | "presentation.segments" | "presentation.art" | "presentation.system" | "presentation.system.dynamic" | "presentation.system.slides" | "presentation.system.template" | "presentation.slate" | "presentation.user" | "presentation.brief" | "presentation.refine" | "tool.create-presentation" | "tool.create-presentation.image-query" | "tool.create-presentation.image-prompt" | "tool.create-presentation.image-why" | "library.refine.system" | "library.refine.request" | "library.refine.retry" | "tool.propose_library_refinement" | "connectors.plan.system" | "connectors.plan.writes" | "connectors.plan.next" | "connectors.plan.tool" | "connectors.layout.system" | "connectors.layout.budget" | "connectors.layout.tool" | "connectors.recipe.github" | "connectors.recipe.linear" | "connectors.recipe.huggingface" | "connectors.recipe.deepwiki" | "connectors.recipe.context7" | "connectors.recipe.wolfram" | "connectors.recipe.firecrawl" | "connectors.recipe.exa";
+    id: "shape.system" | "shape.user" | "shape.retry" | "tool.propose_shapes" | "workshop.map.system" | "workshop.lane.system" | "workshop.chat.retry" | "tool.propose_map_edits" | "tool.propose_workshop_edits" | "workshop.draft.system" | "workshop.draft.component" | "workshop.draft.grid" | "workshop.draft.map" | "workshop.draft.release" | "workshop.draft.rules" | "workshop.draft.retry" | "workshop.draft.repair" | "tool.draft_workshop" | "tool.draft_component" | "tool.draft_grid" | "tool.draft_concept_map" | "tool.draft_release_plan" | "tool.revise_workshop_rules" | "exec.chat.system" | "exec.chat.fix" | "exec.chat.retry" | "agent.request.notes" | "presentation.segments" | "presentation.art" | "presentation.system" | "presentation.system.dynamic" | "presentation.system.slides" | "presentation.system.template" | "presentation.slate" | "presentation.user" | "presentation.brief" | "presentation.refine" | "tool.create-presentation" | "tool.create-presentation.image-query" | "tool.create-presentation.image-prompt" | "tool.create-presentation.image-why" | "library.refine.system" | "library.refine.request" | "library.refine.retry" | "tool.propose_library_refinement" | "connectors.plan.system" | "connectors.plan.writes" | "connectors.plan.next" | "connectors.plan.tool" | "connectors.layout.system" | "connectors.layout.budget" | "connectors.layout.tool" | "connectors.recipe.github" | "connectors.recipe.linear" | "connectors.recipe.huggingface" | "connectors.recipe.deepwiki" | "connectors.recipe.context7" | "connectors.recipe.wolfram" | "connectors.recipe.firecrawl" | "connectors.recipe.exa";
   }): Promise<{
     id?: string;
     code?: Record<string, unknown>;
@@ -442,7 +442,7 @@ declare namespace slatebox.ai.prompts {
   /** Render AI prompt. Renders a prompt version (or text sent with the call) into the request a built-in sample sends, and reports its lint findings. No model is called and nothing is saved. Administrators only. @scope ai:admin:read @idempotent */
   function render(input: {
     /** The prompt, for example shape.system. */
-    id: "shape.system" | "shape.user" | "shape.retry" | "tool.propose_shapes" | "workshop.map.system" | "workshop.lane.system" | "workshop.chat.retry" | "tool.propose_map_edits" | "tool.propose_workshop_edits" | "workshop.draft.system" | "workshop.draft.component" | "workshop.draft.map" | "workshop.draft.release" | "workshop.draft.rules" | "workshop.draft.retry" | "workshop.draft.repair" | "tool.draft_workshop" | "tool.draft_component" | "tool.draft_concept_map" | "tool.draft_release_plan" | "tool.revise_workshop_rules" | "exec.chat.system" | "exec.chat.fix" | "exec.chat.retry" | "agent.request.notes" | "presentation.segments" | "presentation.art" | "presentation.system" | "presentation.system.dynamic" | "presentation.system.slides" | "presentation.system.template" | "presentation.slate" | "presentation.user" | "presentation.brief" | "presentation.refine" | "tool.create-presentation" | "tool.create-presentation.image-query" | "tool.create-presentation.image-prompt" | "tool.create-presentation.image-why" | "library.refine.system" | "library.refine.request" | "library.refine.retry" | "tool.propose_library_refinement" | "connectors.plan.system" | "connectors.plan.writes" | "connectors.plan.next" | "connectors.plan.tool" | "connectors.layout.system" | "connectors.layout.budget" | "connectors.layout.tool" | "connectors.recipe.github" | "connectors.recipe.linear" | "connectors.recipe.huggingface" | "connectors.recipe.deepwiki" | "connectors.recipe.context7" | "connectors.recipe.wolfram" | "connectors.recipe.firecrawl" | "connectors.recipe.exa";
+    id: "shape.system" | "shape.user" | "shape.retry" | "tool.propose_shapes" | "workshop.map.system" | "workshop.lane.system" | "workshop.chat.retry" | "tool.propose_map_edits" | "tool.propose_workshop_edits" | "workshop.draft.system" | "workshop.draft.component" | "workshop.draft.grid" | "workshop.draft.map" | "workshop.draft.release" | "workshop.draft.rules" | "workshop.draft.retry" | "workshop.draft.repair" | "tool.draft_workshop" | "tool.draft_component" | "tool.draft_grid" | "tool.draft_concept_map" | "tool.draft_release_plan" | "tool.revise_workshop_rules" | "exec.chat.system" | "exec.chat.fix" | "exec.chat.retry" | "agent.request.notes" | "presentation.segments" | "presentation.art" | "presentation.system" | "presentation.system.dynamic" | "presentation.system.slides" | "presentation.system.template" | "presentation.slate" | "presentation.user" | "presentation.brief" | "presentation.refine" | "tool.create-presentation" | "tool.create-presentation.image-query" | "tool.create-presentation.image-prompt" | "tool.create-presentation.image-why" | "library.refine.system" | "library.refine.request" | "library.refine.retry" | "tool.propose_library_refinement" | "connectors.plan.system" | "connectors.plan.writes" | "connectors.plan.next" | "connectors.plan.tool" | "connectors.layout.system" | "connectors.layout.budget" | "connectors.layout.tool" | "connectors.recipe.github" | "connectors.recipe.linear" | "connectors.recipe.huggingface" | "connectors.recipe.deepwiki" | "connectors.recipe.context7" | "connectors.recipe.wolfram" | "connectors.recipe.firecrawl" | "connectors.recipe.exa";
     /** A saved version; 0 is the built-in text. (at least 0) */
     version?: number;
     /** The text. Values go in as {{name}}; {{#flag}}…{{/flag}} keeps text only when the flag is set, {{^flag}}…{{/flag}} only when it is not. (1–32768 characters) */
@@ -463,7 +463,7 @@ declare namespace slatebox.ai.prompts {
   /** Save AI prompt draft. Saves a new draft version of a prompt. Changes nothing live: a person publishes it after its checks pass. An agent's draft is marked as a suggestion. Returns the version and its lint findings. Administrators only. @scope ai:admin */
   function saveDraft(input: {
     /** The prompt, for example shape.system. */
-    id: "shape.system" | "shape.user" | "shape.retry" | "tool.propose_shapes" | "workshop.map.system" | "workshop.lane.system" | "workshop.chat.retry" | "tool.propose_map_edits" | "tool.propose_workshop_edits" | "workshop.draft.system" | "workshop.draft.component" | "workshop.draft.map" | "workshop.draft.release" | "workshop.draft.rules" | "workshop.draft.retry" | "workshop.draft.repair" | "tool.draft_workshop" | "tool.draft_component" | "tool.draft_concept_map" | "tool.draft_release_plan" | "tool.revise_workshop_rules" | "exec.chat.system" | "exec.chat.fix" | "exec.chat.retry" | "agent.request.notes" | "presentation.segments" | "presentation.art" | "presentation.system" | "presentation.system.dynamic" | "presentation.system.slides" | "presentation.system.template" | "presentation.slate" | "presentation.user" | "presentation.brief" | "presentation.refine" | "tool.create-presentation" | "tool.create-presentation.image-query" | "tool.create-presentation.image-prompt" | "tool.create-presentation.image-why" | "library.refine.system" | "library.refine.request" | "library.refine.retry" | "tool.propose_library_refinement" | "connectors.plan.system" | "connectors.plan.writes" | "connectors.plan.next" | "connectors.plan.tool" | "connectors.layout.system" | "connectors.layout.budget" | "connectors.layout.tool" | "connectors.recipe.github" | "connectors.recipe.linear" | "connectors.recipe.huggingface" | "connectors.recipe.deepwiki" | "connectors.recipe.context7" | "connectors.recipe.wolfram" | "connectors.recipe.firecrawl" | "connectors.recipe.exa";
+    id: "shape.system" | "shape.user" | "shape.retry" | "tool.propose_shapes" | "workshop.map.system" | "workshop.lane.system" | "workshop.chat.retry" | "tool.propose_map_edits" | "tool.propose_workshop_edits" | "workshop.draft.system" | "workshop.draft.component" | "workshop.draft.grid" | "workshop.draft.map" | "workshop.draft.release" | "workshop.draft.rules" | "workshop.draft.retry" | "workshop.draft.repair" | "tool.draft_workshop" | "tool.draft_component" | "tool.draft_grid" | "tool.draft_concept_map" | "tool.draft_release_plan" | "tool.revise_workshop_rules" | "exec.chat.system" | "exec.chat.fix" | "exec.chat.retry" | "agent.request.notes" | "presentation.segments" | "presentation.art" | "presentation.system" | "presentation.system.dynamic" | "presentation.system.slides" | "presentation.system.template" | "presentation.slate" | "presentation.user" | "presentation.brief" | "presentation.refine" | "tool.create-presentation" | "tool.create-presentation.image-query" | "tool.create-presentation.image-prompt" | "tool.create-presentation.image-why" | "library.refine.system" | "library.refine.request" | "library.refine.retry" | "tool.propose_library_refinement" | "connectors.plan.system" | "connectors.plan.writes" | "connectors.plan.next" | "connectors.plan.tool" | "connectors.layout.system" | "connectors.layout.budget" | "connectors.layout.tool" | "connectors.recipe.github" | "connectors.recipe.linear" | "connectors.recipe.huggingface" | "connectors.recipe.deepwiki" | "connectors.recipe.context7" | "connectors.recipe.wolfram" | "connectors.recipe.firecrawl" | "connectors.recipe.exa";
     /** The text. Values go in as {{name}}; {{#flag}}…{{/flag}} keeps text only when the flag is set, {{^flag}}…{{/flag}} only when it is not. (1–32768 characters) */
     body: string;
     /** Per value: data encloses it in a <data> block so it reads as data, not instructions. */
@@ -486,7 +486,7 @@ declare namespace slatebox.ai.prompts {
   /** Test AI prompt. Sends a prompt version (or text sent with the call) with a built-in sample through a part of Slatebox's binding (default: the prompt's own). Returns the request sent, the raw answer, whether that part could use it, the model, latency and cost. The answer is shown, never applied. Metered to the caller; 30 an hour per administrator. Administrators only. @scope ai:admin */
   function test(input: {
     /** The prompt, for example shape.system. */
-    id: "shape.system" | "shape.user" | "shape.retry" | "tool.propose_shapes" | "workshop.map.system" | "workshop.lane.system" | "workshop.chat.retry" | "tool.propose_map_edits" | "tool.propose_workshop_edits" | "workshop.draft.system" | "workshop.draft.component" | "workshop.draft.map" | "workshop.draft.release" | "workshop.draft.rules" | "workshop.draft.retry" | "workshop.draft.repair" | "tool.draft_workshop" | "tool.draft_component" | "tool.draft_concept_map" | "tool.draft_release_plan" | "tool.revise_workshop_rules" | "exec.chat.system" | "exec.chat.fix" | "exec.chat.retry" | "agent.request.notes" | "presentation.segments" | "presentation.art" | "presentation.system" | "presentation.system.dynamic" | "presentation.system.slides" | "presentation.system.template" | "presentation.slate" | "presentation.user" | "presentation.brief" | "presentation.refine" | "tool.create-presentation" | "tool.create-presentation.image-query" | "tool.create-presentation.image-prompt" | "tool.create-presentation.image-why" | "library.refine.system" | "library.refine.request" | "library.refine.retry" | "tool.propose_library_refinement" | "connectors.plan.system" | "connectors.plan.writes" | "connectors.plan.next" | "connectors.plan.tool" | "connectors.layout.system" | "connectors.layout.budget" | "connectors.layout.tool" | "connectors.recipe.github" | "connectors.recipe.linear" | "connectors.recipe.huggingface" | "connectors.recipe.deepwiki" | "connectors.recipe.context7" | "connectors.recipe.wolfram" | "connectors.recipe.firecrawl" | "connectors.recipe.exa";
+    id: "shape.system" | "shape.user" | "shape.retry" | "tool.propose_shapes" | "workshop.map.system" | "workshop.lane.system" | "workshop.chat.retry" | "tool.propose_map_edits" | "tool.propose_workshop_edits" | "workshop.draft.system" | "workshop.draft.component" | "workshop.draft.grid" | "workshop.draft.map" | "workshop.draft.release" | "workshop.draft.rules" | "workshop.draft.retry" | "workshop.draft.repair" | "tool.draft_workshop" | "tool.draft_component" | "tool.draft_grid" | "tool.draft_concept_map" | "tool.draft_release_plan" | "tool.revise_workshop_rules" | "exec.chat.system" | "exec.chat.fix" | "exec.chat.retry" | "agent.request.notes" | "presentation.segments" | "presentation.art" | "presentation.system" | "presentation.system.dynamic" | "presentation.system.slides" | "presentation.system.template" | "presentation.slate" | "presentation.user" | "presentation.brief" | "presentation.refine" | "tool.create-presentation" | "tool.create-presentation.image-query" | "tool.create-presentation.image-prompt" | "tool.create-presentation.image-why" | "library.refine.system" | "library.refine.request" | "library.refine.retry" | "tool.propose_library_refinement" | "connectors.plan.system" | "connectors.plan.writes" | "connectors.plan.next" | "connectors.plan.tool" | "connectors.layout.system" | "connectors.layout.budget" | "connectors.layout.tool" | "connectors.recipe.github" | "connectors.recipe.linear" | "connectors.recipe.huggingface" | "connectors.recipe.deepwiki" | "connectors.recipe.context7" | "connectors.recipe.wolfram" | "connectors.recipe.firecrawl" | "connectors.recipe.exa";
     /** A saved version; 0 is the built-in text. (at least 0) */
     version?: number;
     /** The text. Values go in as {{name}}; {{#flag}}…{{/flag}} keeps text only when the flag is set, {{^flag}}…{{/flag}} only when it is not. (1–32768 characters) */
@@ -496,7 +496,7 @@ declare namespace slatebox.ai.prompts {
     /** A built-in sample (ai.prompts.get lists them). Default: the first. (at most 40 characters) */
     sample?: string;
     /** Whose binding (model chain) to test against. */
-    surface?: "default" | "chat" | "chat.route" | "generation" | "presentation" | "vision" | "images" | "shape" | "workshop" | "workshop.draft" | "canvas" | "agent.slatebox" | "library" | "connectors";
+    surface?: "default" | "chat" | "chat.route" | "generation" | "presentation" | "vision" | "images" | "shape" | "workshop" | "workshop.draft" | "canvas" | "agent.slatebox" | "library" | "connectors" | "eval";
   }): Promise<({
     rendered?: Record<string, unknown>;
     answer?: Record<string, unknown>;
@@ -897,7 +897,7 @@ declare namespace slatebox.library {
       title: string;
       summary: string;
       /** One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web. */
-      category?: "plan" | "decide" | "meetings" | "track" | "map" | "work" | "business" | "research" | "web";
+      category?: "plan" | "decide" | "meetings" | "track" | "map" | "make" | "work" | "business" | "research" | "web";
       authorName: string;
       publishedAt?: string;
       counts: {
@@ -956,7 +956,7 @@ declare namespace slatebox.library {
   function list(input: {
     kind?: "component" | "slate" | "presentation" | "integration";
     /** One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web. */
-    category?: "plan" | "decide" | "meetings" | "track" | "map" | "work" | "business" | "research" | "web";
+    category?: "plan" | "decide" | "meetings" | "track" | "map" | "make" | "work" | "business" | "research" | "web";
     /** (1–100 characters) */
     q?: string;
     /** (default "new") */
@@ -975,7 +975,7 @@ declare namespace slatebox.library {
       title: string;
       summary: string;
       /** One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web. */
-      category?: "plan" | "decide" | "meetings" | "track" | "map" | "work" | "business" | "research" | "web";
+      category?: "plan" | "decide" | "meetings" | "track" | "map" | "make" | "work" | "business" | "research" | "web";
       authorName: string;
       publishedAt?: string;
       counts: {
@@ -1164,7 +1164,7 @@ declare namespace slatebox.library.review {
     /** Plain text, up to 2,000 characters. (at most 2000 characters) */
     description?: string;
     /** One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web. */
-    category?: "plan" | "decide" | "meetings" | "track" | "map" | "work" | "business" | "research" | "web";
+    category?: "plan" | "decide" | "meetings" | "track" | "map" | "make" | "work" | "business" | "research" | "web";
     /** Smart components only: words people might search for. (at most 12 items) */
     synonyms?: string[];
     /** Review your own submission. Allowed only on a server with one administrator; the thread records it. */
@@ -1178,7 +1178,7 @@ declare namespace slatebox.library.review {
       title: string;
       summary: string;
       /** One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web. */
-      category?: "plan" | "decide" | "meetings" | "track" | "map" | "work" | "business" | "research" | "web";
+      category?: "plan" | "decide" | "meetings" | "track" | "map" | "make" | "work" | "business" | "research" | "web";
       authorName: string;
       publishedAt?: string;
       counts: {
@@ -1238,7 +1238,7 @@ declare namespace slatebox.library {
     /** Plain text, up to 2,000 characters. (at most 2000 characters) */
     description?: string;
     /** One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web. */
-    category?: "plan" | "decide" | "meetings" | "track" | "map" | "work" | "business" | "research" | "web";
+    category?: "plan" | "decide" | "meetings" | "track" | "map" | "make" | "work" | "business" | "research" | "web";
     /** Smart components only: words people might search for. (at most 12 items) */
     synonyms?: string[];
   }): Promise<({
@@ -1283,7 +1283,7 @@ declare namespace slatebox.library {
     /** Plain text, up to 2,000 characters. (at most 2000 characters) */
     description?: string;
     /** One of the five categories: plan, decide, meetings, track, map. An integration takes work, business, research or web. */
-    category?: "plan" | "decide" | "meetings" | "track" | "map" | "work" | "business" | "research" | "web";
+    category?: "plan" | "decide" | "meetings" | "track" | "map" | "make" | "work" | "business" | "research" | "web";
     /** Smart components only: words people might search for. (at most 12 items) */
     synonyms?: string[];
     /** kind integration: your connected integration to suggest (integrations.list). (1–64 characters) */
@@ -2230,7 +2230,7 @@ interface AddComponentPlan {
   operations: Array<{
     kind: "add_component";
     /** The library entry to add (components.list ids). Or name a shared library item with library instead. */
-    component?: "now-next-later" | "pros-cons" | "must-should-could" | "decision-path" | "retro" | "triage" | "team-board" | "launch-plan" | "customer-go-live" | "hiring-plan" | "sort-evidence" | "discovery-tree" | "break-down-problem" | "incident-review" | "impact-effort" | "reorg-sandbox" | "goals-owners" | "sales-pipeline" | "budget";
+    component?: "now-next-later" | "pros-cons" | "must-should-could" | "decision-path" | "retro" | "triage" | "team-board" | "launch-plan" | "customer-go-live" | "hiring-plan" | "sort-evidence" | "discovery-tree" | "break-down-problem" | "incident-review" | "impact-effort" | "reorg-sandbox" | "goals-owners" | "printable-page" | "sales-pipeline" | "budget";
     /** A smart component from the shared library (in place of component). */
     library?: {
       /** A smart component from library.list (kind component), or one of your own. (1–120 characters) */
@@ -2798,7 +2798,7 @@ interface SlateRead {
 
 interface Workshop {
   title: string;
-  kind: "lanes" | "release-plan" | "customer-interviews" | "experiment-budget" | "map" | "launch-plan" | "pipeline" | "budget" | "hiring-plan" | "nest";
+  kind: "lanes" | "release-plan" | "customer-interviews" | "experiment-budget" | "map" | "launch-plan" | "pipeline" | "budget" | "hiring-plan" | "nest" | "grid";
   /** Launch plans: launch day, and the day the last task ends (name: what the plan calls its line, such as go-live). */
   launch?: {
     day: number;
@@ -3067,6 +3067,21 @@ interface WorkshopEditsPlan {
       role?: string;
       /** Nest board: who said it. (1–60 characters) */
       source?: string;
+      /** The kind of tile: heading, text, image, question, answer-lines, word-bank, diagram, qr, panel, speech, term, sticker. */
+      type?: "heading" | "text" | "image" | "question" | "answer-lines" | "word-bank" | "diagram" | "qr" | "panel" | "speech" | "term" | "sticker";
+      /** Its words: a text block’s text, a question’s question, how many answer lines. Line breaks are kept. (1–600 characters) */
+      body?: string;
+      /** Grid sheet: the picture a note brought. */
+      image?: {
+        /** (1–2048 characters) */
+        src: string;
+        /** (1–240 characters) */
+        alt: string;
+      } | null;
+      /** Grid sheet: its row, from 1. (1 to 12) */
+      row?: number;
+      /** Grid sheet: its column, from 1. (1 to 8) */
+      col?: number;
     } | {
       kind: "remove_card";
       /** The card or token. */
@@ -3413,7 +3428,7 @@ interface WorkshopEditsPlan {
       kind: "add_rule";
       /** The rule, lanes by id or name. */
       rule: {
-        kind: "capacity" | "path" | "gate" | "bin" | "deadline" | "overlap" | "snap" | "workdays" | "blackout" | "cascade" | "locked" | "nests" | "children" | "depth" | "rank" | "emptyDrop" | "quadrant" | "parent" | "contains" | "sameOwnerAs";
+        kind: "capacity" | "path" | "gate" | "bin" | "deadline" | "overlap" | "snap" | "workdays" | "blackout" | "cascade" | "locked" | "nests" | "children" | "depth" | "rank" | "emptyDrop" | "quadrant" | "parent" | "contains" | "sameOwnerAs" | "tileTypes" | "tileMax" | "tileNeeds" | "tileSpan";
         severity?: "refuse" | "warn";
         where?: string | {
           /** (1–64 characters) */
@@ -3470,6 +3485,14 @@ interface WorkshopEditsPlan {
         /** (1 to 12) */
         atLeast?: number;
         mode?: "warn" | "ask" | "carry";
+        /** (1–12 items) */
+        types?: Array<"heading" | "text" | "image" | "question" | "answer-lines" | "word-bank" | "diagram" | "qr" | "panel" | "speech" | "term" | "sticker">;
+        type?: "heading" | "text" | "image" | "question" | "answer-lines" | "word-bank" | "diagram" | "qr" | "panel" | "speech" | "term" | "sticker";
+        per?: "page" | "sheet";
+        /** (1 to 12) */
+        rows?: number;
+        /** (1 to 8) */
+        cols?: number;
       };
     } | {
       kind: "set_rule";
@@ -3503,6 +3526,16 @@ interface WorkshopEditsPlan {
       drop?: "new-pile" | "unsorted";
       /** Goals & owners: what a change of team does to the cards under a card. */
       mode?: "warn" | "ask" | "carry";
+      /** Grid sheet: the kinds of tile the sheet uses. (1–12 items) */
+      types?: string[];
+      /** Grid sheet: a limit per page or for the whole sheet. */
+      per?: "page" | "sheet";
+      /** Grid sheet: how many of a kind every page needs. (1 to 12) */
+      atLeast?: number;
+      /** Grid sheet: rows a kind may span. (1 to 12) */
+      rows?: number;
+      /** Grid sheet: columns a kind may span. (1 to 8) */
+      cols?: number;
     } | {
       kind: "remove_rule";
       /** The rule id. (1–64 characters) */
@@ -3669,6 +3702,115 @@ interface WorkshopEditsPlan {
         /** (1–64 characters) */
         id: string;
       }>;
+    } | {
+      kind: "set_page";
+      /** letter or a4. */
+      size?: "letter" | "a4";
+      /** portrait or landscape. */
+      orientation?: "portrait" | "landscape";
+      /** Inches, in eighths: 0.25 to 1. (0.25 to 1) */
+      margin?: number;
+    } | {
+      kind: "set_grid";
+      /** Rows of cells. (1 to 12) */
+      rows?: number;
+      /** Columns of cells. (1 to 8) */
+      cols?: number;
+      /** The gap between cells, inches in sixteenths. (0 to 0.5) */
+      gutter?: number;
+    } | {
+      kind: "add_tile";
+      /** The kind of tile: heading, text, image, question, answer-lines, word-bank, diagram, qr, panel, speech, term, sticker. */
+      type: "heading" | "text" | "image" | "question" | "answer-lines" | "word-bank" | "diagram" | "qr" | "panel" | "speech" | "term" | "sticker";
+      /** What the tile is called (a heading’s words, a question’s name). Left out, its kind: “Heading”. (1–80 characters) */
+      label?: string;
+      /** Its words: a text block’s text, a question’s question, how many answer lines. Line breaks are kept. (1–600 characters) */
+      body?: string;
+      /** A word bank’s words, 3 to 24. (3–24 items) */
+      words?: string[];
+      /** A picture it shows (src and alt). Left out, an image tile is an empty frame that prints its words. */
+      image?: {
+        /** (1–2048 characters) */
+        src: string;
+        /** (1–240 characters) */
+        alt: string;
+      } | null;
+      /** What the picture shows, for an empty frame. (1–120 characters) */
+      alt?: string;
+      /** A QR code’s web address (http or https). (1–2048 characters) */
+      link?: string;
+      /** True for a stamp that stays in the tray. */
+      stamp?: boolean;
+      /** The page it goes on. */
+      page?: string | {
+        /** (1–64 characters) */
+        id: string;
+      };
+      /** Its row, from 1. (1 to 12) */
+      row?: number;
+      /** Its column, from 1. (1 to 8) */
+      col?: number;
+      /** Rows it spans. (1 to 12) */
+      rows?: number;
+      /** Columns it spans. (1 to 8) */
+      cols?: number;
+    } | {
+      kind: "place_tile";
+      /** The tile, or a stamp in the tray. */
+      card: string | {
+        /** (1–64 characters) */
+        id: string;
+      };
+      /** The page, or the tray to take it off the page. */
+      page: string | {
+        /** (1–64 characters) */
+        id: string;
+      };
+      /** Its row, from 1. (1 to 12) */
+      row: number;
+      /** Its column, from 1. (1 to 8) */
+      col: number;
+      /** Rows it spans. (1 to 12) */
+      rows?: number;
+      /** Columns it spans. (1 to 8) */
+      cols?: number;
+      /** True to place it anyway when a limit or the sheet’s tiles refuse it, once the person agreed. Never past a page’s edge or over another tile. */
+      override?: boolean;
+    } | {
+      kind: "set_tile";
+      /** The tile. */
+      card: string | {
+        /** (1–64 characters) */
+        id: string;
+      };
+      /** Its words: a text block’s text, a question’s question, how many answer lines. Line breaks are kept. (1–600 characters) */
+      body?: string;
+      /** A word bank’s words, 3 to 24. (3–24 items) */
+      words?: string[];
+      /** A picture (src and alt), or null to take it away. */
+      image?: {
+        /** (1–2048 characters) */
+        src: string;
+        /** (1–240 characters) */
+        alt: string;
+      } | null;
+      /** What the picture shows, for an empty frame. (1–120 characters) */
+      alt?: string;
+      /** A QR code’s web address; empty takes it away. (0–2048 characters) */
+      link?: string;
+      /** The kind of tile: heading, text, image, question, answer-lines, word-bank, diagram, qr, panel, speech, term, sticker. */
+      type?: "heading" | "text" | "image" | "question" | "answer-lines" | "word-bank" | "diagram" | "qr" | "panel" | "speech" | "term" | "sticker";
+    } | {
+      kind: "add_page";
+      /** The page to copy. */
+      copyOf?: string | {
+        /** (1–64 characters) */
+        id: string;
+      };
+      /** True to shuffle the copied terms among their cells. */
+      shuffle?: boolean;
+      /** Its name. Left out, “Page N”. (1–80 characters) */
+      label?: string;
     }>;
     /** (at least 0) */
     expectedRevision: number;

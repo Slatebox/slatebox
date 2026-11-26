@@ -8,6 +8,25 @@ one-step, path and archive rules). It must also be a working tool, not a toy.
 The prompts are in `prompts.mjs` (46 of them: the owner's, classroom, work, home, games, vague, odd, non-English and
 rambling ones). Both layers below read them.
 
+## Printable pages are grid sheets
+
+Words that name a composed page to print (owner's choice, 2026-11-25: "a page-sized grid where equal tiles snap into
+cells and the composed page exports to print/PDF") are not lanes: `gridDescription` in
+`web/app/imports/api/common/builder-grid.mjs` sends them to a grid sheet, a page of equal cells and a tray of tiles
+(stamps: each drop makes a copy) with rules as data (`tileTypes`, `tileMax`, `tileNeeds`, `tileSpan`). The agent drafts
+it with `draft_grid` (`server/methods/workshop-grid-draft.mjs`); without one, a starter kit from the words
+(`gridStarter`). Prompts tagged `grid` carry `expect: { kind: 'grid' }`; both layers check them with `gridQuality`
+(`checks.mjs` dispatches by kind), and the judge reads a sheet as its page, cells and tiles ("would a teacher or maker
+print this page today?"), with one grid control board (numbered questions with no words).
+
+`grid-e2e.mjs` types the owner's words on `/new#build` in a fresh signed-in context and a fresh guest one, keeps the
+sheet, checks every tile is at its cell's box, drags a stamp into a free cell (and onto a taken one, refused), asks
+"make it 3 columns", prints (one SVG a page at 8.5in × 11in) and saves a PDF (read back as 612 × 792 points):
+
+```sh
+node scripts/evals/smart-components/grid-e2e.mjs --origin http://127.0.0.1:3780 --shots <dir>
+```
+
 ## What "built" means
 
 - **Valid** (`checks.mjs` `previewProblems`): the preview is a board of plain lanes that passes `validateWorkshop`,

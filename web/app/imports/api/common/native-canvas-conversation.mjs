@@ -238,6 +238,11 @@ export function nativeCanvasDraft(board,message,requestId,generated,samples={},{
     if(!playable || !['launch-plan','pipeline','budget'].includes(playable.kind)) throw Error('Say what the board holds, like “Plan a launch for day 30: Design 5 days, Build 8 days after Design”.')
     return {mode:'play',format:playable.kind,workshop:playable}
   }
+  if(mode==='grid') {
+    // A printable page described on a builder slate (builder-grid.mjs): the grid sheet the server drafted or started.
+    if(!playable || playable.kind!=='grid') throw Error('The proposal needs a grid sheet.')
+    return {mode:'play',format:'grid',workshop:playable}
+  }
   if(mode==='lanes') {
     const workshop=playable || workshopFromLaneBrief(words)
     if(workshop.kind || workshop.lanes.some(lane=>lane.station)) throw Error('The proposal needs ordinary workshop lanes.')

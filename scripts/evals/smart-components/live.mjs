@@ -152,7 +152,7 @@ async function runCase(item, index) {
     row.provider = preview.provider
     row.said = preview.said
     row.rules = preview.rules
-    const { problems, workshop } = previewProblems(preview, item.prompt)
+    const { problems, workshop } = previewProblems(preview, item.prompt, item.expect)
     row.problems.push(...problems)
     row.validComponent = Boolean(workshop)
     if (workshop) row.board = { title: workshop.title, lanes: workshop.lanes.map((l) => l.label + (l.capacity ? ` (${l.capacity})` : '')), cards: workshop.cards.length, rules: preview.rules?.length ?? 0 }

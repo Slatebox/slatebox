@@ -39,7 +39,7 @@ test("one forced tool: board edits only for a smart component, and only the edit
   assert.ok(kinds.includes("add_rule") && kinds.includes("set_rule") && kinds.includes("remove_rule"));
   assert.ok(!kinds.includes("set_launch_day"), "a lane board is not offered a launch plan's edits");
   assert.equal(refineTool(slate, null).parameters.properties.edits, undefined);
-  assert.deepEqual(withBoard.parameters.properties.meta.properties.category.enum, ["plan", "decide", "meetings", "track", "map"]);
+  assert.deepEqual(withBoard.parameters.properties.meta.properties.category.enum, ["plan", "decide", "meetings", "track", "map", "make"]);
   assert.deepEqual(readRefinement({ reply: "Ok", meta: { title: "X" }, edits: [], check: ["a"] }), { reply: "Ok", meta: { title: "X" }, check: ["a"] });
 });
 

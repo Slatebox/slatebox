@@ -1,5 +1,6 @@
 import { catalogEntry } from 'slateboxjs/catalog'
 import { laneEditFormats, proposeLaneReply } from '../../imports/api/common/lane-conversation.mjs'
+import { gridEditFormats } from '../../imports/api/common/grid-chat.mjs'
 import { codePromptText, promptText } from '../ai-control/prompts/index.mjs'
 
 // The description is a prompt (tool.propose_workshop_edits); laneTool() sends the published one.
@@ -23,8 +24,9 @@ export const laneChangeTool = {
 export const laneTool = () => ({ ...laneChangeTool, description: promptText('tool.propose_workshop_edits') })
 
 // The lane chat's instructions (workshop.lane.system): the command formats are the reader's own.
-export const laneSystemValues = () => ({ editFormats: laneEditFormats.join('; ') })
-export const laneInstructions = () => promptText('workshop.lane.system', laneSystemValues())
+// A grid sheet's are its own (grid-chat.mjs gridEditFormats): a page, a grid, tiles in cells, pages, rules and print.
+export const laneSystemValues = (board) => ({ editFormats: (board?.kind === 'grid' ? gridEditFormats : laneEditFormats).join('; ') })
+export const laneInstructions = (board) => promptText('workshop.lane.system', laneSystemValues(board))
 
 // A component the AI named: kept only when it is a catalogue entry (an unknown id is dropped).
 function recommendOf(input) {
@@ -45,15 +47,19 @@ export function prepareLaneReply(input, workshop, selection) {
   }
   let next = workshop
   let override = null
+  // A grid sheet's print command is an action the page runs (gridPrint.js), not a change of the board.
+  let action = null
   for (const command of commands) {
     const made = proposeLaneReply(next, command, selection)
-    next = made.workshop
+    if (made.action) action = made.action
+    if (made.workshop) next = made.workshop
     if (made.override) override = made
   }
+  if (action && next === workshop) return { reply: input.reply.trim(), workshop: null, action, ...(recommend && { recommend }) }
   // A move the rules refuse, offered as "Move anyway": said in the board's words, alone (move-anyway.mjs).
   if (override) {
     if (commands.length > 1) throw Error(override.reply)
     return { reply: override.reply, workshop: next, override: override.override, ...(recommend && { recommend }) }
   }
-  return { reply: input.reply.trim(), workshop: next, ...(recommend && { recommend }) }
+  return { reply: input.reply.trim(), workshop: next, ...(action && { action }), ...(recommend && { recommend }) }
 }

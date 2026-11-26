@@ -531,7 +531,8 @@
                   "pipeline",
                   "budget",
                   "hiring-plan",
-                  "nest"
+                  "nest",
+                  "grid"
                 ]
               },
               "launch": {
@@ -1293,7 +1294,8 @@
                       "pipeline",
                       "budget",
                       "hiring-plan",
-                      "nest"
+                      "nest",
+                      "grid"
                     ]
                   },
                   "launch": {
@@ -3353,7 +3355,7 @@
                               {
                                 "type": "object",
                                 "additionalProperties": false,
-                                "description": "Rename the workshop or map. The slate takes the same name. Boards: lanes, release-plan, customer-interviews, experiment-budget, map, launch-plan, pipeline, budget, hiring-plan, nest.",
+                                "description": "Rename the workshop or map. The slate takes the same name. Boards: lanes, release-plan, customer-interviews, experiment-budget, map, launch-plan, pipeline, budget, hiring-plan, nest, grid.",
                                 "required": [
                                   "kind",
                                   "title"
@@ -3373,7 +3375,7 @@
                               {
                                 "type": "object",
                                 "additionalProperties": false,
-                                "description": "Rename a lane, or a step on a map. Boards: lanes, release-plan, customer-interviews, experiment-budget, map, launch-plan, pipeline, budget, hiring-plan, nest.",
+                                "description": "Rename a lane, or a step on a map. Boards: lanes, release-plan, customer-interviews, experiment-budget, map, launch-plan, pipeline, budget, hiring-plan, nest, grid.",
                                 "required": [
                                   "kind",
                                   "lane",
@@ -3418,7 +3420,7 @@
                               {
                                 "type": "object",
                                 "additionalProperties": false,
-                                "description": "Rename a card, a feature or a token. Boards: lanes, release-plan, customer-interviews, experiment-budget, map, launch-plan, pipeline, budget, hiring-plan, nest.",
+                                "description": "Rename a card, a feature or a token. Boards: lanes, release-plan, customer-interviews, experiment-budget, map, launch-plan, pipeline, budget, hiring-plan, nest, grid.",
                                 "required": [
                                   "kind",
                                   "card",
@@ -3489,7 +3491,7 @@
                               {
                                 "type": "object",
                                 "additionalProperties": false,
-                                "description": "Remove an empty lane, or a step no token is at, with everything that pointed at it. Two always stay. Boards: lanes, map.",
+                                "description": "Remove an empty lane, or a step no token is at, with everything that pointed at it. Two always stay. Boards: lanes, map, grid.",
                                 "required": [
                                   "kind",
                                   "lane"
@@ -3527,7 +3529,7 @@
                               {
                                 "type": "object",
                                 "additionalProperties": false,
-                                "description": "Add a card to a lane that has room, or a token at a step. A workshop has up to 24 cards. Boards: lanes, experiment-budget, map, launch-plan, pipeline, budget, hiring-plan, nest.",
+                                "description": "Add a card to a lane that has room, or a token at a step. A workshop has up to 24 cards. Boards: lanes, experiment-budget, map, launch-plan, pipeline, budget, hiring-plan, nest, grid.",
                                 "required": [
                                   "kind",
                                   "lane"
@@ -3687,13 +3689,76 @@
                                     "minLength": 1,
                                     "maxLength": 60,
                                     "description": "Nest board: who said it."
+                                  },
+                                  "type": {
+                                    "enum": [
+                                      "heading",
+                                      "text",
+                                      "image",
+                                      "question",
+                                      "answer-lines",
+                                      "word-bank",
+                                      "diagram",
+                                      "qr",
+                                      "panel",
+                                      "speech",
+                                      "term",
+                                      "sticker"
+                                    ],
+                                    "description": "The kind of tile: heading, text, image, question, answer-lines, word-bank, diagram, qr, panel, speech, term, sticker."
+                                  },
+                                  "body": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 600,
+                                    "description": "Its words: a text block’s text, a question’s question, how many answer lines. Line breaks are kept."
+                                  },
+                                  "image": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "additionalProperties": false,
+                                        "required": [
+                                          "src",
+                                          "alt"
+                                        ],
+                                        "properties": {
+                                          "src": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 2048
+                                          },
+                                          "alt": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 240
+                                          }
+                                        }
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ],
+                                    "description": "Grid sheet: the picture a note brought."
+                                  },
+                                  "row": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 12,
+                                    "description": "Grid sheet: its row, from 1."
+                                  },
+                                  "col": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 8,
+                                    "description": "Grid sheet: its column, from 1."
                                   }
                                 }
                               },
                               {
                                 "type": "object",
                                 "additionalProperties": false,
-                                "description": "Remove a card or token, with the dependencies and outcomes that named it. Boards: lanes, release-plan, customer-interviews, experiment-budget, map, launch-plan, pipeline, budget, hiring-plan, nest.",
+                                "description": "Remove a card or token, with the dependencies and outcomes that named it. Boards: lanes, release-plan, customer-interviews, experiment-budget, map, launch-plan, pipeline, budget, hiring-plan, nest, grid.",
                                 "required": [
                                   "kind",
                                   "card"
@@ -3731,7 +3796,7 @@
                               {
                                 "type": "object",
                                 "additionalProperties": false,
-                                "description": "Move a card to a lane, or a token to a step, by the board’s rules. A release plan brings the features that must move with it. Boards: lanes, release-plan, customer-interviews, experiment-budget, map, launch-plan, pipeline, budget, hiring-plan, nest.",
+                                "description": "Move a card to a lane, or a token to a step, by the board’s rules. A release plan brings the features that must move with it. Boards: lanes, release-plan, customer-interviews, experiment-budget, map, launch-plan, pipeline, budget, hiring-plan, nest, grid.",
                                 "required": [
                                   "kind",
                                   "card",
@@ -3836,7 +3901,7 @@
                               {
                                 "type": "object",
                                 "additionalProperties": false,
-                                "description": "Set how many cards (on a release plan, points; on a map, tokens) a lane holds, or null for any number. Boards: lanes, release-plan, customer-interviews, experiment-budget, map, pipeline, hiring-plan, nest.",
+                                "description": "Set how many cards (on a release plan, points; on a map, tokens) a lane holds, or null for any number. Boards: lanes, release-plan, customer-interviews, experiment-budget, map, pipeline, hiring-plan, nest, grid.",
                                 "required": [
                                   "kind",
                                   "lane",
@@ -4229,7 +4294,7 @@
                               {
                                 "type": "object",
                                 "additionalProperties": false,
-                                "description": "Set the order the lanes or steps are presented in: each once. Boards: lanes, release-plan, customer-interviews, experiment-budget, map, launch-plan, pipeline, budget, hiring-plan, nest.",
+                                "description": "Set the order the lanes or steps are presented in: each once. Boards: lanes, release-plan, customer-interviews, experiment-budget, map, launch-plan, pipeline, budget, hiring-plan, nest, grid.",
                                 "required": [
                                   "kind",
                                   "lanes"
@@ -4272,7 +4337,7 @@
                               {
                                 "type": "object",
                                 "additionalProperties": false,
-                                "description": "Present one lane or step first, or just before or after another, keeping the rest in order. Boards: lanes, release-plan, customer-interviews, experiment-budget, map, launch-plan, pipeline, budget, hiring-plan, nest.",
+                                "description": "Present one lane or step first, or just before or after another, keeping the rest in order. Boards: lanes, release-plan, customer-interviews, experiment-budget, map, launch-plan, pipeline, budget, hiring-plan, nest, grid.",
                                 "required": [
                                   "kind",
                                   "lane"
@@ -5416,7 +5481,7 @@
                               {
                                 "type": "object",
                                 "additionalProperties": false,
-                                "description": "Add a rule (capacity, path from a lane or \"any\", gate or bin; refuse or warn). It moves no card. Boards: lanes, pipeline, launch-plan, hiring-plan, nest.",
+                                "description": "Add a rule (capacity, path from a lane or \"any\", gate or bin; refuse or warn). It moves no card. Boards: lanes, pipeline, launch-plan, hiring-plan, nest, grid.",
                                 "required": [
                                   "kind",
                                   "rule"
@@ -5453,7 +5518,11 @@
                                           "quadrant",
                                           "parent",
                                           "contains",
-                                          "sameOwnerAs"
+                                          "sameOwnerAs",
+                                          "tileTypes",
+                                          "tileMax",
+                                          "tileNeeds",
+                                          "tileSpan"
                                         ]
                                       },
                                       "severity": {
@@ -5714,6 +5783,59 @@
                                           "ask",
                                           "carry"
                                         ]
+                                      },
+                                      "types": {
+                                        "type": "array",
+                                        "items": {
+                                          "enum": [
+                                            "heading",
+                                            "text",
+                                            "image",
+                                            "question",
+                                            "answer-lines",
+                                            "word-bank",
+                                            "diagram",
+                                            "qr",
+                                            "panel",
+                                            "speech",
+                                            "term",
+                                            "sticker"
+                                          ]
+                                        },
+                                        "minItems": 1,
+                                        "maxItems": 12
+                                      },
+                                      "type": {
+                                        "enum": [
+                                          "heading",
+                                          "text",
+                                          "image",
+                                          "question",
+                                          "answer-lines",
+                                          "word-bank",
+                                          "diagram",
+                                          "qr",
+                                          "panel",
+                                          "speech",
+                                          "term",
+                                          "sticker"
+                                        ]
+                                      },
+                                      "per": {
+                                        "enum": [
+                                          "page",
+                                          "sheet"
+                                        ]
+                                      },
+                                      "rows": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 12
+                                      },
+                                      "cols": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 8
                                       }
                                     },
                                     "description": "The rule, lanes by id or name."
@@ -5723,7 +5845,7 @@
                               {
                                 "type": "object",
                                 "additionalProperties": false,
-                                "description": "Change a rule: on, severity, max (a limit) or to (a path). Boards: lanes, pipeline, launch-plan, hiring-plan, nest.",
+                                "description": "Change a rule: on, severity, max (a limit) or to (a path). Boards: lanes, pipeline, launch-plan, hiring-plan, nest, grid.",
                                 "required": [
                                   "kind",
                                   "rule"
@@ -5853,13 +5975,49 @@
                                       "carry"
                                     ],
                                     "description": "Goals & owners: what a change of team does to the cards under a card."
+                                  },
+                                  "types": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 20
+                                    },
+                                    "minItems": 1,
+                                    "maxItems": 12,
+                                    "description": "Grid sheet: the kinds of tile the sheet uses."
+                                  },
+                                  "per": {
+                                    "enum": [
+                                      "page",
+                                      "sheet"
+                                    ],
+                                    "description": "Grid sheet: a limit per page or for the whole sheet."
+                                  },
+                                  "atLeast": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 12,
+                                    "description": "Grid sheet: how many of a kind every page needs."
+                                  },
+                                  "rows": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 12,
+                                    "description": "Grid sheet: rows a kind may span."
+                                  },
+                                  "cols": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 8,
+                                    "description": "Grid sheet: columns a kind may span."
                                   }
                                 }
                               },
                               {
                                 "type": "object",
                                 "additionalProperties": false,
-                                "description": "Remove a rule. Boards: lanes, pipeline, launch-plan, hiring-plan, nest.",
+                                "description": "Remove a rule. Boards: lanes, pipeline, launch-plan, hiring-plan, nest, grid.",
                                 "required": [
                                   "kind",
                                   "rule"
@@ -5879,7 +6037,7 @@
                               {
                                 "type": "object",
                                 "additionalProperties": false,
-                                "description": "Change how the board looks, on every kind of board; it moves nothing. Give one or more of the looks, or a lane with a color. Boards: lanes, release-plan, customer-interviews, experiment-budget, map, launch-plan, pipeline, budget, hiring-plan, nest.",
+                                "description": "Change how the board looks, on every kind of board; it moves nothing. Give one or more of the looks, or a lane with a color. Boards: lanes, release-plan, customer-interviews, experiment-budget, map, launch-plan, pipeline, budget, hiring-plan, nest, grid.",
                                 "required": [
                                   "kind"
                                 ],
@@ -6661,6 +6819,468 @@
                                     "description": "The cards under it that come along."
                                   }
                                 }
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "description": "Grid sheet: set the page’s size (letter or a4), orientation and margin (inches, ¼ to 1). Tiles that no longer fit go to the first free cell, or back to the tray. Boards: grid.",
+                                "required": [
+                                  "kind"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "const": "set_page"
+                                  },
+                                  "size": {
+                                    "enum": [
+                                      "letter",
+                                      "a4"
+                                    ],
+                                    "description": "letter or a4."
+                                  },
+                                  "orientation": {
+                                    "enum": [
+                                      "portrait",
+                                      "landscape"
+                                    ],
+                                    "description": "portrait or landscape."
+                                  },
+                                  "margin": {
+                                    "type": "number",
+                                    "minimum": 0.25,
+                                    "maximum": 1,
+                                    "description": "Inches, in eighths: 0.25 to 1."
+                                  }
+                                }
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "description": "Grid sheet: set how many rows (1 to 12) and columns (1 to 8) of cells a page has, and the gap between them (inches, 0 to ½). Tiles that no longer fit move to the first free cell, or back to the tray. Boards: grid.",
+                                "required": [
+                                  "kind"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "const": "set_grid"
+                                  },
+                                  "rows": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 12,
+                                    "description": "Rows of cells."
+                                  },
+                                  "cols": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 8,
+                                    "description": "Columns of cells."
+                                  },
+                                  "gutter": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 0.5,
+                                    "description": "The gap between cells, inches in sixteenths."
+                                  }
+                                }
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "description": "Grid sheet: add a tile: a stamp to the tray (each drop makes a copy), or a tile on a page at a row and column (1-based). Left without a page, the first free cell of page 1, else the tray. Boards: grid.",
+                                "required": [
+                                  "kind",
+                                  "type"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "const": "add_tile"
+                                  },
+                                  "type": {
+                                    "enum": [
+                                      "heading",
+                                      "text",
+                                      "image",
+                                      "question",
+                                      "answer-lines",
+                                      "word-bank",
+                                      "diagram",
+                                      "qr",
+                                      "panel",
+                                      "speech",
+                                      "term",
+                                      "sticker"
+                                    ],
+                                    "description": "The kind of tile: heading, text, image, question, answer-lines, word-bank, diagram, qr, panel, speech, term, sticker."
+                                  },
+                                  "label": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 80,
+                                    "description": "What the tile is called (a heading’s words, a question’s name). Left out, its kind: “Heading”."
+                                  },
+                                  "body": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 600,
+                                    "description": "Its words: a text block’s text, a question’s question, how many answer lines. Line breaks are kept."
+                                  },
+                                  "words": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 40
+                                    },
+                                    "minItems": 3,
+                                    "maxItems": 24,
+                                    "description": "A word bank’s words, 3 to 24."
+                                  },
+                                  "image": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "additionalProperties": false,
+                                        "required": [
+                                          "src",
+                                          "alt"
+                                        ],
+                                        "properties": {
+                                          "src": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 2048
+                                          },
+                                          "alt": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 240
+                                          }
+                                        }
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ],
+                                    "description": "A picture it shows (src and alt). Left out, an image tile is an empty frame that prints its words."
+                                  },
+                                  "alt": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 120,
+                                    "description": "What the picture shows, for an empty frame."
+                                  },
+                                  "link": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2048,
+                                    "description": "A QR code’s web address (http or https)."
+                                  },
+                                  "stamp": {
+                                    "type": "boolean",
+                                    "description": "True for a stamp that stays in the tray."
+                                  },
+                                  "page": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 200
+                                      },
+                                      {
+                                        "type": "object",
+                                        "additionalProperties": false,
+                                        "required": [
+                                          "id"
+                                        ],
+                                        "properties": {
+                                          "id": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 64
+                                          }
+                                        }
+                                      }
+                                    ],
+                                    "description": "The page it goes on."
+                                  },
+                                  "row": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 12,
+                                    "description": "Its row, from 1."
+                                  },
+                                  "col": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 8,
+                                    "description": "Its column, from 1."
+                                  },
+                                  "rows": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 12,
+                                    "description": "Rows it spans."
+                                  },
+                                  "cols": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 8,
+                                    "description": "Columns it spans."
+                                  }
+                                }
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "description": "Grid sheet: put a tile in a cell of a page (row and column from 1), spanning rows by columns. A stamp is copied there and stays in the tray. Boards: grid.",
+                                "required": [
+                                  "kind",
+                                  "card",
+                                  "page",
+                                  "row",
+                                  "col"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "const": "place_tile"
+                                  },
+                                  "card": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 200
+                                      },
+                                      {
+                                        "type": "object",
+                                        "additionalProperties": false,
+                                        "required": [
+                                          "id"
+                                        ],
+                                        "properties": {
+                                          "id": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 64
+                                          }
+                                        }
+                                      }
+                                    ],
+                                    "description": "The tile, or a stamp in the tray."
+                                  },
+                                  "page": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 200
+                                      },
+                                      {
+                                        "type": "object",
+                                        "additionalProperties": false,
+                                        "required": [
+                                          "id"
+                                        ],
+                                        "properties": {
+                                          "id": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 64
+                                          }
+                                        }
+                                      }
+                                    ],
+                                    "description": "The page, or the tray to take it off the page."
+                                  },
+                                  "row": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 12,
+                                    "description": "Its row, from 1."
+                                  },
+                                  "col": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 8,
+                                    "description": "Its column, from 1."
+                                  },
+                                  "rows": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 12,
+                                    "description": "Rows it spans."
+                                  },
+                                  "cols": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 8,
+                                    "description": "Columns it spans."
+                                  },
+                                  "override": {
+                                    "type": "boolean",
+                                    "description": "True to place it anyway when a limit or the sheet’s tiles refuse it, once the person agreed. Never past a page’s edge or over another tile."
+                                  }
+                                }
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "description": "Grid sheet: change what a tile holds: its words, word bank, picture (null takes it away), QR address (null takes it away) or kind. Boards: grid.",
+                                "required": [
+                                  "kind",
+                                  "card"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "const": "set_tile"
+                                  },
+                                  "card": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 200
+                                      },
+                                      {
+                                        "type": "object",
+                                        "additionalProperties": false,
+                                        "required": [
+                                          "id"
+                                        ],
+                                        "properties": {
+                                          "id": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 64
+                                          }
+                                        }
+                                      }
+                                    ],
+                                    "description": "The tile."
+                                  },
+                                  "body": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 600,
+                                    "description": "Its words: a text block’s text, a question’s question, how many answer lines. Line breaks are kept."
+                                  },
+                                  "words": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 40
+                                    },
+                                    "minItems": 3,
+                                    "maxItems": 24,
+                                    "description": "A word bank’s words, 3 to 24."
+                                  },
+                                  "image": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "additionalProperties": false,
+                                        "required": [
+                                          "src",
+                                          "alt"
+                                        ],
+                                        "properties": {
+                                          "src": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 2048
+                                          },
+                                          "alt": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 240
+                                          }
+                                        }
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ],
+                                    "description": "A picture (src and alt), or null to take it away."
+                                  },
+                                  "alt": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 120,
+                                    "description": "What the picture shows, for an empty frame."
+                                  },
+                                  "link": {
+                                    "type": "string",
+                                    "minLength": 0,
+                                    "maxLength": 2048,
+                                    "description": "A QR code’s web address; empty takes it away."
+                                  },
+                                  "type": {
+                                    "enum": [
+                                      "heading",
+                                      "text",
+                                      "image",
+                                      "question",
+                                      "answer-lines",
+                                      "word-bank",
+                                      "diagram",
+                                      "qr",
+                                      "panel",
+                                      "speech",
+                                      "term",
+                                      "sticker"
+                                    ],
+                                    "description": "The kind of tile: heading, text, image, question, answer-lines, word-bank, diagram, qr, panel, speech, term, sticker."
+                                  }
+                                }
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "description": "Grid sheet: add a page (up to 4), empty or a copy of another (copyOf) with new tiles; shuffle reorders a copy’s terms (a different bingo card per player). Boards: grid.",
+                                "required": [
+                                  "kind"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "const": "add_page"
+                                  },
+                                  "copyOf": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 200
+                                      },
+                                      {
+                                        "type": "object",
+                                        "additionalProperties": false,
+                                        "required": [
+                                          "id"
+                                        ],
+                                        "properties": {
+                                          "id": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 64
+                                          }
+                                        }
+                                      }
+                                    ],
+                                    "description": "The page to copy."
+                                  },
+                                  "shuffle": {
+                                    "type": "boolean",
+                                    "description": "True to shuffle the copied terms among their cells."
+                                  },
+                                  "label": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 80,
+                                    "description": "Its name. Left out, “Page N”."
+                                  }
+                                }
                               }
                             ]
                           },
@@ -7027,6 +7647,7 @@
                             "impact-effort",
                             "reorg-sandbox",
                             "goals-owners",
+                            "printable-page",
                             "sales-pipeline",
                             "budget"
                           ],
@@ -7250,7 +7871,8 @@
                   "pipeline",
                   "budget",
                   "hiring-plan",
-                  "nest"
+                  "nest",
+                  "grid"
                 ]
               },
               "launch": {
@@ -10178,7 +10800,8 @@
               "canvas",
               "agent.slatebox",
               "library",
-              "connectors"
+              "connectors",
+              "eval"
             ],
             "description": "For target binding: the part of Slatebox."
           },
@@ -10196,6 +10819,7 @@
               "tool.propose_workshop_edits",
               "workshop.draft.system",
               "workshop.draft.component",
+              "workshop.draft.grid",
               "workshop.draft.map",
               "workshop.draft.release",
               "workshop.draft.rules",
@@ -10203,6 +10827,7 @@
               "workshop.draft.repair",
               "tool.draft_workshop",
               "tool.draft_component",
+              "tool.draft_grid",
               "tool.draft_concept_map",
               "tool.draft_release_plan",
               "tool.revise_workshop_rules",
@@ -11201,7 +11826,7 @@
           "changes": {
             "type": "array",
             "minItems": 1,
-            "maxItems": 14,
+            "maxItems": 15,
             "items": {
               "type": "object",
               "properties": {
@@ -11221,7 +11846,8 @@
                     "canvas",
                     "agent.slatebox",
                     "library",
-                    "connectors"
+                    "connectors",
+                    "eval"
                   ],
                   "description": "The part of Slatebox, for example shape or agent.slatebox; default is everything not set."
                 },
@@ -11381,6 +12007,7 @@
               "tool.propose_workshop_edits",
               "workshop.draft.system",
               "workshop.draft.component",
+              "workshop.draft.grid",
               "workshop.draft.map",
               "workshop.draft.release",
               "workshop.draft.rules",
@@ -11388,6 +12015,7 @@
               "workshop.draft.repair",
               "tool.draft_workshop",
               "tool.draft_component",
+              "tool.draft_grid",
               "tool.draft_concept_map",
               "tool.draft_release_plan",
               "tool.revise_workshop_rules",
@@ -11520,6 +12148,7 @@
               "tool.propose_workshop_edits",
               "workshop.draft.system",
               "workshop.draft.component",
+              "workshop.draft.grid",
               "workshop.draft.map",
               "workshop.draft.release",
               "workshop.draft.rules",
@@ -11527,6 +12156,7 @@
               "workshop.draft.repair",
               "tool.draft_workshop",
               "tool.draft_component",
+              "tool.draft_grid",
               "tool.draft_concept_map",
               "tool.draft_release_plan",
               "tool.revise_workshop_rules",
@@ -11688,6 +12318,7 @@
               "tool.propose_workshop_edits",
               "workshop.draft.system",
               "workshop.draft.component",
+              "workshop.draft.grid",
               "workshop.draft.map",
               "workshop.draft.release",
               "workshop.draft.rules",
@@ -11695,6 +12326,7 @@
               "workshop.draft.repair",
               "tool.draft_workshop",
               "tool.draft_component",
+              "tool.draft_grid",
               "tool.draft_concept_map",
               "tool.draft_release_plan",
               "tool.revise_workshop_rules",
@@ -11855,6 +12487,7 @@
               "tool.propose_workshop_edits",
               "workshop.draft.system",
               "workshop.draft.component",
+              "workshop.draft.grid",
               "workshop.draft.map",
               "workshop.draft.release",
               "workshop.draft.rules",
@@ -11862,6 +12495,7 @@
               "workshop.draft.repair",
               "tool.draft_workshop",
               "tool.draft_component",
+              "tool.draft_grid",
               "tool.draft_concept_map",
               "tool.draft_release_plan",
               "tool.revise_workshop_rules",
@@ -11948,7 +12582,8 @@
               "canvas",
               "agent.slatebox",
               "library",
-              "connectors"
+              "connectors",
+              "eval"
             ],
             "description": "Whose binding (model chain) to test against."
           }
@@ -17631,6 +18266,7 @@
               "meetings",
               "track",
               "map",
+              "make",
               "work",
               "business",
               "research",
@@ -17700,6 +18336,7 @@
                   "meetings",
                   "track",
                   "map",
+                  "make",
                   "work",
                   "business",
                   "research",
@@ -18532,6 +19169,7 @@
               "meetings",
               "track",
               "map",
+              "make",
               "work",
               "business",
               "research",
@@ -18690,6 +19328,7 @@
               "meetings",
               "track",
               "map",
+              "make",
               "work",
               "business",
               "research",
@@ -19309,6 +19948,7 @@
               "meetings",
               "track",
               "map",
+              "make",
               "work",
               "business",
               "research",
@@ -19395,6 +20035,7 @@
                     "meetings",
                     "track",
                     "map",
+                    "make",
                     "work",
                     "business",
                     "research",
@@ -19580,6 +20221,7 @@
                   "meetings",
                   "track",
                   "map",
+                  "make",
                   "work",
                   "business",
                   "research",

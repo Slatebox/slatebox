@@ -167,12 +167,13 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
   const [boardTry, setBoardTry] = useState(0)
   const retryRef = useRef(null)
   // A nested board's kit is its own chunk (slateboxjs/boards/nest): fetched only for a slate that holds one.
-  const kitsReady = Boolean(kits && (boardKind !== 'nest' || kits.nest))
+  // A grid sheet's kit too (slateboxjs/boards/grid): fetched only for a slate that holds one.
+  const kitsReady = Boolean(kits && (boardKind !== 'nest' || kits.nest) && (boardKind !== 'grid' || kits.grid))
   useEffect(() => {
     if (!boardKind || kitsReady) return undefined
     let gone = false
-    Promise.all([import('slateboxjs/boards'), boardKind === 'nest' ? import('slateboxjs/boards/nest') : null]).then(([loaded, nest]) => {
-      if (!gone) { setFailure(''); setKits({ kitFor: loaded.kitFor, boardLayoutFor: loaded.boardLayoutFor, nest: Boolean(nest) }) }
+    Promise.all([import('slateboxjs/boards'), boardKind === 'nest' ? import('slateboxjs/boards/nest') : null, boardKind === 'grid' ? import('slateboxjs/boards/grid') : null]).then(([loaded, nest, grid]) => {
+      if (!gone) { setFailure(''); setKits(was => ({ kitFor: loaded.kitFor, boardLayoutFor: loaded.boardLayoutFor, nest: Boolean(nest) || Boolean(was?.nest), grid: Boolean(grid) || Boolean(was?.grid) })) }
     }).catch(err => {
       console.warn('The board could not be loaded.', err)
       if (gone) return
