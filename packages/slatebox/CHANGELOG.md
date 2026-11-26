@@ -13,8 +13,42 @@ release's highlights.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-25
+
 ### Added
 
+- **updates:** automatic updates for self-hosted Slatebox: `slatebox install` and `slatebox upgrade` set up a host
+  updater (a launchd agent, systemd timer or cron line every five minutes) on an image that has
+  `slatebox updates` (2.1.0 on). It applies only a release signed by Slatebox, pulled by its digest,
+  through the same backup, health check and rollback as `slatebox upgrade`; when to apply is set in
+  Admin › Updates. New: `slatebox updates [enable | disable | check | apply | auto on|off | run]`
+  (also `slatebox update`), `--no-auto-updates`. `slatebox uninstall` removes the updater.
+  `slatebox upgrade` refuses while an automatic update runs.
+- **installer:** a wizard in the terminal. Questions, answers, the plan and the setup link are
+  in the terminal's own text color (bold where it matters), so they read on light and dark
+  backgrounds; Slatebox gold (dark), deep green (light) or mid tones (not known) mark the
+  pointer, steps and tags. The background comes from `SLATEBOX_THEME=light|dark`, `COLORFGBG`,
+  or the terminal's answer to a background query. The machine
+  check runs first and shows one row per check (Docker, processor, disk, port; `r` checks
+  again). Six short sections follow (where, address, admin, agents, sign-in, review),
+  answered with the arrow keys, numbers and Enter, and each answer folds into one line. A
+  taken team address offers the free ones to pick. One question takes the usual settings
+  for backups, size and mail (exactly what `--yes` would choose). The review shows the plan
+  in a box, with Install, Change a section… (asks that section again) or Cancel, and `d` for
+  every file and command; on a server or a cluster Cancel is highlighted, as before. Each
+  install step is a spinner row that settles into its result and time, and the end shows
+  where Slatebox runs and the one-time setup link, never wrapped (a link the terminal can
+  open, where it supports one). Ctrl-C stops at any question and changes nothing (exit 7),
+  and the terminal is always given back.
+- **installer:** `--plain` (or `SLATEBOX_PLAIN=1`) keeps the line-by-line questions, for
+  screen readers and simple terminals. They are also used with `TERM=dumb`, in CI, without
+  raw mode, or under 60 columns, and they are the same, byte for byte, as in 0.2.3.
+  `NO_COLOR` and `FORCE_COLOR` are honored.
+- **installer:** dependencies: `@clack/core` is pinned to exactly 1.6.0 (as `slatebox-mcp` is
+  to its version). Its own four small dependencies (fast-string-width, fast-string-truncated-width,
+  fast-wrap-ansi, sisteransi; all MIT, no install scripts) keep the caret ranges `@clack/core`
+  publishes, so `npx slatebox` resolves the newest within those ranges, as it already does for
+  `slatebox-mcp`'s `@modelcontextprotocol/sdk`. No `npm-shrinkwrap.json` is shipped.
 - **installer:** after "Slatebox is running", the wizard continues with the first admin:
   **Create the admin account now** (recommended) asks name, email (the admin email given
   earlier), team name and the password twice (hidden, with a strength check) and sends them to
@@ -34,7 +68,6 @@ release's highlights.
   says so and shows the same. `--plain --qr` adds the QR code to plain output.
 - **installer:** the QR encoder is vendored (uqr 0.1.3, MIT, pure JavaScript) in
   `src/vendor/qrcode.mjs`; the package still has two dependencies.
-
 - **installer:** a setup link or sign-in page on `localhost` / `127.0.0.1` / `::1`, with no
   browser here, says "This link opens only on this computer:" instead of "Open this on any
   device:", gives the `ssh -L <port>:localhost:<port> <user>@<server>` tunnel (the server
@@ -44,6 +77,18 @@ release's highlights.
   browser here (...). Open this on any device:"), and `--qr` adds a QR code for the setup link
   there (it was only on the device sign-in page). Runs where a browser can open (every golden
   transcript) are unchanged.
+
+### Changed
+
+- The wizard's key handling is `@clack/core` 1.6.0 (pinned exactly; about 56 kB), loaded only
+  for a wizard run: `--version`, `--json`, `--yes`, agents, pipes and CI never load it.
+- `--json`, `--yes`, a run with nobody to ask (exit 3), the answers file, flags and exit codes
+  are unchanged.
+- `create-slatebox` 0.1.4 installs `slatebox` 0.3.0.
+- **installer:** golden QR snapshot `setup-link.color.txt` follows the new colored look.
+- **installer:** golden transcript `plain-team-taken.stderr.txt` gains one line, the optional
+  first-admin question (no answer left in that scenario, so the printed link stays as it is).
+  The scenario sets `DISPLAY` (a Linux desktop), so its browser question is asked as before.
 
 ### Fixed
 
@@ -70,59 +115,6 @@ release's highlights.
   a light terminal).
 - **installer:** `CI=false`, `CI=0`, `CI=no` and `CI=off` no longer count as a CI run (a browser
   is offered again).
-
-### Changed
-
-- **installer:** golden QR snapshot `setup-link.color.txt` follows the new colored look.
-- **installer:** golden transcript `plain-team-taken.stderr.txt` gains one line, the optional
-  first-admin question (no answer left in that scenario, so the printed link stays as it is).
-  The scenario sets `DISPLAY` (a Linux desktop), so its browser question is asked as before.
-
-## [0.3.0] - 2026-11-25
-
-### Added
-
-- Automatic updates for self-hosted Slatebox: `slatebox install` and `slatebox upgrade` set up a host
-  updater (a launchd agent, systemd timer or cron line every five minutes) on an image that has
-  `slatebox updates` (2.1.0 on). It applies only a release signed by Slatebox, pulled by its digest,
-  through the same backup, health check and rollback as `slatebox upgrade`; when to apply is set in
-  Admin › Updates. New: `slatebox updates [enable | disable | check | apply | auto on|off | run]`
-  (also `slatebox update`), `--no-auto-updates`. `slatebox uninstall` removes the updater.
-  `slatebox upgrade` refuses while an automatic update runs.
-
-- **installer:** a wizard in the terminal. Questions, answers, the plan and the setup link are
-  in the terminal's own text color (bold where it matters), so they read on light and dark
-  backgrounds; Slatebox gold (dark), deep green (light) or mid tones (not known) mark the
-  pointer, steps and tags. The background comes from `SLATEBOX_THEME=light|dark`, `COLORFGBG`,
-  or the terminal's answer to a background query. The machine
-  check runs first and shows one row per check (Docker, processor, disk, port; `r` checks
-  again). Six short sections follow (where, address, admin, agents, sign-in, review),
-  answered with the arrow keys, numbers and Enter, and each answer folds into one line. A
-  taken team address offers the free ones to pick. One question takes the usual settings
-  for backups, size and mail (exactly what `--yes` would choose). The review shows the plan
-  in a box, with Install, Change a section… (asks that section again) or Cancel, and `d` for
-  every file and command; on a server or a cluster Cancel is highlighted, as before. Each
-  install step is a spinner row that settles into its result and time, and the end shows
-  where Slatebox runs and the one-time setup link, never wrapped (a link the terminal can
-  open, where it supports one). Ctrl-C stops at any question and changes nothing (exit 7),
-  and the terminal is always given back.
-- **installer:** `--plain` (or `SLATEBOX_PLAIN=1`) keeps the line-by-line questions, for
-  screen readers and simple terminals. They are also used with `TERM=dumb`, in CI, without
-  raw mode, or under 60 columns, and they are the same, byte for byte, as in 0.2.3.
-  `NO_COLOR` and `FORCE_COLOR` are honored.
-- **installer:** dependencies: `@clack/core` is pinned to exactly 1.6.0 (as `slatebox-mcp` is
-  to its version). Its own four small dependencies (fast-string-width, fast-string-truncated-width,
-  fast-wrap-ansi, sisteransi; all MIT, no install scripts) keep the caret ranges `@clack/core`
-  publishes, so `npx slatebox` resolves the newest within those ranges, as it already does for
-  `slatebox-mcp`'s `@modelcontextprotocol/sdk`. No `npm-shrinkwrap.json` is shipped.
-
-### Changed
-
-- The wizard's key handling is `@clack/core` 1.6.0 (pinned exactly; about 56 kB), loaded only
-  for a wizard run: `--version`, `--json`, `--yes`, agents, pipes and CI never load it.
-- `--json`, `--yes`, a run with nobody to ask (exit 3), the answers file, flags and exit codes
-  are unchanged.
-- `create-slatebox` 0.1.4 installs `slatebox` 0.3.0.
 
 ## [0.2.3] - 2026-11-25
 
