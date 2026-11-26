@@ -12,14 +12,24 @@
 // an action card (a ghost note with Approve and Decline); the chip lists them too, with
 // Approve and Decline, their links once done, and, for its inviter (or the slate's owner, to narrow
 // it), whether it acts without asking here and who may approve.
-// The canvas.agents slot holds "+ Invite agent" and the walkthrough.
+// The canvas.agents slot holds "+ Invite agent" and the walkthrough. For someone with connected
+// integrations, "+ Invite agent" first opens a small panel (owner, 2026-11-25: "it should be quicker to
+// invite an already connected mcp to the slate - they can just connect here without 'asking' first"):
+// their integrations at the top, each with Add (one click: no dialog, no new sign-in, no consent again;
+// its cursor greets in view and its chip opens), "Add to every slate I own" (its standing rule), and
+// More agents for the full walkthrough. Add says plainly when it can't be instant (addDecision).
+// Adding never changes how its outside changes are approved: Ask first stays its default.
 import React, { useEffect, useRef, useState } from 'react'
 import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
 import { useTracker } from 'meteor/react-meteor-data'
+import { Link } from 'react-router-dom'
 import { atom, useAtom, useSetAtom } from 'jotai'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import ClickAwayListener from '@mui/material/ClickAwayListener'
+import Paper from '@mui/material/Paper'
+import Popper from '@mui/material/Popper'
 import MenuItem from '@mui/material/MenuItem'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
@@ -29,7 +39,9 @@ import { usePaySheet } from '/imports/ui/components/billing/pay/PaySheetHost.jsx
 import { agentColor, openAgentAtom, rosterExtrasAtom } from '/imports/ui/components/AgentPresenceListener.jsx'
 import { askableAgentsAtom, conversationOpen, openChatWithAtom } from '/imports/ui/jotai/atoms'
 import { enterpriseSlots } from '/imports/api/client/enterprise-slots.mjs'
+import Hexagon from '/imports/ui/components/AgentMark.jsx'
 import { GALLERY, NATIVE_CARDS } from '../common/gallery.mjs'
+import { addDecision } from '../common/integration-words.mjs'
 import { DriveFiles } from './GoogleIntegration'
 
 // What a chip says about an agent that can't be asked right now (everyone sees it; its ghosts stay
@@ -124,12 +136,29 @@ export default function AgentsOnSlate({ slate, canEdit, readSelection, readView,
   const openAgent = useSetAtom(openAgentAtom)
   const [reconnect, setReconnect] = useAtom(reconnectAtom)
   const [inviting, setInviting] = useState(false)
-  // This person's integrations, for "Invite to this slate" (asked when the walkthrough opens).
-  const [integrations, setIntegrations] = useState([])
+  // The quick panel above "+ Invite agent": this person's integrations, each added in one click.
+  const [panelOpen, setPanelOpen] = useState(false)
+  const inviteButton = useRef(null)
+  // This person's integrations (null until asked) and the slate owner's rule for outside agents.
+  const [integrations, setIntegrations] = useState(null)
+  const [setting, setSetting] = useState(null)
+  const loadIntegrations = () => {
+    Meteor.callAsync('integrations.list', {}).then((answer) => setIntegrations(Array.isArray(answer?.integrations) ? answer.integrations : [])).catch((e) => { enterpriseSlots.lockIfRefused(e); setIntegrations([]) })
+    Meteor.callAsync('integrations.slateSetting', { shareId }).then(setSetting).catch(() => {})
+  }
+  // Asked when the slate opens, so "+ Invite agent" knows at once whether to open the quick panel.
   useEffect(() => {
-    if (!inviting || !userId || guest) return
-    Meteor.callAsync('integrations.list', {}).then((answer) => setIntegrations(Array.isArray(answer?.integrations) ? answer.integrations : [])).catch((e) => { enterpriseSlots.lockIfRefused(e) })
-  }, [inviting, userId, guest])
+    if (!userId || guest || !shareId || !canEdit) return
+    loadIntegrations()
+  }, [userId, guest, shareId, canEdit]) // eslint-disable-line react-hooks/exhaustive-deps
+  // The walkthrough lists them too ("Your integrations"): fresh each time it opens.
+  useEffect(() => { if (inviting && userId && !guest && shareId) loadIntegrations() }, [inviting]) // eslint-disable-line react-hooks/exhaustive-deps
+  const openInvite = () => {
+    if (integrations?.length) {
+      if (!panelOpen) loadIntegrations()
+      setPanelOpen(!panelOpen)
+    } else setInviting(true)
+  }
   // Standing rules: the owner's own integrations that join every slate they own arrive when it opens
   // (idempotent on the server; one removed from this slate before stays away).
   const ownSlate = Boolean(userId && slate?.userId === userId)
@@ -158,15 +187,109 @@ export default function AgentsOnSlate({ slate, canEdit, readSelection, readView,
         // On a phone, Ask Slatebox's sheet has the foot of the screen: the button steps aside while it is open.
         display: { xs: chatOpen ? 'none' : 'block', md: 'block' },
       }}>
-      <Button size="small" variant="outlined" data-invite-agent-open="" onClick={() => setInviting(true)} sx={{ bgcolor: 'background.paper' }}>+ Invite agent</Button>
+      <Button size="small" variant="outlined" data-invite-agent-open="" ref={inviteButton} aria-expanded={integrations?.length ? panelOpen : undefined} onClick={openInvite} sx={{ bgcolor: 'background.paper' }}>+ Invite agent</Button>
+      <InvitePanel open={panelOpen} anchorEl={inviteButton.current} onClose={() => setPanelOpen(false)} shareId={shareId} readView={readView}
+        integrations={integrations || []} invited={connections} setting={setting} isOwner={ownSlate} onChanged={loadIntegrations}
+        onAdded={(connection) => { setPanelOpen(false); if (connection?.agentId) openAgent(connection.agentId) }}
+        onMore={() => { setPanelOpen(false); setInviting(true) }} />
       {/* invited: the agents already on this slate, so the gallery marks them (✓ On this slate) and offers Manage. */}
       <InviteWalkthrough open={inviting} onClose={() => { setInviting(false); setReconnect(null) }} shareId={shareId} slateName={slate?.options?.name} reconnect={reconnect}
         invited={connections.map((c) => ({ connectionId: c._id, agentId: c.agentId, name: c.name, galleryId: c.galleryId || null, mine: Boolean(c.mine), status: c.status, integrationId: c.integrationId || null }))}
-        integrations={integrations}
+        integrations={integrations || []}
         onManage={(agentId) => { setInviting(false); if (agentId) openAgent(agentId) }}
         onInvited={(connection) => connection?.agentId && openAgent(connection.agentId)} />
     </Box>
   )
+}
+
+/**
+ * The quick panel: this person's connected integrations, each added to this slate in one click (no
+ * dialog, no new sign-in, no consent again: connecting it gave both). Where Add can't be instant it
+ * says why in plain words (addDecision) and offers the next step. Ask first stays its default.
+ */
+export function InvitePanel({ open, anchorEl, onClose, shareId, readView, integrations, invited, setting, isOwner, onAdded, onMore, onChanged }) {
+  const [busy, setBusy] = useState(null) // the integration being added
+  const [note, setNote] = useState('')
+  const { open: openPay } = usePaySheet()
+  useEffect(() => { if (open) setNote('') }, [open])
+  const mine = invited.map((c) => ({ integrationId: c.integrationId || null, mine: Boolean(c.mine), status: c.status }))
+  const add = async (integration, { everySlate = false } = {}) => {
+    setBusy(integration.integrationId)
+    setNote('')
+    try {
+      if (everySlate) await Meteor.callAsync('integrations.setRule', { integrationId: integration.integrationId, rule: 'my_slates' })
+      const here = addDecision(integration, { invited: mine, setting, isOwner }).act === 'here'
+      if (here) {
+        onChanged?.()
+        setNote(`${integration.name} joins every slate you own when you open it.`)
+        return
+      }
+      const view = readView?.() || null
+      const connection = await Meteor.callAsync('integrations.invite', { shareId, integrationId: integration.integrationId, ...(view && { view }) })
+      if (everySlate) onChanged?.()
+      onAdded?.(connection)
+    } catch (e) {
+      if (e?.error === 'pro_required') return openPay({ action: 'pro', from: 'agents', reason: 'Invite outside agents onto your slates.', retry: () => add(integration, { everySlate }) })
+      setNote(errorText(e))
+    } finally {
+      setBusy(null)
+    }
+  }
+  if (!open || !anchorEl) return null
+  return (
+    <Popper open anchorEl={anchorEl} placement="top-start" sx={{ zIndex: 1300 }} modifiers={[{ name: 'offset', options: { offset: [0, 8] } }]}>
+      <ClickAwayListener onClickAway={(event) => { if (!anchorEl.contains(event.target)) onClose() }}>
+        <Paper elevation={8} role="region" aria-label="Add an agent to this slate" data-invite-panel-quick=""
+          onKeyDown={(e) => { if (e.key === 'Escape') { onClose(); anchorEl.focus?.() } }}
+          sx={{ width: { xs: 'calc(100vw - 32px)', sm: 360 }, maxHeight: '60vh', overflowY: 'auto', p: 1.5, borderRadius: '14px' }}>
+          <Typography variant="overline" component="div" sx={{ lineHeight: 1.6 }}>Your connected agents</Typography>
+          <Typography variant="caption" color="text.secondary" component="div" sx={{ mb: 1 }}>Add one here in a click: no new sign-in. Its changes outside Slatebox still wait for your approval.</Typography>
+          {integrations.map((integration) => {
+            const decision = addDecision(integration, { invited: mine, setting, isOwner })
+            const everySlate = integration.rule === 'my_slates'
+            return (
+              <Box key={integration.integrationId} data-invite-quick={integration.name} data-invite-quick-act={decision.act} sx={{ py: 0.75, borderTop: '1px solid', borderColor: 'divider' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Hexagon color={agentColor(integration.colorIndex ?? 1)} size={18} style={{}} />
+                  <Typography variant="body2" sx={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}><b>{integration.name}</b> · {integration.host}</Typography>
+                  {decision.act === 'here' && <Typography variant="caption" color="text.secondary" data-invite-quick-here="">✓ On this slate</Typography>}
+                  {decision.act === 'add' && <Button size="small" variant="contained" disabled={Boolean(busy)} data-invite-quick-add="" aria-label={`Add ${integration.name} to this slate`} onClick={() => add(integration)}>{busy === integration.integrationId ? 'Adding…' : 'Add'}</Button>}
+                  {(decision.act === 'review' || decision.act === 'sign-in') && <Button size="small" component={Link} to="/integrations" data-invite-quick-fix="">{decision.act === 'review' ? 'Review' : 'Sign in'}</Button>}
+                  {decision.act === 'pro' && <Button size="small" data-invite-quick-fix="" onClick={() => openPay({ action: 'pro', from: 'agents', reason: 'Invite outside agents onto your slates.', retry: onChanged })}>Renew Pro</Button>}
+                </Box>
+                {decision.why && <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.25 }} data-invite-quick-why="">{decision.why}</Typography>}
+                {decision.act === 'add' && !everySlate && (
+                  <Button size="small" disabled={Boolean(busy)} data-invite-quick-every="" onClick={() => add(integration, { everySlate: true })} sx={{ p: 0, mt: 0.25, minWidth: 0, textTransform: 'none', fontSize: 13 }}>Add to every slate I own</Button>
+                )}
+                {everySlate && decision.act !== 'blocked' && <Typography variant="caption" color="text.secondary" component="div">Joins every slate you own.</Typography>}
+              </Box>
+            )
+          })}
+          {note && <Typography role="status" variant="body2" sx={{ mt: 1 }} data-invite-quick-note="">{note}</Typography>}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: 1, pt: 1, borderTop: '1px solid', borderColor: 'divider' }}>
+            <Button size="small" variant="outlined" data-invite-quick-more="" onClick={onMore}>More agents</Button>
+            <Typography variant="caption" component={Link} to="/integrations" sx={{ color: 'text.secondary' }}>Manage integrations</Typography>
+          </Box>
+        </Paper>
+      </ClickAwayListener>
+    </Popper>
+  )
+}
+InvitePanel.propTypes = {
+  open: PropTypes.bool,
+  anchorEl: PropTypes.shape({ contains: PropTypes.func, focus: PropTypes.func }),
+  onClose: PropTypes.func.isRequired,
+  shareId: PropTypes.string,
+  readView: PropTypes.func,
+  // eslint-disable-next-line react/forbid-prop-types
+  integrations: PropTypes.arrayOf(PropTypes.object),
+  // eslint-disable-next-line react/forbid-prop-types
+  invited: PropTypes.arrayOf(PropTypes.object),
+  setting: PropTypes.shape({ outsideAgents: PropTypes.string, canChange: PropTypes.bool }),
+  isOwner: PropTypes.bool,
+  onAdded: PropTypes.func,
+  onMore: PropTypes.func,
+  onChanged: PropTypes.func,
 }
 
 AgentsOnSlate.propTypes = {
