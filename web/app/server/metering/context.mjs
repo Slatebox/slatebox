@@ -102,12 +102,15 @@ const FIXED_FEATURE = { imageSearch: 'image-search', imageGeneration: 'image-gen
 // A use with a fixed price (an image search, a generated image).
 // entry: { ref, kind: 'imageSearch' | 'imageGeneration', costMicros, model? }
 // Slatebox's own Google and Stability keys pay for these, so inside a request paid by an own
-// AI key they are counted as a separate use: the included amount (Pro credits), then the balance.
+// AI key (or by the personalization allowance) they are counted as a separate use: the included
+// amount (Pro credits), then the balance.
 export async function chargeFixed(entry) {
   const action = currentAIAction()
   if (!meterOn()) return { charged: false }
   if (!action || action.finished) throw Object.assign(new Error(UNMETERED_MESSAGE), { error: 'unmetered' })
-  if (action.route === 'byok' && !ownKeyCovers(entry.kind)) {
+  // The personalization allowance pays for the agent's own turns only: a fixed-price use inside one
+  // is counted on its own too.
+  if ((action.route === 'byok' && !ownKeyCovers(entry.kind)) || action.route === 'allowance') {
     const use = await meter.begin({ feature: FIXED_FEATURE[entry.kind] || action.feature, kind: entry.kind, userId: action.userId, estimateMicros: entry.costMicros, countsAsDraft: false })
     let ok = false
     try {

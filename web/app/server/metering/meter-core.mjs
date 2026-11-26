@@ -1,25 +1,27 @@
 // The AI meter that context.mjs runs: decide who pays, set the request's hold, record each
 // provider call or fixed-price use, and release the hold when the request ends. Pure apart
 // from the injected io and lookups; meteor.js supplies Mongo, tests an in-memory store.
-import { aiActionsPerDay, creditsForShare, messageFor } from './policy.mjs'
+import { aiActionsPerDay, creditsForShare, dayKey, messageFor, monthKey } from './policy.mjs'
 import { ESTIMATES, actionCeilingMicros, actionEstimateMicros, aiCostMicros } from './prices.mjs'
 import { recordUsage } from './record.mjs'
 import { holdFree, holdWallet, releaseHold } from './holds.mjs'
-import { addressBucket } from './client-address.mjs'
+import { addressBucket, isProxyAddress } from './client-address.mjs'
 import { creditsForPool, poolMonthKey } from './pool.mjs'
+import { holdAllowance } from './allowance.mjs'
 
 const defaultError = (code, message) => Object.assign(new Error(message), { error: code, reason: message })
 
 /**
  * deps: { enabled(), io (holds.mjs io + record.mjs io), settings() → metering settings,
- *         decide({ userId?, kind, feature, estimateMicros, countsAsDraft }) → { decision, userId, address? }
- *           (address: the caller's network address, counted on the guest route),
+ *         decide({ userId?, kind, feature, estimateMicros, countsAsDraft, allowanceTaken? }) → { decision, userId, address? }
+ *           (address: the caller's network address, counted on the guest route; allowanceTaken: the
+ *           allowance's hold was refused, so the meter decides without it: policy.mjs route),
  *         credentials(keyOwner, feature, userId), onSpend?({ costMicros, route, kind, now }),
  *         makeError?(code, message, { userId, wallet? }) → error, or a promise of one,
  *         now?(), newId() }
  */
 export function createMeter({ enabled, io, settings: loadSettings, decide, credentials, onSpend = () => {}, makeError = defaultError, now = Date.now, newId }) {
-  return {
+  const meter = {
     enabled,
     async begin(opts) {
       const settings = await loadSettings()
@@ -36,6 +38,23 @@ export function createMeter({ enabled, io, settings: loadSettings, decide, crede
       const at = now()
       if (decision.route === 'byok') {
         action.credentials = await credentials(decision.keyOwner, opts.feature, userId)
+      } else if (decision.route === 'allowance') {
+        // The personalization allowance (allowance.mjs): one of today's uses, taken atomically, and the
+        // request's most possible spend set aside on the shared budget. Lost to a request running at the
+        // same moment (or the budget's ceiling): the meter decides again, without the allowance.
+        // The caller's network address shares out the allowance too (allowance.mjs PEOPLE_PER_ADDRESS),
+        // so throwaway accounts made from one place get no more; an address that stands for many
+        // callers (a Cloudflare edge, the cluster's own) is not counted.
+        const { budget } = settings
+        const place = address && !isProxyAddress(address) ? addressBucket(address) : null
+        const hold = await holdAllowance(io, {
+          feature: decision.allowance.feature, perDay: decision.allowance.perDay,
+          keys: { day: `user:${decision.payer.id}:${dayKey(at)}`, global: `global:${monthKey(at)}`, ...(place && { address: `address:${place}:${dayKey(at)}` }) },
+          ceilingMicros: action.ceilingMicros, estimateMicros, globalCap: Math.floor(budget.monthlyMicros * budget.pauseAiAt / 100), now: at,
+        })
+        if (!hold.ok) return meter.begin({ ...opts, allowanceTaken: hold.code })
+        action.hold = hold
+        action.ceilingMicros = Math.min(action.ceilingMicros, hold.holdMicros)
       } else if (decision.route === 'free') {
         // The guest route (policy.mjs) has its own daily count, per person and per address.
         const hold = await holdFree(io, {
@@ -81,4 +100,5 @@ export function createMeter({ enabled, io, settings: loadSettings, decide, crede
       await releaseHold(io, action.hold, { ok }, now())
     },
   }
+  return meter
 }

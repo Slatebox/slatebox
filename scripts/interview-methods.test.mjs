@@ -277,3 +277,32 @@ test("the panel: reached from About you, the conversation's own parts, chips to 
   }
   assert.equal(read("web/app/imports/api/common/constants.js").includes("keep: 'interview.keep'"), true);
 });
+
+// Owner, 2026-11-26: a refusal for credits (today's free talk used up, no Pro or balance) is the app's pay notice, with
+// Get Pro, top up and use your own key, in the meter's own words; never a bare sentence and Retry.
+test("the panel: a refusal for credits is the pay notice inside the agent's turn, in the meter's own words, with its retry", () => {
+  const panel = read("web/app/imports/ui/components/profile/Interview.jsx");
+  assert.match(panel, /import PayNotice, \{ isCreditRefusal \} from '\.\.\/PayNotice'/);
+  // the first question and a later turn: either refusal becomes the pay notice, other errors stay as they were
+  assert.match(panel, /if \(isCreditRefusal\(requestError\?\.error\)\) setRefusal\(\{ error: requestError\.error, reason: requestError\.reason, details: requestError\.details, message: null \}\)\s*\n\s*else \{\s*\n\s*setError\(reason\(requestError, 'The talk could not start\. Try again\.'\)\)\s*\n\s*setStartFailed\(true\)/);
+  assert.match(panel, /if \(isCreditRefusal\(requestError\?\.error\)\) setRefusal\(\{ error: requestError\.error, reason: requestError\.reason, details: requestError\.details, message: words \}\)\s*\n\s*else setError\(/);
+  // inline in the agent's turn: Get Pro, top up, use your own key; the meter's words kept; paid, the turn runs again
+  assert.match(panel, /<ChatTurn who="slatebox">\s*\n\s*<PayNotice refusal=\{refusal\} from="draft" retry=\{\(\) => \(refusal\.message \? send\(refusal\.message\) : start\(\)\)\} inline ownKey keepReason \/>/);
+  // the bare Retry is only for a start that failed for any other reason
+  assert.match(panel, /\{startFailed && \(/);
+  const notice = read("web/app/imports/ui/components/PayNotice.jsx");
+  assert.match(notice, /inlinePayActions\(refusal, \{ summary, metered: Meteor\.settings\.public\.metered === true, ownKeys: Meteor\.settings\.public\.ownKeys === true, ownKey \}\)/);
+  assert.match(notice, /inlineRefusalText\(refusal, actions, \{ keepReason \}\)/);
+  // a tab of its own: the talk stays where it is (a link in this tab would leave About you and end it)
+  assert.match(notice, /href=\{item\.href\} target="_blank" rel="noopener"/);
+  // the server sends the meter's refusal with its pay action (refusalErrorArgs), as before
+  assert.match(read("web/app/server/methods/interview.js"), /throw new Meteor\.Error\(\.\.\.refusalErrorArgs\(\{ error: refusal\.code, reason: refusal\.message, pay: refusal\.pay \}\)\)/);
+  // the words this flow shows say "agent", and say plainly when today's free talk is used up
+  for (const source of [panel, notice]) assert.doesNotMatch(source, /\bAI\b/);
+  const allowance = read("web/app/server/metering/allowance.mjs");
+  assert.ok(allowance.includes("You've used today's free talk with Slatebox. It comes back tomorrow, or keep going with Pro or your own key."));
+  const policy = read("web/app/server/metering/policy.mjs");
+  for (const name of ["getPro", "aiPaused", "proAiToday", "proAiMonth"]) {
+    for (const line of policy.split("\n").filter((l) => l.trim().startsWith(`${name}:`))) assert.doesNotMatch(line, /\bAI\b/, line);
+  }
+});

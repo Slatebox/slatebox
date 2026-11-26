@@ -3,6 +3,7 @@
 import { proPriceWords } from '../../imports/api/pro/prices.mjs'
 import { CALL_PRICES, ESTIMATES } from './prices.mjs'
 import { BILLING_CONTACT_URL } from '../../imports/api/common/contact.mjs'
+import { DEFAULT_PERSONAL_ALLOWANCE, allowanceCheck, resolvePersonalAllowance, usedUpWords } from './allowance.mjs'
 
 // Pro's monthly price in words, from the one place it is written (pro/prices.mjs)
 const PRO_MONTH = proPriceWords('month').label
@@ -94,6 +95,8 @@ export const DEFAULT_METERING = Object.freeze({
     spikeFactor: 2,
     hold: null,                     // null | 'video-to-voice' | 'smaller-ai' | 'pause-calls' | 'pause-ai'
   }),
+  // the personalization allowance (allowance.mjs): uses a day Slatebox pays for, by meter feature
+  personalAllowance: DEFAULT_PERSONAL_ALLOWANCE,
   marginPercent: 5,
   // cardFee: 'included' (processing folded into the price) or 'absorb' (imports/api/billing/top-up.mjs)
   topUp: Object.freeze({ minCents: 1000, firstMaxCents: 2500, maxBalanceCents: 50000, holdHours: 24, cardFee: 'included' }),
@@ -112,7 +115,7 @@ export const COPY = Object.freeze({
   unverified: 'Confirm your email address to use the free amount each month. Your balance still works.',
   aiToday: "You have used today's free AI. Top up in your profile.",
   aiMonth: "You have used this month's free AI. Top up in your profile.",
-  aiPaused: 'Free AI is paused until the 1st. Your balance still works.',
+  aiPaused: "Free use of Slatebox's agent is paused until the 1st. Your balance still works.",
   callsToday: "You have used today's free amount for starting calls. Top up in your profile.",
   callsMonth: "You have used this month's free calls. Top up in your profile.",
   callsPaused: 'Free calls are paused until the 1st. Calls paid from your balance still work.',
@@ -123,12 +126,12 @@ export const COPY = Object.freeze({
   presentationsToday: "You have used today's free presentation plans. Sign in with a confirmed email for more, or try again tomorrow.",
   stagePaused: 'Free AI and free calls are paused until the 1st. Your balance still works.',
   // Slatebox Pro (Cloud, once settings.free.proRequiredFrom has passed)
-  getPro: `AI on Slatebox comes with Slatebox Pro, ${PRO_MONTH}, or a balance. Get Pro or top up in your profile.`,
+  getPro: `Slatebox's agent comes with Slatebox Pro, ${PRO_MONTH}, or a balance. Get Pro or top up in your profile.`,
   getProCalls: `Starting a call comes with Slatebox Pro, ${PRO_MONTH}, or a balance. Anyone can join a call that's already running.`,
   getProImages: 'Image search and image generation come with Slatebox Pro or a balance. Get Pro or top up in your profile.',
   proPastDue: "Your Pro payment didn't go through, so your credits are paused. Update your card in your profile. Your balance still works.",
-  proAiToday: "You have used today's Pro credits for AI. Top up in your profile.",
-  proAiMonth: "You have used this month's Pro credits for AI. Top up in your profile.",
+  proAiToday: "You have used today's Pro credits for the agent. Top up in your profile.",
+  proAiMonth: "You have used this month's Pro credits for the agent. Top up in your profile.",
   proCallsToday: "You have used today's Pro credits for starting calls. Top up in your profile.",
   proCallsMonth: "You have used this month's Pro credits for calls. Top up in your profile.",
   // a Slatebox Business team's shared pool (pool.mjs): the month is the team's
@@ -145,18 +148,18 @@ export const OWN_KEY_COPY = Object.freeze({
   unverified: 'Confirm your email address to use the free amount each month. Your own key and your balance still work.',
   aiToday: "You have used today's free AI. Add your own key or top up in your profile.",
   aiMonth: "You have used this month's free AI. Add your own key or top up in your profile.",
-  aiPaused: 'Free AI is paused until the 1st. Your own key and your balance still work.',
+  aiPaused: "Free use of Slatebox's agent is paused until the 1st. Your own key and your balance still work.",
   callsToday: "You have used today's free amount for starting calls. Add a Daily key or top up in your profile.",
   callsMonth: "You have used this month's free calls. Add a Daily key or top up in your profile.",
   callsPaused: 'Free calls are paused until the 1st. Calls on your own Daily key or your balance still work.',
   videoToVoice: 'Your free video for this month is used up, so this call is voice. Add a Daily key or top up for video.',
   freeStopped: `Free use is off for this account. Your own key and your balance still work. Write to us at ${BILLING_CONTACT_URL}.`,
   stagePaused: 'Free AI and free calls are paused until the 1st. Your own keys and your balance still work.',
-  getPro: `AI on Slatebox's own models comes with Slatebox Pro, ${PRO_MONTH}, or a balance. Get Pro or top up in your profile, or use your own AI key: it spends no Slatebox credits.`,
+  getPro: `Slatebox's agent on its own models comes with Slatebox Pro, ${PRO_MONTH}, or a balance. Get Pro or top up in your profile, or use your own key: it spends no Slatebox credits.`,
   getProCalls: `Starting a call comes with Slatebox Pro, ${PRO_MONTH}, or a balance, or use your own call key: it spends no Slatebox credits. Anyone can join a call that's already running.`,
   proPastDue: "Your Pro payment didn't go through, so your credits are paused. Update your card in your profile. Your own keys and your balance still work.",
-  proAiToday: "You have used today's Pro credits for AI. Add your own AI or top up in your profile.",
-  proAiMonth: "You have used this month's Pro credits for AI. Add your own AI or top up in your profile.",
+  proAiToday: "You have used today's Pro credits for the agent. Add your own key or top up in your profile.",
+  proAiMonth: "You have used this month's Pro credits for the agent. Add your own key or top up in your profile.",
   proCallsToday: "You have used today's Pro credits for starting calls. Add a Daily key or top up in your profile.",
   proCallsMonth: "You have used this month's Pro credits for calls. Add a Daily key or top up in your profile.",
   proStopped: `Included AI and calls are off for this account. Your own key and your balance still work. Write to us at ${BILLING_CONTACT_URL}.`,
@@ -196,7 +199,7 @@ function creditCost(value, where) {
 
 /**
  * The meter's settings: the defaults, then the deploy settings (Meteor.settings.metering:
- * proRequiredFrom and creditCostMicrosPerMonth, e.g. 'now' on Cloud), then what an administrator
+ * proRequiredFrom, creditCostMicrosPerMonth and personalAllowance, e.g. 'now' on Cloud), then what an administrator
  * stored (SystemSettings 'metering', the admin page). The credit size resizes every allowance
  * (sizeCredits) unless that allowance is itself set. Throws for a wrong deploy value.
  */
@@ -213,6 +216,8 @@ export function resolveMetering({ stored = {}, deploy = {}, ownKeys = false } = 
     free,
     budget: { ...DEFAULT_METERING.budget, ...stored?.budget },
     topUp: { ...DEFAULT_METERING.topUp, ...stored?.topUp },
+    // deploy settings metering.personalAllowance, then an administrator's (checked: a wrong deploy value stops the start)
+    personalAllowance: resolvePersonalAllowance({ deploy: deploy?.personalAllowance, stored: stored?.personalAllowance }),
     // whether own AI and call keys pay here (own-keys.mjs): the vault and the administrator's switch
     // say so at each read (meteor.js), never a stored meter setting
     ownKeys: ownKeys === true,
@@ -397,7 +402,9 @@ function guestRoute(input, person) {
 
 /**
  * route({ kind: 'ai'|'imageSearch'|'imageGeneration'|'voice'|'video', person, teamId, keys, usage, wallets, global,
- *         estimateMicros, minutes, running, countsAsDraft, feature, settings, now })
+ *         estimateMicros, minutes, running, countsAsDraft, feature, settings, now, allowanceTaken? })
+ * usage.allowanceToday: { feature: uses today } (allowance.mjs allowanceUsage). allowanceTaken: the
+ *   allowance's hold was refused ('used-up' | 'paused', meter-core.mjs), so the meter decides.
  * person: { id, anonymous, emailVerified, freeStopped, included?, pro?, proPastDue?, creditShare?, pool? }
  *   pool: a Slatebox Business team's shared pool ({ id, members }, pool.mjs); settings and the month's
  *   usage given are then the team's (meteor.js routeFor), and an ok free decision carries it.
@@ -406,12 +413,39 @@ function guestRoute(input, person) {
  *   budget's stages do not apply. proPastDue: Pro whose last payment failed. creditShare: the
  *   part of this month Pro covers (monthShare), when less than all of it: the month's allowances
  *   are cut to it, and an ok decision carries it for the hold (meter-core.mjs).
- * → { ok: true, route: 'byok'|'free'|'balance', payer, kind, keyOwner?, fellBackToVoice?, notice?,
- *     guest?, draftsPerDay?, perAddressPerDay?, pro?, creditShare? }  (guest… on the guest route: see guestRoute)
- * → { ok: false, code, message }
- * Order: own key, the included amount (Pro credits), balance. Video that cannot run falls back to voice.
+ * → { ok: true, route: 'byok'|'allowance'|'free'|'balance', payer, kind, keyOwner?, fellBackToVoice?, notice?,
+ *     guest?, draftsPerDay?, perAddressPerDay?, pro?, creditShare?, allowance? }  (guest… on the guest route: see guestRoute)
+ * → { ok: false, code, message, allowance?: 'used-up' }
+ * Order: own key, the personalization allowance (its features only), the included amount (Pro
+ * credits), balance. Video that cannot run falls back to voice.
  */
 export function route(input) {
+  const { kind, person, teamId = null, keys = {}, settings } = input
+  // An own key that serves this request pays for it: it never uses the allowance.
+  const family = settings?.ownKeys === true ? OWN_KEY_FAMILY[kind] : null
+  const ownKey = Boolean(family && (keys.personal?.[family] || (teamId && keys.team?.[family])))
+  // The personalization allowance (allowance.mjs): Slatebox pays, on its own binding, counted in the
+  // shared budget, with no Pro needed. Past it, the meter below decides as it always has.
+  const allowance = ownKey || !settings ? null : allowanceCheck({
+    kind, feature: input.feature, person, usage: input.usage || {}, settings, taken: input.allowanceTaken ?? null,
+    level: budgetLevel({ ...(input.global || {}), budget: settings.budget }).level,
+  })
+  if (allowance?.ok) {
+    return { ok: true, route: 'allowance', payer: { type: 'user', id: person.id }, kind, allowance: { feature: allowance.feature, perDay: allowance.perDay } }
+  }
+  const decision = meterRoute(input)
+  // Today's allowance is used up and the meter has nothing else for this person (no Pro, no balance):
+  // the words say so plainly, and the way on is the same (Get Pro, top up, an own key).
+  if (!decision.ok && allowance?.usedUp && decision.code === 'pro') {
+    const base = messageFor('pro', null, settings)
+    const rest = decision.message.startsWith(base) ? decision.message.slice(base.length) : ''
+    return { ...decision, message: usedUpWords(input.feature, settings) + rest, allowance: 'used-up' }
+  }
+  return decision
+}
+
+// The meter's own decision, without the allowance.
+function meterRoute(input) {
   const { kind, person, teamId = null, keys = {}, wallets = {}, now } = input
   // the month Pro starts or ends in gives only its share of the month's credits (monthShare)
   const share = person?.included !== false && typeof person?.creditShare === 'number' && person.creditShare < 1 ? person.creditShare : null

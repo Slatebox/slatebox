@@ -41,6 +41,19 @@ export async function recordUsage(io, { ref, payer, actorId, kind, route, featur
       await io.inc(`global:${day}`, { freeMicros: amounts.costMicros })
     }
   }
+  // The personalization allowance (allowance.mjs): Slatebox pays and the person is charged nothing.
+  // It counts in the shared budget (freeMicros and freeByKind, so its stages and ceiling bound it and
+  // the admin page's lines by kind add up to the month) and on its own keys (allowanceMicros, by
+  // feature) so operators see it; the person's own day keeps its share apart from the included
+  // amount's freeMicros. A use that spent anything is not given back.
+  if (route === 'allowance') {
+    if (hold) hold.used = true
+    const keys = hold?.keys || { day: `user:${payer.id}:${day}`, global: `global:${month}` }
+    const byFeature = `allowanceByFeature.${String(feature).replace(/[^A-Za-z0-9]/g, '_')}`
+    await io.inc(keys.day, { allowanceMicros: amounts.costMicros })
+    await io.inc(keys.global, { freeMicros: amounts.costMicros, [`freeByKind.${kind}`]: amounts.costMicros, allowanceMicros: amounts.costMicros, [byFeature]: amounts.costMicros, ...(released && { heldMicros: -released }) })
+    await io.inc(`global:${day}`, { freeMicros: amounts.costMicros, allowanceMicros: amounts.costMicros })
+  }
   let debit = null
   if (route === 'balance' && amounts.chargeMicros > 0) {
     debit = await io.debitWallet(`${payer.type}:${payer.id}`, amounts.chargeMicros, event, released)

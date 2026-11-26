@@ -58,7 +58,10 @@ export function refusalForViewer(row, userId) {
 // In a chat message itself (owner, 2026-11-24: the offer belongs right in the chat, with the same pay sheet, so it can be
 // done right then, really easily): both ways on as buttons in the refusing message, each opening the same pay sheet on
 // its pane, and the request runs again once paid.
-export const INLINE_LABELS = Object.freeze({ pro: 'Get Slatebox Pro — $5/month', topup: 'Add a balance', again: 'Run it now' })
+export const INLINE_LABELS = Object.freeze({ pro: 'Get Slatebox Pro — $5/month', topup: 'Add a balance', again: 'Run it now', ownKey: 'Use your own key' })
+// Where a person adds their own key (Credits → Use your own key, billing/Credits.jsx OwnKeys): requests on it spend no
+// Slatebox credits (own-keys.mjs). tab=ai chooses a connection per feature; it is not where the meter's own keys live.
+export const OWN_KEY_HREF = '/profile?tab=credits'
 
 /**
  * The buttons a refusal carries inside a chat message: [{ action, wallet, choice, label }], Pro first. The server's own
@@ -66,26 +69,34 @@ export const INLINE_LABELS = Object.freeze({ pro: 'Get Slatebox Pro — $5/month
  * server said so (pay.also), or their meter does (summary, once loaded). A Pro member out of credits is never offered Pro,
  * and a server that sells no top-ups never a balance. Pro switched on since is "Run it now"; anything else (confirm the
  * email, sign in, the card, a team admin) is its one button, as refusalAction says. [] when it is not about money.
+ * ownKey: the surface offers "Use your own key" too, after Pro and a balance (a link to the own-key settings, with href), where
+ *   this server keeps own keys (ownKeys) and the person's meter does not say they are off.
  */
 export function inlinePayActions(refusal, options = {}) {
   const one = refusalAction(refusal, options)
   if (!one) return []
   if (one.action === 'again') return [{ action: 'again', wallet: null, choice: null, label: INLINE_LABELS.again }]
   if ((one.action !== 'pro' && one.action !== 'topup') || one.wallet === 'team') return [{ ...one, choice: null }]
-  const { summary = null } = options
+  const { summary = null, ownKey = false, ownKeys = false } = options
   const also = (refusal.pay ?? refusal.details?.pay)?.also
   const proOn = Boolean(summary?.proState?.active || summary?.proState?.pastDue)
   // Pro beside a balance: the server or a loaded meter says it is for sale and not theirs yet.
   const pro = one.action === 'pro' || (!proOn && (summary ? summary.proAvailable !== false : also === 'pro'))
   const topup = one.action === 'topup' || (summary ? summary.topUpsAvailable !== false : also === 'topup')
+  const own = ownKey === true && ownKeys === true && summary?.ownKeysAvailable !== false
   return [
     ...(pro ? [{ action: 'pro', wallet: null, choice: { interval: 'month' }, label: INLINE_LABELS.pro }] : []),
     ...(topup ? [{ action: 'topup', wallet: 'me', choice: null, label: INLINE_LABELS.topup }] : []),
+    ...(own ? [{ action: 'own-key', wallet: null, choice: null, label: INLINE_LABELS.ownKey, href: OWN_KEY_HREF }] : []),
   ]
 }
 
-/** What the refusing message says when it carries both buttons: short, the buttons say the rest. */
-export function inlineRefusalText(refusal, actions) {
+/**
+ * What the refusing message says when it carries both buttons: short, the buttons say the rest. keepReason: the surface
+ * shows the server's own words as they are (the interview: "You've used today's free talk with Slatebox…").
+ */
+export function inlineRefusalText(refusal, actions, { keepReason = false } = {}) {
+  if (keepReason) return refusal?.reason ?? ''
   const both = actions.some(item => item.action === 'pro') && actions.some(item => item.action === 'topup')
   if (both) return 'This needs Slatebox Pro or a balance. Choose one here and it runs as soon as it’s paid.'
   return refusal?.reason ?? ''

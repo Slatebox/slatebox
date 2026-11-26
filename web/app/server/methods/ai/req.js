@@ -158,6 +158,9 @@ async function requestFromProvider({ prompts, system, maxSize, userId: askedFor,
     return { abort: true, abortMessage, fallbackBlocked: true, chosen: chosen?.ref, chosenLabel, ...(chosen?.gap ? { capability: chosen.gap.need } : { unusable: true }), failure: ownKey && !chosen?.own ? 'stop' : 'config' }
   }
   aiOpts.unpaid = Boolean(chosen?.own)
+  // a personalization allowance turn served on the person's own connection: Slatebox paid nothing, so its use comes
+  // back when nothing else in the turn was paid (metering/allowance.mjs releaseAllowance)
+  if (aiOpts.unpaid && currentAIAction()?.route === 'allowance' && currentAIAction().hold) currentAIAction().hold.ownServed = true
   const viaConnection = chosenConnection ? { ...connectionRequest(chosenConnection), fetcher: connectionFetch(chosenConnection.baseUrl, chosen.rules) } : null
   const anthropicConnection = viaConnection?.provider === 'anthropic' ? viaConnection : null
   // a person's endpoint on hosted Slatebox is reached only through a lookup that refuses private

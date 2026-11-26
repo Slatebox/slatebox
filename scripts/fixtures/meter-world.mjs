@@ -5,11 +5,13 @@
 import { installMeter } from '../../web/app/server/metering/context.mjs'
 import { DEFAULT_METERING, route, dayKey, monthKey } from '../../web/app/server/metering/policy.mjs'
 import { emptyWallet } from '../../web/app/server/metering/ledger.mjs'
+import { allowanceUsage } from '../../web/app/server/metering/allowance.mjs'
 
 export const NOW = Date.UTC(2026, 10, 19, 12)
 const tick = () => new Promise(resolve => setImmediate(resolve))
 
-export async function meterWorld({ keys = {}, wallet = null, globalMonth = 0, person = {}, address = null, settings = structuredClone(DEFAULT_METERING) } = {}) {
+// clock: the moment the meter reads (the personalization allowance's UTC day); NOW unless a test moves it.
+export async function meterWorld({ keys = {}, wallet = null, globalMonth = 0, person = {}, address = null, settings = structuredClone(DEFAULT_METERING), clock = () => NOW } = {}) {
   const { createMeter } = await import('../../web/app/server/metering/meter-core.mjs')
   const { guardsPass, debitWithRelease } = await import('../../web/app/server/metering/holds.mjs')
   const stores = { counters: new Map(), wallets: new Map() }
@@ -46,10 +48,12 @@ export async function meterWorld({ keys = {}, wallet = null, globalMonth = 0, pe
   }
   const counter = key => stores.counters.get(key) || {}
   const usage = () => {
-    const m = counter(`user:u1:${monthKey(NOW)}`), d = counter(`user:u1:${dayKey(NOW)}`)
+    const m = counter(`user:u1:${monthKey(clock())}`), d = counter(`user:u1:${dayKey(clock())}`)
     return {
       aiActionsToday: d.aiActions || 0, freeMicrosToday: (d.freeMicros || 0) + (d.heldMicros || 0),
       aiMicrosMonth: (m.aiMicros || 0) + (m.heldAiMicros || 0), voiceMinutesMonth: m.voiceMinutes || 0, videoMinutesMonth: m.videoMinutes || 0,
+      // as meteor.js usageFor reads it
+      allowanceToday: allowanceUsage(d),
     }
   }
   const spent = () => {
@@ -70,7 +74,7 @@ export async function meterWorld({ keys = {}, wallet = null, globalMonth = 0, pe
     enabled: () => true,
     io,
     settings: async () => settings,
-    now: () => NOW,
+    now: () => clock(),
     newId: () => 'a' + ids++,
     async decide(opts) {
       await tick()
@@ -78,7 +82,8 @@ export async function meterWorld({ keys = {}, wallet = null, globalMonth = 0, pe
       const decision = route({
         kind: opts.kind, person: { id: 'u1', anonymous: false, emailVerified: true, ...person }, keys: { personal: keys },
         usage: usage(), wallets: { personal: w ? { ...w, recentTopUpMicros: 0 } : null }, global: (({ monthFreeMicros, todayFreeMicros }) => ({ monthFreeMicros, todayFreeMicros }))(global()),
-        estimateMicros: opts.estimateMicros, countsAsDraft: opts.countsAsDraft, feature: opts.feature, settings, now: NOW,
+        estimateMicros: opts.estimateMicros, countsAsDraft: opts.countsAsDraft, feature: opts.feature, settings, now: clock(),
+        allowanceTaken: opts.allowanceTaken ?? null,
       })
       return { decision, userId: 'u1', address }
     },

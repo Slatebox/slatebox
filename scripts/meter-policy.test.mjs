@@ -148,7 +148,7 @@ test('70 percent: new free video starts as voice; 90 percent: 10 drafts a day; 1
   const paused = ask({ kind: 'voice', global: at(100) })
   assert.equal(paused.message, 'Free calls are paused until the 1st. Calls on your own Daily key or your balance still work.')
   assert.equal(ask({ global: at(100) }).route, 'free')
-  assert.equal(ask({ global: at(110) }).message, 'Free AI is paused until the 1st. Your own key and your balance still work.')
+  assert.equal(ask({ global: at(110) }).message, "Free use of Slatebox's agent is paused until the 1st. Your own key and your balance still work.")
   // balances keep working at every stage
   assert.equal(ask({ global: at(110), wallets: { personal: { balanceMicros: 1_000_000 } } }).route, 'balance')
   assert.equal(ask({ kind: 'voice', global: at(100), wallets: { personal: { balanceMicros: 1_000_000 } } }).route, 'balance')

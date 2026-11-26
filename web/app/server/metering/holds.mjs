@@ -9,6 +9,7 @@
 // and 'wallets' (Wallets, never created here).
 import { dayKey, monthKey } from './policy.mjs'
 import { debit } from './ledger.mjs'
+import { releaseAllowance } from './allowance.mjs'
 
 // A guard is { sum: { field: weight }, max } (the weighted sum, missing fields as 0, is at most
 // max), { absent: field } or { notTrue: field }.
@@ -122,7 +123,7 @@ export async function holdWallet(io, { walletId, estimateMicros, ceilingMicros, 
 // How much of a spend comes out of the hold. Mutates the hold's remaining amount.
 export function takeFromHold(hold, { costMicros, chargeMicros }) {
   if (!hold) return 0
-  if (hold.route === 'free') {
+  if (hold.route === 'free' || hold.route === 'allowance') {
     const take = Math.min(costMicros, hold.leftMicros)
     hold.leftMicros -= take
     return take
@@ -136,6 +137,7 @@ export function takeFromHold(hold, { costMicros, chargeMicros }) {
 export async function releaseHold(io, hold, { ok }, now) {
   if (!hold || hold.released) return
   hold.released = true
+  if (hold.route === 'allowance') return releaseAllowance(io, hold, { ok }, now)
   if (hold.route === 'free') {
     const left = hold.leftMicros
     hold.leftMicros = 0

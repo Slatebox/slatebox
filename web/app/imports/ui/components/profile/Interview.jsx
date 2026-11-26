@@ -12,6 +12,7 @@ import { FACT_KINDS, KIND_LABELS, LIMITS } from '../../../api/common/personal-fa
 import { INTERVIEW_LIMITS, freshProposals, historyFor, keepOutcome, keptSummary } from '../../../api/common/interview.mjs'
 import ConversationPanel, { ConversationComposer } from '../ConversationPanel'
 import ChatTurn, { ChatThinking } from '../ChatTurn'
+import PayNotice, { isCreditRefusal } from '../PayNotice'
 import { FinePrint, SPACE } from '../../common/AccountLayout'
 
 // Profile › About you › Talk with Slatebox: the agent asks about the person's work, one question a
@@ -19,6 +20,9 @@ import { FinePrint, SPACE } from '../../common/AccountLayout'
 // saved until they keep it. "Done for now" ends with what was kept. One turn is one method call
 // (interview.start, interview.turn: server/methods/interview.js) and the transcript is text, so a
 // voice mode can later sit on the same message box (ConversationComposer) and the same turns.
+// When the meter refuses a turn (today's free talk used up, no Pro or balance), the refusal is the
+// agent's turn with its ways on in it (PayNotice: Get Pro, top up, use your own key), in the meter's
+// own words, and the turn runs again once paid.
 const M = CONSTANTS.methods.interview
 // "Skip this question" sends the same words a person would type to skip.
 const SKIP_WORDS = "I'd rather skip that one."
@@ -120,6 +124,8 @@ export default function Interview({ onKept, onDone }) {
   const [waiting, setWaiting] = useState(false)
   const [error, setError] = useState('')
   const [startFailed, setStartFailed] = useState(false)
+  // The meter's refusal ({ error, reason, details, message }: message is the answer it refused, none for the first question)
+  const [refusal, setRefusal] = useState(null)
   const [kept, setKept] = useState([])
   const [finished, setFinished] = useState(false)
   const [status, setStatus] = useState('')
@@ -146,13 +152,17 @@ export default function Interview({ onKept, onDone }) {
     setWaiting(true)
     setError('')
     setStartFailed(false)
+    setRefusal(null)
     try {
       const out = await Meteor.callAsync(M.start)
       setTurns([{ id: newId(), role: 'assistant', content: out.reply, proposed: [] }])
       requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }))
     } catch (requestError) {
-      setError(reason(requestError, 'The talk could not start. Try again.'))
-      setStartFailed(true)
+      if (isCreditRefusal(requestError?.error)) setRefusal({ error: requestError.error, reason: requestError.reason, details: requestError.details, message: null })
+      else {
+        setError(reason(requestError, 'The talk could not start. Try again.'))
+        setStartFailed(true)
+      }
     } finally {
       setWaiting(false)
     }
@@ -168,6 +178,7 @@ export default function Interview({ onKept, onDone }) {
     setTurns((all) => [...all, mine])
     if (typed) setMessage('')
     setError('')
+    setRefusal(null)
     setWaiting(true)
     try {
       const out = await Meteor.callAsync(M.turn, { message: words, history })
@@ -179,7 +190,8 @@ export default function Interview({ onKept, onDone }) {
       // Their words come back to the box, and the turn that did not go is taken away.
       setTurns((all) => all.filter((turn) => turn.id !== mine.id))
       if (typed) setMessage(words)
-      setError(reason(requestError, 'That did not go through. Try again.'))
+      if (isCreditRefusal(requestError?.error)) setRefusal({ error: requestError.error, reason: requestError.reason, details: requestError.details, message: words })
+      else setError(reason(requestError, 'That did not go through. Try again.'))
     } finally {
       setWaiting(false)
     }
@@ -288,6 +300,11 @@ export default function Interview({ onKept, onDone }) {
                 {turn.content}
               </ChatTurn>
             )))}
+          {refusal && !waiting && (
+            <ChatTurn who="slatebox">
+              <PayNotice refusal={refusal} from="draft" retry={() => (refusal.message ? send(refusal.message) : start())} inline ownKey keepReason />
+            </ChatTurn>
+          )}
           {waiting && <ChatThinking />}
         </Box>
         {startFailed && (

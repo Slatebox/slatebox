@@ -25,6 +25,7 @@ import { assertPublicHost, checkOwnEndpoint, ownEndpointAgent } from './own-endp
 import { NOT_AVAILABLE, describeKey, keyDocument, loadMasterKey, open as openKey, PROVIDERS } from './vault.mjs'
 import { minutesLeftFor, roomRequest, tick, transcriptionAllowed } from './calls.mjs'
 import { runM1, runM2, runM4 } from './migrations.mjs'
+import { allowanceUsage } from './allowance.mjs'
 import { aiSettings, auxCredential } from '../methods/ai/ai-settings'
 import { dailyClient } from '../methods/huddle-provider.mjs'
 import { TOP_UP_AMOUNTS, cardFeeMode } from '../../imports/api/billing/top-up.mjs'
@@ -90,6 +91,8 @@ export async function usageFor(userId, now, pool = null) {
   return {
     aiActionsToday: day.aiActions || 0, freeMicrosToday: (day.freeMicros || 0) + (day.heldMicros || 0),
     aiMicrosMonth: (month.aiMicros || 0) + (month.heldAiMicros || 0), voiceMinutesMonth: month.voiceMinutes || 0, videoMinutesMonth: month.videoMinutes || 0,
+    // the personalization allowance's uses today (UTC), by feature (allowance.mjs)
+    allowanceToday: allowanceUsage(day),
   }
 }
 
@@ -217,7 +220,8 @@ export async function poolFor(user, now = Date.now()) {
 }
 
 // Everything route() needs for one person and one kind of use.
-export async function routeFor({ user, kind, feature, estimateMicros, minutes, running, countsAsDraft, now = Date.now() }) {
+// allowanceTaken: the personalization allowance's hold was refused (meter-core.mjs), so it is not offered again.
+export async function routeFor({ user, kind, feature, estimateMicros, minutes, running, countsAsDraft, allowanceTaken = null, now = Date.now() }) {
   const settings = await meterSettings()
   const aiScope = await ownAIScope(user, kind, feature)
   const pool = await poolFor(user, now)
@@ -232,6 +236,7 @@ export async function routeFor({ user, kind, feature, estimateMicros, minutes, r
   const decision = route({
     kind, person: personOf(user, settings, now, pool), teamId: user?.orgId || null, keys: { personal: personalKeys, team: teamKeys },
     usage, wallets: { personal, team }, global, estimateMicros, minutes, running, countsAsDraft, feature, settings: pool ? creditsForPool(settings, pool) : settings, now,
+    allowanceTaken,
   })
   return { decision, settings, usage, global, wallets: { personal, team } }
 }
@@ -398,12 +403,13 @@ installMeter(createMeter({
   async decide(opts) {
     const userId = opts.userId ?? Meteor.userId()
     const user = userId && await Meteor.users.findOneAsync(userId, userFields)
-    const { decision } = await routeFor({ user, kind: opts.kind, feature: opts.feature, estimateMicros: opts.estimateMicros, countsAsDraft: opts.countsAsDraft })
+    const { decision } = await routeFor({ user, kind: opts.kind, feature: opts.feature, estimateMicros: opts.estimateMicros, countsAsDraft: opts.countsAsDraft, allowanceTaken: opts.allowanceTaken ?? null })
     return { decision, userId: user?._id ?? null, address: callerAddress() }
   },
   credentials: (keyOwner, feature, userId) => credentialsFor(keyOwner, 'ai', feature, userId),
   onSpend({ route: spentOn, now }) {
-    if (spentOn === 'free') checkAlerts(now).catch(error => console.error('meter alert check failed', error.message))
+    // the personalization allowance counts in the shared budget too (record.mjs)
+    if (spentOn === 'free' || spentOn === 'allowance') checkAlerts(now).catch(error => console.error('meter alert check failed', error.message))
   },
 }))
 
@@ -603,7 +609,9 @@ Meteor.methods({
     const past = await MeterTotals.find({ _id: { $in: days } }).fetchAsync()
     const raw = MeterEvents.rawCollection()
     const [top, routes] = await Promise.all([
-      raw.aggregate([{ $match: { month, route: 'free' } }, { $group: { _id: '$payerId', micros: { $sum: '$costMicros' } } }, { $sort: { micros: -1 } }, { $limit: 20 }]).toArray(),
+      // the top spenders of Slatebox's money: the included amount and the personalization allowance, so an
+      // account that farms the allowance is found here and stopped (freeStopped, which the allowance respects)
+      raw.aggregate([{ $match: { month, route: { $in: ['free', 'allowance'] } } }, { $group: { _id: '$payerId', micros: { $sum: '$costMicros' } } }, { $sort: { micros: -1 } }, { $limit: 20 }]).toArray(),
       raw.aggregate([{ $match: { month } }, { $group: { _id: '$route', events: { $sum: 1 }, charge: { $sum: '$chargeMicros' } } }]).toArray(),
     ])
     const people = await Meteor.users.find({ _id: { $in: top.map(t => t._id) } }, { fields: { emails: 1, freeStopped: 1 } }).fetchAsync()
@@ -625,6 +633,9 @@ Meteor.methods({
       spentMicros: global.monthFreeMicros, byKind: totals.freeByKind || {}, percent, level,
       // Pro credits spent this month: Slatebox's cost, outside the shared budget's stages
       proSpentMicros: totals.proMicros || 0, proByKind: totals.proByKind || {},
+      // the personalization allowance this month: Slatebox's cost, inside the shared budget, by feature (allowance.mjs)
+      allowanceSpentMicros: totals.allowanceMicros || 0, allowanceByFeature: totals.allowanceByFeature || {},
+      personalAllowance: settings.personalAllowance,
       todayMicros: global.todayFreeMicros, dailyCeilingMicros: Math.floor(settings.budget.monthlyMicros / settings.budget.dailyCeilingDivisor),
       sevenDayAverageMicros: Math.round(past.reduce((s, r) => s + (r.freeMicros || 0), 0) / 7),
       projectedMicros: Math.round(global.monthFreeMicros / elapsedDays * daysInMonth),

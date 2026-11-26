@@ -43,7 +43,9 @@ const pick = (r) => [r.ok, r.code, r.route]
 
 test('without Pro: included AI is refused with the exact words, and nothing is spent', () => {
   const r = ask()
-  assert.deepEqual(r, { ok: false, code: 'pro', message: 'AI on Slatebox comes with Slatebox Pro, $5 a month, or a balance. Get Pro or top up in your profile.' })
+  // Restated 2026-11-26 (owner: "agent", not "AI", in the words the interview and the pay notice show): was "AI on
+  // Slatebox comes with …"; the refusal, its code and its way on are the same.
+  assert.deepEqual(r, { ok: false, code: 'pro', message: "Slatebox's agent comes with Slatebox Pro, $5 a month, or a balance. Get Pro or top up in your profile." })
   assert.equal(r.message, COPY.getPro)
 })
 
@@ -114,7 +116,7 @@ test('Pro: its credits (sized to $3.75 a month), in Pro words once used up', () 
   const r = ask({ person: withPro })
   assert.deepEqual([r.ok, r.route, r.pro, r.level], [true, 'free', true, 0])
   const drafts = ask({ person: withPro, usage: { aiActionsToday: 30 } })
-  assert.deepEqual([drafts.code, drafts.message], ['ai-today', "You have used today's Pro credits for AI. Top up in your profile."])
+  assert.deepEqual([drafts.code, drafts.message], ['ai-today', "You have used today's Pro credits for the agent. Top up in your profile."])
   assert.equal(ask({ person: withPro, usage: { aiActionsToday: 29 } }).ok, true)
   assert.equal(ask({ person: withPro, usage: { aiMicrosMonth: 936_000 }, estimateMicros: 5000 }).code, 'ai-month')
   assert.equal(ask({ person: withPro, kind: 'voice', usage: { voiceMinutesMonth: 1380 } }).message, "You have used this month's Pro credits for calls. Top up in your profile.")

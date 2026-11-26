@@ -100,3 +100,21 @@ test('only the refusing turn carries the buttons, and "Run it now" drops the she
   assert.match(notice, /const summary = useLoadedAllowance\(\)/)
   assert.match(host, /if \(summary \|\| !Meteor\.userId\(\)\) return\s*\n\s*Meteor\.callAsync\(CONSTANTS\.methods\.meter\.summary\)/)
 })
+
+// Owner, 2026-11-26: the interview's refusal offers Get Pro, top up and use your own key, in the meter's own words.
+test('a surface may offer "Use your own key" beside Pro and a balance, and keep the meter’s own words', async () => {
+  const { OWN_KEY_HREF } = await import('../web/app/imports/ui/components/billing/pay/pay-notice.mjs')
+  const usedUp = { ...pro, reason: "You've used today's free talk with Slatebox. It comes back tomorrow, or keep going with Pro or your own key." }
+  const on = { ...cloud, ownKeysAvailable: true }
+  const actions = inlinePayActions(usedUp, { summary: on, ownKeys: true, ownKey: true })
+  assert.deepEqual(actions.map(item => [item.action, item.label]), [['pro', INLINE_LABELS.pro], ['topup', INLINE_LABELS.topup], ['own-key', 'Use your own key']])
+  assert.equal(actions[2].href, OWN_KEY_HREF)
+  assert.equal(OWN_KEY_HREF, '/profile?tab=credits')
+  assert.equal(inlineRefusalText(usedUp, actions, { keepReason: true }), usedUp.reason)
+  // only where this server keeps own keys and the person's meter does not say they are off; never unless the surface asks
+  assert.deepEqual(inlinePayActions(usedUp, { summary: on, ownKeys: false, ownKey: true }).map(item => item.action), ['pro', 'topup'])
+  assert.deepEqual(inlinePayActions(usedUp, { summary: { ...on, ownKeysAvailable: false }, ownKeys: true, ownKey: true }).map(item => item.action), ['pro', 'topup'])
+  assert.deepEqual(inlinePayActions(usedUp, { summary: on, ownKeys: true }).map(item => item.action), ['pro', 'topup'])
+  // not about money: still nothing
+  assert.deepEqual(inlinePayActions({ code: 'busy', reason: 'x' }, { summary: on, ownKeys: true, ownKey: true }), [])
+})

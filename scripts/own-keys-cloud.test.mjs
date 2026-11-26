@@ -385,7 +385,9 @@ test('the meter\'s words name own keys where they are on, Cloud included', () =>
   assert.equal(copyFor(on), copyFor({ ownKeys: true }))
   assert.equal(messageFor('ai-today', null, on), OWN_KEY_COPY.aiToday)
   // Cloud's own-key words keep Pro and the balance, and never call the provider's AI free
-  assert.match(messageFor('pro', null, on), /Get Pro or top up in your profile, or use your own AI key: it spends no Slatebox credits\./)
+  // Restated 2026-11-26 (owner: "agent", not "AI", in the words the interview and the pay notice show): was "or use your
+  // own AI key"; the way on is the same.
+  assert.match(messageFor('pro', null, on), /^Slatebox's agent on its own models comes with Slatebox Pro, \$5 a month, or a balance\. Get Pro or top up in your profile, or use your own key: it spends no Slatebox credits\.$/)
   assert.match(OWN_KEY_COPY.getProCalls, /or a balance, or use your own call key: it spends no Slatebox credits/)
   assert.match(OWN_KEY_COPY.unverified, /Your own key and your balance still work\./)
   for (const [name, text] of Object.entries(OWN_KEY_COPY)) assert.doesNotMatch(text, /which is free|for free/, name)

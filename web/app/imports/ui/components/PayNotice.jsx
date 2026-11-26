@@ -39,12 +39,12 @@ export function usePayAction() {
  * balance" as buttons in the bubble, each opening the same pay sheet on its pane (the person pays there, with their own
  * click, or not at all); the surface's retry runs once the server has the payment. Pro switched on since: "Run it now".
  */
-function InlinePay({ refusal, from, retry }) {
+function InlinePay({ refusal, from, retry, ownKey, keepReason }) {
   const { open } = usePaySheet()
   // What this person can buy, from their own meter (read once if nobody on the page has yet): a second way on is offered
   // only when it is known to be theirs; until then the server's own answer is the one button.
   const summary = useLoadedAllowance()
-  const actions = inlinePayActions(refusal, { summary, metered: Meteor.settings.public.metered === true, ownKeys: Meteor.settings.public.ownKeys === true })
+  const actions = inlinePayActions(refusal, { summary, metered: Meteor.settings.public.metered === true, ownKeys: Meteor.settings.public.ownKeys === true, ownKey })
   const reason = refusal.reason ?? ''
   const run = item => {
     if (item.action !== 'again') return open({ action: item.action, wallet: item.wallet, reason, retry, from, choice: item.choice })
@@ -53,19 +53,24 @@ function InlinePay({ refusal, from, retry }) {
     return retry?.()
   }
   return <Box data-inline-pay="" sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-    <Typography variant="body2" component="span" sx={{ whiteSpace: 'pre-wrap', display: 'block', lineHeight: 1.5 }}>{inlineRefusalText(refusal, actions) || reason}</Typography>
+    <Typography variant="body2" component="span" sx={{ whiteSpace: 'pre-wrap', display: 'block', lineHeight: 1.5 }}>{inlineRefusalText(refusal, actions, { keepReason }) || reason}</Typography>
     {actions.length > 0 && <Box role="group" aria-label="Pay" sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-      {actions.map((item, i) => <Button key={item.action} size="small" variant={i === 0 ? 'contained' : 'outlined'} data-pay-action={item.action}
-        disabled={item.action === 'again' && typeof retry !== 'function'} onPointerEnter={prefetchPaySheet} onClick={() => run(item)}
-        sx={{ textTransform: 'none' }}>{item.label}</Button>)}
+      {actions.map((item, i) => (item.href
+        // a link of its own (Use your own key: where the profile keeps own keys), never the pay sheet. It opens
+        // in a tab of its own, so the conversation that was refused stays as it is.
+        ? <Button key={item.action} size="small" variant="outlined" data-pay-action={item.action} href={item.href} target="_blank" rel="noopener" sx={{ textTransform: 'none' }}>{item.label}</Button>
+        : <Button key={item.action} size="small" variant={i === 0 ? 'contained' : 'outlined'} data-pay-action={item.action}
+          disabled={item.action === 'again' && typeof retry !== 'function'} onPointerEnter={prefetchPaySheet} onClick={() => run(item)}
+          sx={{ textTransform: 'none' }}>{item.label}</Button>))}
     </Box>}
   </Box>
 }
 
 // The button itself, under a refusal's text. plain: the style bar's and the presenter's own
-// small button instead of MUI's. inline: inside a chat's message, its text with both ways on (InlinePay).
-export default function PayNotice({ refusal, from, retry, plain, inline }) {
-  if (inline && refusal) return <InlinePay refusal={refusal} from={from} retry={retry} />
+// small button instead of MUI's. inline: inside a chat's message, its text with both ways on (InlinePay); with ownKey,
+// "Use your own key" beside them where own keys are on; with keepReason, the server's own words instead of the short line.
+export default function PayNotice({ refusal, from, retry, plain, inline, ownKey, keepReason }) {
+  if (inline && refusal) return <InlinePay refusal={refusal} from={from} retry={retry} ownKey={ownKey} keepReason={keepReason} />
   return <PayButton refusal={refusal} from={from} retry={retry} plain={plain} />
 }
 
@@ -89,6 +94,8 @@ PayNotice.propTypes = {
   retry: PropTypes.func,
   plain: PropTypes.bool,
   inline: PropTypes.bool,
+  ownKey: PropTypes.bool,
+  keepReason: PropTypes.bool,
 }
 
-PayNotice.defaultProps = { refusal: null, from: 'draft', retry: null, plain: false, inline: false }
+PayNotice.defaultProps = { refusal: null, from: 'draft', retry: null, plain: false, inline: false, ownKey: false, keepReason: false }
