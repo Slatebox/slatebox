@@ -3,7 +3,7 @@
 // draft falls back to), and says what it made.
 import 'slateboxjs/workshops/behaviour'
 import { validateWorkshop } from 'slateboxjs/workshops/model'
-import { componentStarter } from '../../../web/app/imports/api/common/builder-freeform.mjs'
+import { componentQuality, componentStarter } from '../../../web/app/imports/api/common/builder-freeform.mjs'
 
 /** Checks a preview: [] when it is a valid, drafted, rendered-ready component, else the reasons. */
 export function previewProblems(preview, prompt) {
@@ -21,4 +21,15 @@ export function previewProblems(preview, prompt) {
     if (!preview.said || !/from your description/.test(preview.said)) problems.push('the reply does not say what was made')
   }
   return { problems, workshop: valid }
+}
+
+/**
+ * The quality gate on what a preview made (componentQuality, the check the drafting request and the preview hold a
+ * draft to): [] when every card is named as a real thing (never a lane, title or generic phrase plus a number or letter),
+ * no card is named twice, there are three or more, and the board has behavior (a capacity, allowed lanes, a rule).
+ */
+export function qualityProblems(preview, prompt) {
+  let workshop
+  try { workshop = validateWorkshop(preview.canvas?.workshop) } catch (error) { return ['no valid board: ' + error.message] }
+  return componentQuality(workshop, { message: prompt })
 }

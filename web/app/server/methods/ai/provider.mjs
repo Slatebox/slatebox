@@ -219,15 +219,15 @@ export function normalizeProviderUsage(provider, response = {}) {
   }
 }
 
-// tools: the tools the request offered ({ name, parameters }): a call to one of them spelled out in the message
-// text, when the answer has no tool_calls, is read as that call (text-tool-call.mjs).
-export function normalizeProviderResponse({ provider, response = {}, tools = [] } = {}) {
+// textTools: the offered tools ({ name, parameters }) whose calls may be read from the message text, when the answer
+// has no tool_calls (text-tool-call.mjs). Empty unless the caller opts in (req's textToolCalls): none by default.
+export function normalizeProviderResponse({ provider, response = {}, textTools = [] } = {}) {
   const message =
     provider === AI_PROVIDERS.anthropic
       ? response
       : response?.choices?.[0]?.message
   const toolCall = normalizeToolCall(provider, message) ||
-    (provider !== AI_PROVIDERS.anthropic ? textToolCall(message?.content, tools) : null)
+    (provider !== AI_PROVIDERS.anthropic ? textToolCall(message?.content, textTools) : null)
 
   let jsonCandidate = message?.content || message?.function_call
   if (provider === AI_PROVIDERS.anthropic) jsonCandidate = message

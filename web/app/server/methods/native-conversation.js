@@ -75,20 +75,25 @@ Meteor.methods({
     if(kind==='lanes') {
       try {workshopFromLaneBrief(message);literalWorkshop=true} catch {}
     }
-    let generated, drafted=false
+    let generated, drafted=false, guest=false
     if(freeform) {
       // Drafted from the words when an agent may draft for this person; a refusal the pay sheet answers, or the
       // one-draft-a-minute lock, is said as it is. Any other failure, a draft that is no board of lanes, or no
       // agent, starts the board here instead (builderBoard): a description always makes a board.
       let asked=null
       if(ai && message.trim().length>=10) {
-        try {asked=await Meteor.callAsync('workshops.draft',builderBrief(message),'lanes',undefined,shareId)}
+        try {asked=await Meteor.callAsync('workshops.draft',builderBrief(message),'component',undefined,shareId)}
         catch(e) {
           if(e?.error==='busy' || e?.details?.pay || CREDIT_REFUSALS.includes(e?.error)) throw e
           console.warn('[nativeCanvas.preview] builder draft fell back to a starter:',e?.error || e?.message)
         }
       }
-      ;({workshop:generated,drafted}=builderBoard(asked,message))
+      let repairs
+      ;({workshop:generated,drafted,repairs}=builderBoard(asked,message))
+      if(repairs.length) console.info('[nativeCanvas.preview] builder draft repaired:',repairs.join('; '))
+      if(asked && !drafted) console.warn('[nativeCanvas.preview] builder draft failed the quality gate; started from the words')
+      // A visitor who is not signed in is told signing in lets the agent draft it (builderSaid).
+      if(!drafted) guest=Boolean((await Meteor.users.findOneAsync(this.userId,{fields:{isAnonymous:1}}))?.isAnonymous)
     }
     // A launch plan, a pipeline or a budget is read from the person's own words, never drafted.
     if(kind==='board') {
@@ -126,7 +131,7 @@ Meteor.methods({
       ...(kind==='board' && {said:businessBoardSaid(draft.workshop)}),
       // A described smart component: what was made, and how it behaves (its rulebook's lines: a drafted board's lane
       // limits too, which it carries as capacities, not rules).
-      ...(freeform && {said:builderSaid(draft.workshop,{drafted}),title:draft.workshop.title,rules:rulebook().lines(draft.workshop)}),
+      ...(freeform && {said:builderSaid(draft.workshop,{drafted,guest}),title:draft.workshop.title,rules:rulebook().lines(draft.workshop),smart:true}),
       ...(draft.replace && {replace:true}), ...(draft.beside && {beside:true,title:draft.workshop.title}),
       // A library entry: which one, and how it behaves (the lines of its "How this board behaves" note).
       ...(draft.component && {component:draft.component,title:draft.workshop.title,rules:draft.workshop.behaviour ? rulebook().lines(draft.workshop) : []}),

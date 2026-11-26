@@ -16,11 +16,12 @@ import { after, before, test } from 'node:test'
 import 'slateboxjs/workshops/behaviour'
 import { rulebook, validateWorkshop, workshopToSlate } from 'slateboxjs/workshops/model'
 import '../../../web/app/imports/api/common/library.mjs'
-import { builderBrief, builderDescription, builderTitle, componentStarter } from '../../../web/app/imports/api/common/builder-freeform.mjs'
+import { builderBrief, builderDescription, builderTitle, componentQuality, componentStarter, placeholderLabel } from '../../../web/app/imports/api/common/builder-freeform.mjs'
+import { previewAsksForCards, previewHeading, previewSaidLine } from '../../../web/app/imports/api/common/conversation-preview.mjs'
 import { textToolCall } from '../../../web/app/server/methods/ai/text-tool-call.mjs'
 import { normalizeProviderResponse } from '../../../web/app/server/methods/ai/provider.mjs'
 import { authorTool, laneDraftCheck, normalizeLaneDraft, parseLaneDraft } from '../../../web/app/server/methods/workshop-lane-draft.mjs'
-import { previewProblems } from './checks.mjs'
+import { previewProblems, qualityProblems } from './checks.mjs'
 import { PROMPTS } from './prompts.mjs'
 import { GOOD, RECORDED } from './recorded.mjs'
 import { completion, startReplay } from './replay.mjs'
@@ -81,6 +82,9 @@ test('every prompt makes a valid smart component with no agent at all: the start
     const workshop = isComponent(preview, prompt)
     assert.deepEqual(workshop, validateWorkshop(componentStarter(prompt, { now: new Date(workshop.behaviour.rules[0].set.at) })), id)
     assert.match(preview.said, /^Started “/, id)
+    // Built from the words, it passes the same quality gate a draft must: named pieces, no repeats, behavior.
+    assert.deepEqual(componentQuality(workshop, { message: prompt }), [], id)
+    assert.doesNotMatch(JSON.stringify(workshop.cards), /"Piece [A-D]"/, id)
   }
 })
 
@@ -94,6 +98,9 @@ test('every prompt keeps a good draft from the agent as it was drafted', async (
     // The request carries the person's words framed as a component, and the lanes tool.
     assert.equal(sent[0].messages.at(-1).content, builderBrief(prompt), id)
     assert.equal(sent[0].tools[0].function.name, 'draft_workshop')
+    // The component's own instructions (with worked examples) and the tool's rules (behavior as data).
+    assert.match(sent[0].messages[0].content, /^Build a reusable smart component from the person's description/)
+    assert.deepEqual(sent[0].tools[0].function.parameters.properties.rules.items.properties.kind.enum, ['one-step', 'path', 'archive'])
   }
 })
 
@@ -119,6 +126,11 @@ for (const item of RECORDED) {
     const checked = previewProblems(preview, prompt)
     if (item.expect.outcome === 'drafted') assert.deepEqual(checked.problems, [])
     else assert.ok(checked.problems.some((p) => /fell back to the starter/.test(p)))
+    // Whatever was answered, what the person gets passes the quality gate (a draft, or the starter from the words).
+    assert.deepEqual(qualityProblems(preview, prompt), [])
+    if (item.expect.cards) assert.deepEqual(workshop.cards.map((card) => card.id), item.expect.cards)
+    if (item.expect.ruleKinds) assert.deepEqual(workshop.behaviour.rules.map((rule) => rule.kind), item.expect.ruleKinds)
+    if (item.expect.outcome === 'starter') assert.equal(/sign in and the agent drafts/.test(preview.said), Boolean(item.expect.guest))
     if (item.expect.title) assert.equal(workshop.title, item.expect.title)
     if (item.expect.lanes) assert.deepEqual(workshop.lanes.map((lane) => lane.label), item.expect.lanes)
     if (item.expect.rules) assert.deepEqual(preview.rules, item.expect.rules)
@@ -128,7 +140,8 @@ for (const item of RECORDED) {
       assert.equal(asked.role, 'user')
       assert.match(asked.content, item.expect.retry)
       assert.match(asked.content, /Return a complete draft_workshop tool call\./)
-      plainWords(asked.content.split('Return a complete')[0].replace('draft_workshop', 'the tool'))
+      // what was wrong, in words: each problem one plain sentence (a draft can have more than one)
+      for (const sentence of asked.content.split('Return a complete')[0].replace('draft_workshop', 'the tool').split(/(?<=\.) (?=[A-Z])/)) plainWords(sentence)
     }
   })
 }
@@ -156,10 +169,10 @@ test('a tool call written as text is read as that call only when it is complete,
   assert.equal(textToolCall('Plain words.', tools), null)
   // Through the provider's normalization: only when the answer has no tool_calls of its own.
   const asText = completion({ text: text(p('version', '1') + p('title', 'Kit')) })
-  assert.equal(normalizeProviderResponse({ provider: 'connection', response: asText, tools }).toolCall.name, 'draft_workshop')
-  assert.equal(normalizeProviderResponse({ provider: 'connection', response: asText }).toolCall, null, 'no tools offered, no call read')
+  assert.equal(normalizeProviderResponse({ provider: 'connection', response: asText, textTools: tools }).toolCall.name, 'draft_workshop')
+  assert.equal(normalizeProviderResponse({ provider: 'connection', response: asText }).toolCall, null, 'no caller opted in, no call read')
   const real = completion({ args: { title: 'Real' }, text: text(p('title', 'Text')) })
-  assert.equal(normalizeProviderResponse({ provider: 'connection', response: real, tools }).toolCall.arguments.title, 'Real')
+  assert.equal(normalizeProviderResponse({ provider: 'connection', response: real, textTools: tools }).toolCall.arguments.title, 'Real')
 })
 
 test('a draft\'s repairs touch only unambiguous slips; anything else is refused by the board and asked again', () => {
@@ -184,8 +197,42 @@ test('the owner\'s words end to end: a builder slate gets a smart component, nev
 })
 
 test('the preview says what was made once: no doubled full stop, and no "add your cards" for a board that brings its pieces', async () => {
-  const { readFileSync } = await import('node:fs')
-  const page = readFileSync(new URL('../../../web/app/imports/ui/components/NativeCanvasConversation.jsx', import.meta.url), 'utf8')
-  assert.match(page, /\{draft\.said\.replace\(\/\^Added \/,'Keep this to add '\)\}\{\/\[\.!\?\]\$\/\.test\(draft\.said\) \? '' : '\.'\}/)
-  assert.match(page, /draft\.format==='lanes' && !draft\.component && !draft\.canvas\?\.workshop\?\.cards\?\.length && <Typography variant="body2">Add your cards in the workshop after Keep\./)
+  const { preview } = await replay.turn(OWNER, [{ args: GOOD }])
+  // The heading names the agent (never "AI") and what was made: a smart component.
+  assert.equal(previewHeading(preview), 'Agent preview · Smart component · Snap-together printable kit')
+  const line = previewSaidLine(preview)
+  assert.equal(line, preview.said)
+  assert.doesNotMatch(line, /\.\.$/)
+  assert.equal(previewAsksForCards(preview), false)
+  // A starter is a preview made here; a board of lanes with no cards asks for them; a sentence without a stop gets one.
+  const { preview: guest } = await replay.turn(OWNER, [], { as: 'guest' })
+  assert.equal(previewHeading(guest), 'Preview · Smart component · Snappable congruent pieces to compose new printable materials')
+  assert.equal(previewAsksForCards({ format: 'lanes', canvas: { workshop: { cards: [] } } }), true)
+  assert.equal(previewSaidLine({ said: 'Added a retro' }), 'Keep this to add a retro.')
+  assert.equal(previewHeading({ provider: 'ai', format: 'lanes', mode: 'play' }), 'Agent preview · Workshop')
+  assert.equal(previewHeading({ provider: 'direct', format: 'map', mode: 'play', links: 1 }), 'Preview · Interactive route · 1 connection')
+})
+
+test('the quality gate: a card that is only a phrase the board says and a number or letter is a placeholder; a board needs behavior', () => {
+  const known = new Set(['snappable', 'congruent', 'piece', 'laptop'])
+  for (const label of ['Snappable congruent piece 1', 'Piece A', 'Card 3', 'Laptop B', '7', 'item #2', 'Task-4']) assert.equal(placeholderLabel(label, known), true, label)
+  for (const label of ['Square 1x1', 'Bar 1x2', 'Read 20 minutes', 'MacBook Air 13', 'Title banner', 'One half', 'Corner L shape piece']) assert.equal(placeholderLabel(label, known), false, label)
+  const workshop = validateWorkshop(GOOD)
+  assert.deepEqual(componentQuality(workshop, { message: OWNER }), [])
+  const plain = validateWorkshop({ ...GOOD, lanes: GOOD.lanes.map(({ capacity, ...lane }) => lane), cards: GOOD.cards.map(({ allowedLaneIds, ...card }) => card) })
+  assert.deepEqual(componentQuality(plain), ['Give the board at least one rule: a lane capacity, allowedLaneIds on a card, or a rule such as one-step.'])
+  const twice = validateWorkshop({ ...GOOD, cards: [...GOOD.cards, { id: 'again', label: 'Bar 1X2', laneId: 'piece-tray' }] })
+  assert.deepEqual(componentQuality(twice), ['Give each card its own name: “Bar 1X2” appears more than once.'])
+  // The owner's prompt, drafted once with one phrase on every card: named by the phrase, not the piece.
+  const echo = validateWorkshop({ ...GOOD, cards: ['Title', 'Instruction', 'Question', 'Diagram', 'Picture'].map((name, i) => ({ id: 'c' + i, label: name + ' square tile 2x2', laneId: 'piece-tray' })) })
+  assert.deepEqual(componentQuality(echo), ['Name each card for what makes it different: 5 of 5 cards end in the same words, “tile 2x2”.'])
+  for (const problem of [...componentQuality(plain), ...componentQuality(twice), ...componentQuality(echo)]) plainWords(problem)
+})
+
+test('reading a call written as text is opt-in: a drafting format that does not opt in (a map) asks again instead', async () => {
+  const call = '<atem:function_calls>\n<atem:invoke name="draft_concept_map">\n<atem:parameter name="title">Hike</atem:parameter>\n</atem:invoke>\n</atem:function_calls>'
+  const { sent, error } = await replay.draft('Plan a day hike from the car park to the summit', 'map', [{ text: call }, { text: call }])
+  assert.equal(sent.length, 2, 'the text was not read as a call: the map draft asked again')
+  assert.ok(error, 'and, never answered with a call, refused')
+  assert.match(sent[1].messages.at(-1).content, /Call the requested tool\./)
 })

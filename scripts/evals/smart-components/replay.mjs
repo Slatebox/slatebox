@@ -126,6 +126,18 @@ export async function startReplay(appRoot = new URL('../../../web/app/', import.
         return { error, sent: [...sent], audits: state.audits, warnings: state.warnings, left: queue.length }
       }
     },
+    /** One workshops.draft call by a signed-in person (any format), the model answering with `answers` in order. */
+    async draft(brief, format, answers = []) {
+      queue = [...answers]
+      sent.length = 0
+      Object.assign(state, { audits: [], warnings: [], connection: {}, locked: false, noAI: false, off: null, refuse: null })
+      state.user = { _id: 'ada', isAnonymous: false, profile: {} }
+      try {
+        return { result: await Meteor.callAsync('workshops.draft', brief, format), sent: [...sent], left: queue.length }
+      } catch (error) {
+        return { error, sent: [...sent], left: queue.length }
+      }
+    },
     close() {
       console.warn = quiet
       server.close()

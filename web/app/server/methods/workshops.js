@@ -19,6 +19,7 @@ import { releasePlanFromDraft, releaseInstructions, releaseDraftTool } from './w
 import { conceptMapFromDraft, mapInstructions, mapDraftTool } from './workshop-map-draft.mjs'
 import { promptText } from '../ai-control/prompts/index.mjs'
 import { authorTool, laneDraftCheck, parseLaneDraft } from './workshop-lane-draft.mjs'
+import { componentDraftCheck, componentTool, parseComponentDraft } from './workshop-component-draft.mjs'
 import { slateSaveCore, SlateEvents } from '../slate-save'
 import { readMoveLog, timeInLane, waitedLine } from '../workshop-move-log.mjs'
 import { MAIN_BOARD, boardIdPattern, slateAsBoard } from '../../imports/api/common/slate-boards.mjs'
@@ -117,7 +118,9 @@ async function chatTurn(input, map) {
 }
 
 async function draftWorkshop(brief, format = 'lanes', currentDraft) {
-  if (!['lanes', 'map', 'release-plan'].includes(format)) throw new Meteor.Error('invalid-format', 'Choose a workshop format.')
+  // 'component': a smart component described on a builder slate (builder-freeform.mjs), a board of plain lanes held
+  // to the quality gate (workshop-component-draft.mjs)
+  if (!['lanes', 'map', 'release-plan', 'component'].includes(format)) throw new Meteor.Error('invalid-format', 'Choose a workshop format.')
   if (typeof brief !== 'string' || brief.trim().length < 10 || brief.length > 1200) {
     throw new Meteor.Error('invalid-brief', 'Describe the decision in 10 to 1,200 characters.')
   }
@@ -128,7 +131,7 @@ async function draftWorkshop(brief, format = 'lanes', currentDraft) {
   if (currentDraft !== undefined) {
     try {
       base = validateWorkshop(currentDraft)
-      if (!(format === 'map' && base.lanes[0].station || format === 'release-plan' && base.kind === format)) throw new Error()
+      if (format === 'component' || !(format === 'map' && base.lanes[0].station || format === 'release-plan' && base.kind === format)) throw new Error()
     } catch { throw new Meteor.Error('invalid-workshop', 'Review the current workshop rules before asking for a revision.') }
   }
 
@@ -153,6 +156,10 @@ async function draftWorkshop(brief, format = 'lanes', currentDraft) {
   } : {
     map: () => ({ tool: mapDraftTool(), parse: conceptMapFromDraft, instructions: mapInstructions(), error: 'invalidConceptMapDraft' }),
     'release-plan': () => ({ tool: releaseDraftTool(), parse: releasePlanFromDraft, instructions: releaseInstructions(), error: 'invalidReleasePlanDraft' }),
+    component: () => {
+      const tool = componentTool()
+      return { tool, parse: parseComponentDraft, instructions: promptText('workshop.draft.component'), check: toolCall => componentDraftCheck(toolCall, { tool, message: brief }) }
+    },
   }[format]?.()
   const tool = special?.tool || { ...authorTool, description: promptText('tool.draft_workshop') }
   const parse = special?.parse || parseLaneDraft
@@ -161,11 +168,15 @@ async function draftWorkshop(brief, format = 'lanes', currentDraft) {
     prompts: [{ role: 'user', content: base ? JSON.stringify({ currentWorkshop: base, requestedChange: brief.trim() }) : brief.trim() }],
     system: special?.instructions || promptText('workshop.draft.system'),
     functions: [tool], function_call: { name: tool.name },
+    // A lane board or a component drafted with a model that now and then writes its call as text in its own markup
+    // is read as that call (text-tool-call.mjs); the board's own check still runs on it. Only these opt in.
+    ...((!special || special.check) && { textToolCalls: true }),
     maxResponseValidationRetries: 1,
     validateResponse({ toolCall }) {
-      // a lane board: its slips repaired, and a retry that names what was wrong (workshop-lane-draft.mjs)
-      if (!special) {
-        const check = laneDraftCheck(toolCall, { tool, parse })
+      // a lane board or a component: its slips repaired, and a retry that names what was wrong (workshop-lane-draft.mjs,
+      // workshop-component-draft.mjs: a component is also held to the quality gate)
+      if (!special || special.check) {
+        const check = special ? special.check(toolCall) : laneDraftCheck(toolCall, { tool, parse })
         if (check) console.warn('[workshops.draft] lane draft refused:', check.retryPrompt.split(' Return a complete')[0].slice(0, 240))
         return check
       }

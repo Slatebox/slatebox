@@ -11,7 +11,7 @@ import ChatTurn,{ChatThinking} from './ChatTurn'
 import {keptReply} from '../../api/common/chat-words.mjs'
 import {loadLibrary} from './library/libraryBus'
 import BoardRules from './workshop/BoardRules'
-import {previewKeepSentence} from '../../api/common/conversation-preview.mjs'
+import {previewAsksForCards,previewHeading,previewKeepSentence,previewSaidLine} from '../../api/common/conversation-preview.mjs'
 import {useAtom,useAtomValue,useSetAtom} from 'jotai'
 import {askableAgentsAtom,openChatWithAtom} from '../jotai/atoms'
 import {agentChatReply,agentErrorReply,agentOfTurn,routeMessage,sameAgentName} from '../../api/common/agent-mention.mjs'
@@ -41,7 +41,6 @@ const agentSummary=(name,added)=>{
 // component described on a builder slate (a board of lanes, never loose notes: builder-freeform.mjs).
 const methodsFor=(message,board)=>nativeRequestKind(message)==='draw' && !builderDescription(board,message) ? 'canvasConversation' : 'nativeCanvas'
 const BOARD_FORMATS=['launch-plan','pipeline','budget']
-const BOARD_NAMES={'launch-plan':'Launch plan',pipeline:'Sales pipeline',budget:'Budget'}
 const WARNINGS={
   removes:count=>`This removes ${count===1?'a note or connection':(count||'some')+' notes or connections'}.`,
   rewrites_text:count=>`This rewrites the text of ${count} notes.`,
@@ -393,7 +392,7 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
     {draft && <Box aria-label="Review the preview" aria-live="polite" sx={{my:1}}>
       <ChatTurn who="you" as="div">{draft.message}</ChatTurn>
       <ChatTurn who="slatebox" as="div"><Box sx={{typography:'body2','& ul':{my:.5,pl:2.5}}}>
-      <Typography variant="body2" sx={{mb:.5,fontWeight:700}}>{draft.provider==='ai'?'AI preview':'Preview'} · {draft.component ? draft.title : BOARD_NAMES[draft.format] ?? (draft.format==='lanes'?'Workshop':draft.mode==='play'?'Interactive route':'Drawing')}{!draft.component && draft.format!=='lanes' && !BOARD_NAMES[draft.format] && ' · '+draft.links+' '+(draft.links===1?'connection':'connections')}</Typography>
+      <Typography variant="body2" sx={{mb:.5,fontWeight:700}}>{previewHeading(draft)}</Typography>
       <Typography variant="body2">{stale ? 'Your drawing changed after this preview, so it is no longer shown. Discard it and ask again on the drawing as it is now.'
         : 'Shown on the canvas with dashed outlines. Nothing is added until you keep it.'}</Typography>
       <ul>{draft.labels.map((label,i)=><li key={i}>{label}</li>)}</ul>
@@ -409,8 +408,8 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
       {/* The board's rules as the chips it draws above itself on the canvas (boardLegend): the chat and the canvas say the same. */}
       {draft.canvas?.workshop && <BoardRules workshop={draft.canvas.workshop} />}
       {/* Only a board that comes with no cards asks for them; a described smart component brings its pieces. */}
-      {draft.format==='lanes' && !draft.component && !draft.canvas?.workshop?.cards?.length && <Typography variant="body2">Add your cards in the workshop after Keep.</Typography>}
-      {draft.said && <Typography variant="body2">{draft.said.replace(/^Added /,'Keep this to add ')}{/[.!?]$/.test(draft.said) ? '' : '.'}</Typography>}
+      {previewAsksForCards(draft) && <Typography variant="body2">Add your cards in the workshop after Keep.</Typography>}
+      {previewSaidLine(draft) && <Typography variant="body2">{previewSaidLine(draft)}</Typography>}
       {draft.imported && <Typography variant="body2" data-import-summary="">Imported drawing: {draft.imported.notes} {draft.imported.notes===1?'note':'notes'}, {draft.imported.lines} {draft.imported.lines===1?'line':'lines'}. Keep it to add them to this slate.</Typography>}
       {draft.importLeft && <Typography variant="body2" color="text.secondary">{draft.importLeft}</Typography>}
       {/* What Keep does, in the board's own words: "play the route" is a map's only. */}

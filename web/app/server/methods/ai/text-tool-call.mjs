@@ -8,12 +8,15 @@
 //   </atem:invoke>
 //   </atem:function_calls>
 //
-// (live eval of free-form smart components, 2026-11-25: 5 of 56 Muse Ember draft answers, each a complete board).
-// That is the same call, so it is read as one: only a complete invoke block (closed), naming a tool the request
-// offered, with every parameter closed. A value that is JSON is read as JSON, else kept as the text it is. Nothing is
-// guessed: anything else is no call, and the feature's own check and retry answer it as before. A parameter the
-// tool's schema types as a string is kept as text (a title "2024" stays text). The arguments still
-// go through the feature's own validation (validateWorkshop and the like), so this never lets a bad call through.
+// (live eval of free-form smart components, 2026-11-25, Muse Ember: the baseline run of 46 prompts made 56 draft calls,
+// 14 answers were refused and 3 prompts lost both attempts to end on the starter; a diagnostic run that logged each
+// refused answer found 12 of its 18 were a complete board written this way). That is the same call, so it is read as
+// one, only for a caller that opts in (req's textToolCalls: workshops.draft's lane boards and components) and only a
+// complete invoke block (closed), naming a tool the request offered, with every parameter closed. A value that is
+// JSON is read as JSON, else kept as the text it is. Nothing is guessed: anything else is no call, and the feature's
+// own check and retry answer it as before. A parameter the tool's schema types as a string is kept as text (a title
+// "2024" stays text). The arguments still go through the feature's own validation (validateWorkshop and the like),
+// so this never lets a bad call through.
 
 const INVOKE = /<(?:([A-Za-z][\w-]*):)?invoke\s+name\s*=\s*"([^"]{1,64})"\s*>([\s\S]*?)<\/(?:[A-Za-z][\w-]*:)?invoke\s*>/
 const PARAMETER = /<(?:[A-Za-z][\w-]*:)?parameter\s+name\s*=\s*"([^"]{1,64})"\s*>([\s\S]*?)<\/(?:[A-Za-z][\w-]*:)?parameter\s*>/g

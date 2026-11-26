@@ -11,11 +11,11 @@ import { rulebook, validateWorkshop } from "slateboxjs/workshops/model";
 import { catalogSamples as samples } from "slateboxjs/workshops/samples";
 import "../web/app/imports/api/common/library.mjs";
 import { nativeCanvasDraft } from "../web/app/imports/api/common/native-canvas-conversation.mjs";
-import { builderBoard, builderBrief, builderDescription, builderSaid, builderTitle, componentStarter, pieceNoun } from "../web/app/imports/api/common/builder-freeform.mjs";
+import { builderBoard, builderBrief, builderDescription, builderSaid, builderTitle, componentQuality, componentStarter, listedItems, pieceNoun } from "../web/app/imports/api/common/builder-freeform.mjs";
 import { componentPlacing } from "../web/app/imports/api/common/component-add.mjs";
 import { keptReply } from "../web/app/imports/api/common/chat-words.mjs";
 import { BUILD_SHAPES } from "../web/app/imports/ui/components/library/build/buildTurns.mjs";
-import { authorTool } from "../web/app/server/methods/workshop-lane-draft.mjs";
+import { componentAuthorTool } from "../web/app/server/methods/workshop-component-draft.mjs";
 import { makeExecWorld } from "./exec-test-world.mjs";
 import { principalFromUser } from "../web/app/server/actions/principal.mjs";
 import { API_TOKEN_SCOPES } from "../web/app/server/api-token-core.mjs";
@@ -50,40 +50,46 @@ test("the page sends a description on a builder slate to the board path, and the
   assert.match(page, /data-turn-next="edit"[^>]*onClick=\{\(\)=>\{setText\(turn\.message\)/);
 });
 
-test("with no agent, the owner's description starts a native board: pieces as cards, a kit, a place to compose, and drag rules", () => {
+test("with no agent, the owner's description starts a native board from its words: named pieces, a place to compose, and drag rules", () => {
   const starter = validateWorkshop(componentStarter(OWNER, { now: NOW }));
   assert.equal(starter.title, "Snappable congruent pieces to compose new printable materials");
-  assert.deepEqual(starter.lanes.map((lane) => lane.label), ["Kit", "Compose", "Ready to print"]);
-  assert.deepEqual(starter.cards.map((card) => [card.label, card.laneId]), [["Piece A", "kit"], ["Piece B", "kit"], ["Piece C", "kit"], ["Piece D", "kit"]]);
-  assert.deepEqual(starter.behaviour.rules.map((rule) => [rule.kind, rule.where ?? rule.from, rule.max ?? rule.noSkip]), [["capacity", "compose", 4], ["path", "any", true]]);
+  assert.deepEqual(starter.lanes.map((lane) => lane.label), ["Pieces", "Compose", "Ready to print"]);
+  // Printable pieces, named with the description's own word for them: never "Piece A" to "Piece D".
+  assert.deepEqual(starter.cards.map((card) => card.label), ["Square piece", "Triangle piece", "Hexagon piece", "Half-width strip", "Title banner", "Text box", "Image frame", "Page margins"]);
+  assert.ok(starter.cards.every((card) => card.laneId === "pieces"));
+  assert.deepEqual(starter.behaviour.rules.map((rule) => [rule.kind, rule.where ?? rule.from, rule.max ?? rule.noSkip]), [["capacity", "compose", 6], ["path", "any", true]]);
   assert.deepEqual(starter.behaviour.rules[0].set, { by: "Slatebox", at: "2026-11-25T23:18:01.000Z", via: "preset" });
-  // Its rules are the rulebook's own sentences (the "How this board behaves" note), and the rules hold: a fifth piece
-  // is refused in Compose, and a piece can't skip from Kit to Ready.
+  assert.deepEqual(componentQuality(starter, { message: OWNER }), []);
+  // Its rules are the rulebook's own sentences (the "How this board behaves" note), and the rules hold: a seventh piece
+  // is refused in Compose, and a piece can't skip from Pieces to Ready to print.
   const lines = rulebook().lines(starter);
   assert.equal(lines.length, 2);
   const moved = (board, cardId, laneId) => ({ ...board, cards: board.cards.map((card) => (card.id === cardId ? { ...card, laneId } : card)) });
-  const full = { ...starter, cards: starter.cards.map((card) => ({ ...card, laneId: "compose" })).concat({ id: "piece-e", label: "Piece E", laneId: "kit" }) };
-  assert.ok("refused" in rulebook().check(full, moved(full, "piece-e", "compose")), "a fifth piece in Compose");
-  assert.ok("refused" in rulebook().check(starter, moved(starter, "piece-a", "ready")), "Kit straight to Ready");
-  assert.ok(!("refused" in rulebook().check(starter, moved(starter, "piece-a", "compose"))), "Kit to Compose");
-  // Other words: the noun they use for pieces, and a plain last lane when nothing is printed.
+  const full = { ...starter, cards: starter.cards.map((card, i) => ({ ...card, laneId: i < 6 ? "compose" : "pieces" })) };
+  assert.ok("refused" in rulebook().check(full, moved(full, "image-frame", "compose")), "a seventh piece in Compose");
+  assert.ok("refused" in rulebook().check(starter, moved(starter, "square-piece", "ready-to-print")), "Pieces straight to Ready to print");
+  assert.ok(!("refused" in rulebook().check(starter, moved(starter, "square-piece", "compose"))), "Pieces to Compose");
+  // Other words: the noun they use for pieces, the items they list (as cards, or as lanes when they are stages).
   assert.equal(pieceNoun("modular tiles for a floor plan"), "Tile");
   assert.equal(pieceNoun("a way to sort our hiring ideas"), "Piece");
-  assert.equal(componentStarter("modular tiles for a floor plan").lanes.at(-1).label, "Ready");
+  assert.deepEqual(listedItems("a floor plan with rooms that snap together: kitchen, two bedrooms, bath, living room"), ["Kitchen", "Two bedrooms", "Bath", "Living room"]);
+  assert.deepEqual(validateWorkshop(componentStarter("a floor plan with rooms that snap together: kitchen, two bedrooms, bath, living room")).cards.map((card) => card.label), ["Kitchen", "Two bedrooms", "Bath", "Living room"]);
+  assert.deepEqual(validateWorkshop(componentStarter("camping packing list: to pack, packed, in the car")).lanes.map((lane) => lane.label), ["To pack", "Packed", "In the car"]);
+  assert.ok(!componentStarter("modular tiles for a floor plan").lanes.some((lane) => /print/i.test(lane.label)), "nothing printed, no print lane");
   assert.equal(builderTitle("x ".repeat(60)).length <= 80, true);
 });
 
-test("the drafting agent gets the words framed as a component, within the draft's 1,200 characters", () => {
-  const brief = builderBrief(OWNER);
-  assert.match(brief, /^Build a reusable smart component people drag to use\. Its cards are the pieces people move;/);
-  assert.ok(brief.endsWith("The component: " + OWNER));
-  assert.ok(builderBrief("y".repeat(1200)).length <= 1200);
-  // The lanes tool is the one the draft answers with: capacity and allowedLaneIds are its rules.
-  assert.ok(authorTool.parameters.properties.lanes.items.properties.capacity);
-  assert.ok(authorTool.parameters.properties.cards.items.properties.allowedLaneIds);
+test("the drafting agent gets the person's words; how to make a component of them is the draft's own instructions and tool", () => {
+  assert.equal(builderBrief(OWNER), OWNER);
+  assert.ok(builderBrief("y".repeat(1300)).length <= 1200);
+  // The component tool is the lanes tool with rules: capacity, allowedLaneIds, and one-step, path and archive.
+  assert.equal(componentAuthorTool.name, "draft_workshop");
+  assert.ok(componentAuthorTool.parameters.properties.lanes.items.properties.capacity);
+  assert.ok(componentAuthorTool.parameters.properties.cards.items.properties.allowedLaneIds);
+  assert.deepEqual(componentAuthorTool.parameters.properties.rules.items.properties.kind.enum, ["one-step", "path", "archive"]);
 });
 
-test("an agent's draft is used when it holds together as lanes; a broken or wrong-kind draft starts the board instead, never an error", () => {
+test("an agent's draft is used when it holds together as lanes and passes the quality gate; else the board starts from the words, never an error", () => {
   const drafted = {
     version: 1, title: "Snap-together printable kit",
     lanes: [{ id: "pieces", label: "Pieces" }, { id: "layout", label: "Layout", capacity: 6 }, { id: "print", label: "Print sheet", capacity: 1 }],
@@ -97,13 +103,23 @@ test("an agent's draft is used when it holds together as lanes; a broken or wron
   const used = builderBoard(drafted, OWNER, { now: NOW });
   assert.equal(used.drafted, true);
   assert.equal(used.workshop.title, "Snap-together printable kit");
-  for (const broken of [{ ...drafted, lanes: drafted.lanes.slice(0, 1) }, { version: 1, title: "x", lanes: "no" }, { ...drafted, kind: "pipeline" }, null]) {
+  // The toy the owner was shown: numbered copies of their own words, and a board with no behavior at all.
+  const toy = { ...drafted, lanes: drafted.lanes.map(({ capacity, ...lane }) => lane), cards: [1, 2, 3, 4, 5, 6].map((n) => ({ id: "p" + n, label: "Snappable congruent piece " + n, laneId: "pieces" })) };
+  const plain = { ...drafted, lanes: drafted.lanes.map(({ capacity, ...lane }) => lane), cards: drafted.cards.map(({ allowedLaneIds, ...card }) => card) };
+  for (const broken of [{ ...drafted, lanes: drafted.lanes.slice(0, 1) }, { version: 1, title: "x", lanes: "no" }, { ...drafted, kind: "pipeline" }, null, toy, plain]) {
     const made = builderBoard(broken, OWNER, { now: NOW });
     assert.equal(made.drafted, false);
     assert.deepEqual(made.workshop, validateWorkshop(componentStarter(OWNER, { now: NOW })));
   }
+  // A repeated card, or a placeholder beside three named ones, is repaired (left out), not thrown away.
+  const repaired = builderBoard({ ...drafted, cards: [...drafted.cards, { id: "again", label: "corner L", laneId: "pieces" }, { id: "p9", label: "Piece 9", laneId: "pieces" }] }, OWNER, { now: NOW });
+  assert.equal(repaired.drafted, true);
+  assert.deepEqual(repaired.workshop.cards.map((card) => card.id), ["square", "bar", "corner", "frame"]);
+  assert.equal(repaired.repairs.length, 2);
   assert.match(builderSaid(used.workshop, { drafted: true }), /^Drafted “Snap-together printable kit” from your description: Pieces, Layout and Print sheet, with 4 pieces to drag\./);
-  assert.match(builderSaid(builderBoard(null, OWNER).workshop, { drafted: false }), /^Started “Snappable congruent pieces to compose new printable materials” from your description: Kit, Compose and Ready to print/);
+  assert.match(builderSaid(builderBoard(null, OWNER).workshop, { drafted: false }), /^Started “Snappable congruent pieces to compose new printable materials” from your description: Pieces, Compose and Ready to print/);
+  // A visitor is told plainly that signing in lets the agent draft it.
+  assert.match(builderSaid(builderBoard(null, OWNER).workshop, { drafted: false, guest: true }), /This is a starter from your words: sign in and the agent drafts the whole component for you\.$/);
 });
 
 test("the preview is a playable board of lanes (never loose notes), and Keep's reply says what was made", () => {
@@ -145,7 +161,7 @@ test("the kept board is what useBuilder reads and library.saveDraft saves: the d
   assert.equal(saved.status, "draft");
   const item = world.library.items.docs.find((doc) => doc._id === saved.itemId);
   const kept = JSON.stringify(item);
-  for (const label of ["Kit", "Compose", "Ready to print", "Piece A", "compose-holds", "one-step"]) assert.ok(kept.includes(label), label);
+  for (const label of ["Pieces", "Compose", "Ready to print", "Square piece", "compose-holds", "one-step"]) assert.ok(kept.includes(label), label);
   const mine = await run("library.mine", {});
   assert.ok(mine.items.some((row) => row.id === saved.itemId && row.status === "draft"));
 });

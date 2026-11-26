@@ -538,7 +538,7 @@ export default function WorkshopConversation({ board: shown, boards: all, onChan
     {drawing ? <Box aria-label="Review proposed drawing" aria-live="polite" sx={{ my: 1 }}>
       <ChatTurn who="you" as="div">{drawing.message}</ChatTurn>
       <ChatTurn who="slatebox" as="div"><Box sx={{ typography: 'body2', '& ul': { my: .5, pl: 2.5 } }}>
-      <Typography variant="body2" sx={{ fontWeight: 700, mb: .5 }}>{drawing.provider === 'ai' ? 'AI preview' : 'Preview'} · {drawingHeading(drawing)}</Typography>
+      <Typography variant="body2" sx={{ fontWeight: 700, mb: .5 }}>{drawing.provider === 'ai' ? 'Agent preview' : 'Preview'} · {drawingHeading(drawing)}</Typography>
       <Typography variant="body2">{drawingStale ? 'Your drawing changed after this preview, so it is no longer shown. Discard it and ask again on the drawing as it is now.'
         : 'Shown on the canvas with dashed outlines. Nothing is added until you keep it.'}</Typography>
       {drawing.component || drawing.beside || drawing.replace ? drawing.canvas?.workshop && <BoardRules workshop={drawing.canvas.workshop} />

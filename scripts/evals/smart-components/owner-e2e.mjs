@@ -6,7 +6,8 @@
 // Twice, each in a fresh browser context (no cookies, no stored login):
 //   signed-in  a new account (made over DDP, its login handed to the page as Meteor resumes one): /new#build, the
 //              words typed, the agent's draft previewed, Keep, then Save: the component is in Add to this slate › Yours;
-//   guest      a visitor: /new#build makes a guest, the same words start the board from the words, Keep.
+//   guest      a visitor: /new#build makes a guest, the same words start the board from the words (told that signing
+//              in lets the agent draft it), Keep.
 // Screenshots of each step go to --shots. Fails (exit 1) on any "Operation N" text, a page error, or a step that
 // does not arrive.
 //
@@ -69,7 +70,12 @@ async function run(name, login) {
     await until('the preview (Keep changes)', () => panel(page).getByRole('button', { name: 'Keep changes' }).isVisible(), 120000)
     out.previewMs = Date.now() - asked
     await page.waitForTimeout(1200)
-    out.said = (await panel(page).innerText()).split('\n').find((line) => /from your description/.test(line)) ?? null
+    const lines = (await panel(page).innerText()).split('\n')
+    out.said = lines.find((line) => /from your description/.test(line)) ?? null
+    out.heading = lines.find((line) => /preview · /i.test(line)) ?? null
+    // The agent, never "AI"; a smart component, named as one; a visitor told what signing in adds.
+    if (!/^(Agent preview|Preview) · Smart component/.test(out.heading ?? '')) throw new Error('the preview heading is ' + JSON.stringify(out.heading))
+    if (!login && !/sign in and the agent drafts/.test(out.said ?? '')) throw new Error('the guest preview does not say signing in lets the agent draft it')
     out.steps.push('preview')
     await shot(page, `${name}-2-preview`)
     await panel(page).getByRole('button', { name: 'Keep changes' }).click()
@@ -108,6 +114,7 @@ async function run(name, login) {
     }
     const text = await page.locator('body').innerText()
     if (/Operation \d+/.test(text)) throw new Error('an "Operation N" list reached the page')
+    if (/\bAI preview\b/.test(text)) throw new Error('"AI preview" reached the page')
     if (errors.length) throw new Error('page errors: ' + errors.slice(0, 2).join(' | '))
     out.ok = true
   } catch (error) {

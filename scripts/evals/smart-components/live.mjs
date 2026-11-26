@@ -9,6 +9,7 @@
 //   3. checks: the preview is a board of lanes (play, lanes), its workshop passes validateWorkshop (the one gate),
 //      the agent drafted it (provider 'ai', not the starter a failed draft falls back to), its title and pieces
 //      come from the words (not the starter's), it says what it made, and its rules are the rulebook's sentences;
+//      then, separately, the quality gate (componentQuality: named cards, no repeats, at least three, behavior);
 //   4. nativeCanvas.keep, then (unless --no-render) the slate opened in a fresh headless browser signed in as that
 //      account: every card and lane of the kept board is drawn on #slateCanvas, with no page error;
 //   5. latency, and tokens and cost from the app's aiAudit rows for that account (--mongo; cost for a model with a
@@ -19,14 +20,15 @@
 //   node scripts/evals/smart-components/live.mjs --origin http://127.0.0.1:3660 --mongo mongodb://127.0.0.1:3661/meteor \
 //     [--only id,id] [--concurrency 3] [--no-render] [--out report.json] [--shots dir] [--keep]
 // SLATEBOX_CHROMIUM names a Chromium executable for the render step (as the browser specs read it).
-// Exit code: 0 when the pass rate meets --target (default 0.95), else 1.
+// Exit code: 0 when the pass rate meets --target (default 0.95) and the quality rate --quality-target (default 0.90),
+// else 1. See README.md beside this file for what a run needs.
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
 import '../../../web/app/imports/api/common/library.mjs'
 import { builderDescription } from '../../../web/app/imports/api/common/builder-freeform.mjs'
-import { previewProblems } from './checks.mjs'
+import { previewProblems, qualityProblems } from './checks.mjs'
 import { DDP } from './ddp.mjs'
 import { PROMPTS } from './prompts.mjs'
 
@@ -42,6 +44,7 @@ const { values: args } = parseArgs({
     shots: { type: 'string', default: '' },
     prices: { type: 'string', default: process.env.EVAL_PRICES || '' },
     target: { type: 'string', default: '0.95' },
+    'quality-target': { type: 'string', default: '0.90' },
     keep: { type: 'boolean', default: false },
     repeat: { type: 'string', default: '1' },
   },
@@ -114,6 +117,10 @@ async function runCase(item, index) {
     row.problems.push(...problems)
     row.validComponent = Boolean(workshop)
     if (workshop) row.board = { title: workshop.title, lanes: workshop.lanes.map((l) => l.label + (l.capacity ? ` (${l.capacity})` : '')), cards: workshop.cards.length, rules: preview.rules?.length ?? 0 }
+    if (workshop) row.cards = workshop.cards.map((card) => card.label)
+    // Quality, separately from validity: a drafted board that is a tool someone would use (the same gate the request uses).
+    row.quality = qualityProblems(preview, item.prompt)
+    row.qualityOk = Boolean(workshop) && preview.provider === 'ai' && !row.quality.length
     if (workshop) {
       await ddp.call('nativeCanvas.keep', shareId, preview.id)
       if (render) {
@@ -142,7 +149,7 @@ const workers = Array.from({ length: Math.max(1, Number(args.concurrency)) }, as
     // The eval's own connection dropping (the app restarting under it) is no answer from the app: asked once more.
     if (row.problems.some((p) => /^eval error: DDP connection (closed|failed)/.test(p)) && row.latencyMs === undefined) row = await runCase(cases[index], index + 10000)
     rows[index] = row
-    console.log(`${row.ok ? 'PASS' : 'FAIL'} ${row.id} ${row.latencyMs ?? '-'}ms${row.board ? ` "${row.board.title}" [${row.board.lanes.join(' | ')}] ${row.board.cards} pieces, ${row.board.rules} rules` : ''}${row.ok ? '' : '\n     ' + row.problems.join('\n     ')}`)
+    console.log(`${row.ok ? 'PASS' : 'FAIL'}${row.qualityOk ? '' : ' (quality)'} ${row.id} ${row.latencyMs ?? '-'}ms${row.board ? ` "${row.board.title}" [${row.board.lanes.join(' | ')}] ${row.board.cards} pieces, ${row.board.rules} rules: ${(row.cards ?? []).slice(0, 4).join(', ')}` : ''}${row.ok ? '' : '\n     ' + row.problems.join('\n     ')}${row.quality?.length ? '\n     quality: ' + row.quality.join(' ') : ''}`)
   }
 })
 await Promise.all(workers)
@@ -193,13 +200,17 @@ const summary = {
   outages: rows.filter((r) => r.outage).length,
   passRateWithoutOutages: passed / Math.max(1, rows.filter((r) => !r.outage).length),
   validComponentRate: valid / rows.length,
+  // drafted by the agent, valid, and through the quality gate (named cards, no repeats, three or more, behavior)
+  qualityRate: rows.filter((r) => r.qualityOk).length / rows.length,
+  qualityPassed: rows.filter((r) => r.qualityOk).length,
   drafted: rows.filter((r) => r.provider === 'ai').length,
   latencyMs: { p50: pct(0.5), p90: pct(0.9), max: latencies.at(-1) },
   models: [...new Set(rows.flatMap((r) => r.models ?? []))],
   calls: sum('calls'), inputTokens: sum('inputTokens'), outputTokens: sum('outputTokens'),
   ...(rows.some((r) => r.costUsd != null) && { costUsd: Number(sum('costUsd').toFixed(4)) }),
   failures: rows.filter((r) => !r.ok).map((r) => ({ id: r.id, problems: r.problems })),
+  qualityFailures: rows.filter((r) => !r.qualityOk).map((r) => ({ id: r.id, quality: r.quality ?? [], cards: r.cards })),
 }
 console.log('\n' + JSON.stringify(summary, null, 2))
 if (args.out) writeFileSync(args.out, JSON.stringify({ summary, rows }, null, 2))
-process.exit(summary.passRate >= Number(args.target) ? 0 : 1)
+process.exit(summary.passRate >= Number(args.target) && summary.qualityRate >= Number(args['quality-target']) ? 0 : 1)

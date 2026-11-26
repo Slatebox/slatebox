@@ -4,6 +4,8 @@ import { validateWorkshop } from 'slateboxjs/workshops/model'
 import { prepareConstraintProposal } from '../../../imports/api/common/workshop-constraints.mjs'
 import { constraintTool } from '../../methods/workshop-constraint-draft.mjs'
 import { authorTool } from '../../methods/workshop-lane-draft.mjs'
+import { componentAuthorTool, parseComponentDraft } from '../../methods/workshop-component-draft.mjs'
+import { componentQuality } from '../../../imports/api/common/builder-freeform.mjs'
 import { conceptMapFromDraft, mapTool } from '../../methods/workshop-map-draft.mjs'
 import { releasePlanFromDraft, releaseTool } from '../../methods/workshop-release-draft.mjs'
 import { toolCallOf, verdict } from './answer.mjs'
@@ -13,6 +15,11 @@ const KINDS = {
   lanes: { system: 'workshop.draft.system', toolId: 'tool.draft_workshop', tool: authorTool, parse: validateWorkshop },
   map: { system: 'workshop.draft.map', toolId: 'tool.draft_concept_map', tool: mapTool, parse: conceptMapFromDraft },
   release: { system: 'workshop.draft.release', toolId: 'tool.draft_release_plan', tool: releaseTool, parse: releasePlanFromDraft },
+  // a smart component is held to the quality gate as well as the board's own check
+  component: { system: 'workshop.draft.component', toolId: 'tool.draft_component', tool: componentAuthorTool, parse: (args, s) => {
+    const problems = componentQuality(parseComponentDraft(args), { message: s.brief })
+    if (problems.length) throw new Error(problems.join(' '))
+  } },
   rules: { system: 'workshop.draft.rules', toolId: 'tool.revise_workshop_rules', tool: constraintTool('map'), parse: (args) => prepareConstraintProposal(MAP, args) },
 }
 const sample = (id, title, kind, brief) => ({
@@ -28,6 +35,7 @@ export default {
     sample('lanes', 'A lane board for choosing a venue', 'lanes', 'Choose a venue for the spring party with the team: a hall, a barn or a park, at most two on the shortlist.'),
     sample('map', 'A map board for a hiking trip', 'map', 'Plan a day hike from the car park to the summit, with a lake detour that costs an hour.'),
     sample('release', 'A release plan for a small app', 'release', 'Plan two releases of a notes app: sign in, sharing, offline mode and search, about 20 points each release.'),
+    sample('component', 'A smart component described in the builder', 'component', 'snappable congruent pieces to compose new printable materials'),
     sample('rules', 'Revising a map board\'s rules', 'rules', 'Let the walker skip the start and go straight to the summit.'),
   ],
   toolFor: (s) => (KINDS[s.kind].tool.name),
@@ -46,7 +54,7 @@ export default {
     const want = KINDS[s.kind].tool.name
     if (!call) return `It did not call ${want}.`
     if (call.name !== want) return `It called ${call.name}, not ${want}.`
-    KINDS[s.kind].parse(call.arguments)
+    KINDS[s.kind].parse(call.arguments, s)
     return null
   }),
 }

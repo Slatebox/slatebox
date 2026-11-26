@@ -16,7 +16,7 @@ const here = (path) => new URL(path, import.meta.url)
 const golden = JSON.parse(readFileSync(here('./fixtures/ai-request/call-sites.golden.json'), 'utf8'))
 const FEATURE = {
   laneChat: 'lane-chat', mapChat: 'map-chat', 'draft:lanes': 'workshop', 'draft:map': 'workshop', 'draft:release-plan': 'workshop',
-  'draft:revision': 'workshop', canvas: 'canvas', agent: 'agent',
+  'draft:component': 'workshop', 'draft:revision': 'workshop', canvas: 'canvas', agent: 'agent',
 }
 
 test('the four call sites send the same request as before, with their own request feature', () => {

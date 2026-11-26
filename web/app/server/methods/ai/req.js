@@ -386,7 +386,9 @@ async function requestFromProvider({ prompts, system, maxSize, userId: askedFor,
       }
     }
 
-    const normalized = normalizeProviderResponse({ provider, response: response || {}, tools: aiOpts.functions || [] })
+    // A call written as text is read only for a caller that opts in (textToolCalls: workshops.draft's lane boards and
+    // components), whose own check validates the arguments; every other tool-offering caller is unchanged.
+    const normalized = normalizeProviderResponse({ provider, response: response || {}, textTools: aiOpts.textToolCalls ? aiOpts.functions || [] : [] })
     const { message, toolCall, usage } = normalized
     if (toolCall) calledTool = true
     const validationError = aiOpts.validateResponse?.({
@@ -415,7 +417,7 @@ async function requestFromProvider({ prompts, system, maxSize, userId: askedFor,
       if (responseValidationErrors >= maxResponseValidationRetries) {
         return {
           abort: true,
-          abortMessage: 'The AI response did not meet Slatebox validation.',
+          abortMessage: 'The agent’s answer could not be used. Try again, or say it another way.',
           shape: true,
           // What the feature's check said of the last answer (its code, and a sentence for the person when it has one).
           rejected: { code: validationError.code || 'responseValidationFailed', ...(typeof validationError.reason === 'string' && { reason: validationError.reason }) },

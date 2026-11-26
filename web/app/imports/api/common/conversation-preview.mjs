@@ -218,3 +218,31 @@ export function previewShown(whole, focus, view, { margin = 24, readable = READA
   }
   return [whole, ...choices].find(fits) ?? choices.at(-1)
 }
+
+// ---- What the chat says of a preview (NativeCanvasConversation): pure, so the page and the tests read the same ----
+const BOARD_NAMES = { 'launch-plan': 'Launch plan', pipeline: 'Sales pipeline', budget: 'Budget' }
+
+/**
+ * The preview's heading: who made it (the agent, or Slatebox from the words) and what it is. A smart component
+ * described on a builder slate (`smart`) is named as one, with its title.
+ */
+export function previewHeading(draft) {
+  const who = draft.provider === 'ai' ? 'Agent preview' : 'Preview'
+  if (draft.smart) return `${who} · Smart component${draft.title ? ' · ' + draft.title : ''}`
+  if (draft.component) return `${who} · ${draft.title}`
+  const what = BOARD_NAMES[draft.format] ?? (draft.format === 'lanes' ? 'Workshop' : draft.mode === 'play' ? 'Interactive route' : 'Drawing')
+  const links = draft.format !== 'lanes' && !BOARD_NAMES[draft.format] ? ` · ${draft.links} ${draft.links === 1 ? 'connection' : 'connections'}` : ''
+  return `${who} · ${what}${links}`
+}
+
+/** The preview's sentence of what was made (the server's `said`), ending once with a full stop; null without one. */
+export function previewSaidLine(draft) {
+  if (!draft.said) return null
+  const line = draft.said.replace(/^Added /, 'Keep this to add ')
+  return /[.!?]$/.test(line) ? line : line + '.'
+}
+
+/** Whether the preview asks for cards after Keep: only a board of lanes that comes with none. */
+export function previewAsksForCards(draft) {
+  return draft.format === 'lanes' && !draft.component && !draft.canvas?.workshop?.cards?.length
+}

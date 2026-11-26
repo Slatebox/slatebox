@@ -155,7 +155,7 @@ export async function recordCallSites(appRoot, { disabled = false, offFirst = fa
     await quiet(() => methods['workshops.mapChat']({ shareId: 'share1', revision: 3, message: 'add a station after the summit', history: [] }))
     out.mapChat = shape(last(), mapAnswers)
     board = LANES
-    for (const format of ['lanes', 'map', 'release-plan']) {
+    for (const format of ['lanes', 'map', 'release-plan', 'component']) {
       await quiet(() => methods['workshops.draft']('Choose a venue for the spring party with the team', format))
       out[`draft:${format}`] = shape(last(), [...wrongTool, { toolCall: { name: last().functions[0].name, arguments: {} } }])
     }
@@ -174,7 +174,7 @@ export async function recordCallSites(appRoot, { disabled = false, offFirst = fa
   board = MAP
   await quiet(() => methods['workshops.mapChat']({ shareId: 'share1', revision: 3, message: 'add a station after the summit', history: [] }))
   out.mapChat = shape(last(), wrongTool)
-  for (const format of ['lanes', 'map', 'release-plan']) {
+  for (const format of ['lanes', 'map', 'release-plan', 'component']) {
     await quiet(() => methods['workshops.draft']('Choose a venue for the spring party with the team', format))
     out[`draft:${format}`] = shape(last(), wrongTool)
   }

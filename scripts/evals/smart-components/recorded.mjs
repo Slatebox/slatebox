@@ -4,11 +4,13 @@
 // tool), and what must come of it:
 //   drafted  the agent's board is used (provider 'ai', "Drafted …"), after `requests` model calls;
 //   starter  the board is started from the words ("Started …"), still a valid smart component, never an error;
+//            `guest`: the preview tells a visitor that signing in lets the agent draft it;
 //   error    one plain sentence for the person (`said`), nothing drawn.
 // `retry` is what the second request must tell the model (the board's own sentence for what was wrong).
 //
 // The Muse Ember shapes are the ones the live eval met (2026-11-25, test's AI config): a complete call written as
-// text in its own markup instead of tool_calls (5 of 56 answers), and a call with empty arguments.
+// text in its own markup instead of tool_calls (12 of 18 refused answers in a diagnostic run), and a call with empty
+// arguments. The quality gate's shapes are the ones the owner was shown: numbered copies of their words, no rule at all.
 
 const board = (over = {}) => ({
   version: 1,
@@ -31,6 +33,14 @@ const asText = (draft, tool = 'draft_workshop', ns = 'atem') => [
   `</${ns}:invoke>`, `</${ns}:function_calls>`,
 ].join('\n')
 
+// The board the owner was shown (2026-11-25): numbered copies of their own words in generic lanes, no rule at all.
+const toy = {
+  version: 1, title: 'Snappable congruent pieces',
+  lanes: [{ id: 'piece-library', label: 'Piece library' }, { id: 'composing-canvas', label: 'Composing canvas' }, { id: 'printable-sheet', label: 'Printable sheet' }],
+  cards: [1, 2, 3, 4, 5, 6].map((n) => ({ id: 'piece-' + n, label: 'Snappable congruent piece ' + n, laneId: 'piece-library' })),
+}
+// GOOD with no behavior: no capacity, no allowed lanes, no rules.
+const plain = board({ lanes: GOOD.lanes.map(({ capacity, ...lane }) => lane), cards: GOOD.cards.map(({ allowedLaneIds, ...card }) => card) })
 const manyCards = Array.from({ length: 30 }, (_, i) => ({ id: 'piece-' + (i + 1), label: 'Piece ' + (i + 1), laneId: 'piece-tray' }))
 const sixLanes = Array.from({ length: 6 }, (_, i) => ({ id: 'lane-' + (i + 1), label: 'Lane ' + (i + 1) }))
 
@@ -44,7 +54,19 @@ export const RECORDED = Object.freeze([
   { id: 'lists-double-encoded', prompt: 'bill-of-materials', answers: [{ args: { ...GOOD, lanes: JSON.stringify(GOOD.lanes), cards: JSON.stringify(GOOD.cards) } }], expect: { outcome: 'drafted', requests: 1 } },
   { id: 'arguments-double-encoded', prompt: 'habit-tracker', answers: [{ args: JSON.stringify(JSON.stringify(GOOD)) }], expect: { outcome: 'drafted', requests: 1 } },
   { id: 'optional-nulls', prompt: 'seating-chart', answers: [{ args: board({ signals: null, lanes: [{ id: 'piece-tray', label: 'Unassigned', capacity: null }, { id: 'compose', label: 'Table 1', capacity: 4 }, { id: 'print-sheet', label: 'Table 2', capacity: 4 }], cards: GOOD.cards.map((card) => ({ ...card, allowedLaneIds: null })) }) }], expect: { outcome: 'drafted', requests: 1 } },
-  { id: 'non-english', prompt: 'japanese-study', answers: [{ args: board({ title: '試験勉強の計画', lanes: [{ id: 'todo', label: '未着手' }, { id: 'doing', label: '学習中', capacity: 3 }, { id: 'done', label: '完了' }], cards: [{ id: 'math', label: '数学', laneId: 'todo' }, { id: 'english', label: '英語', laneId: 'todo' }] }) }], expect: { outcome: 'drafted', requests: 1, title: '試験勉強の計画' } },
+  { id: 'non-english', prompt: 'japanese-study', answers: [{ args: board({ title: '試験勉強の計画', lanes: [{ id: 'todo', label: '未着手' }, { id: 'doing', label: '学習中', capacity: 3 }, { id: 'done', label: '完了' }], cards: [{ id: 'math', label: '数学', laneId: 'todo' }, { id: 'english', label: '英語', laneId: 'todo' }, { id: 'history', label: '歴史', laneId: 'todo' }] }) }], expect: { outcome: 'drafted', requests: 1, title: '試験勉強の計画' } },
+  // Rules as data: one-step, a path and an archive lane become the board's rulebook, said in its own sentences.
+  { id: 'rules-drafted', prompt: 'owner-printable-pieces', answers: [{ args: board({ rules: [{ kind: 'one-step' }, { kind: 'path', from: 'print-sheet', to: ['compose'] }, { kind: 'archive', lane: 'print-sheet' }] }) }], expect: { outcome: 'drafted', requests: 1, ruleKinds: ['path', 'path', 'bin'] } },
+  { id: 'rules-as-text', prompt: 'terse-blocks', answers: [{ args: board({ rules: '[{"kind":"one-step"}]' }) }], expect: { outcome: 'drafted', requests: 1, ruleKinds: ['path'] } },
+  // A repeated card, and a placeholder beside named ones, are left out; the rest of the draft is used as sent.
+  { id: 'duplicate-and-placeholder-repaired', prompt: 'bill-of-materials', answers: [{ args: board({ cards: [...GOOD.cards, { id: 'square-again', label: 'square 1X1', laneId: 'piece-tray' }, { id: 'part-7', label: 'Part 7', laneId: 'piece-tray' }] }) }], expect: { outcome: 'drafted', requests: 1, cards: ['square', 'bar', 'corner', 'frame'] } },
+
+  // ---- the quality gate: a valid board that is a toy is asked again, naming what is wrong ----
+  { id: 'owner-toy-draft', prompt: 'owner-printable-pieces', answers: [{ args: toy }, { args: GOOD }], expect: { outcome: 'drafted', requests: 2, retry: /Name every card as the real, specific thing it is: “Snappable congruent piece 1”, “Snappable congruent piece 2”, “Snappable congruent piece 3” are only a phrase and a number or letter\. Give the board at least one rule/ } },
+  { id: 'lettered-cards', prompt: 'decision-matrix', answers: [{ args: board({ cards: ['A', 'B', 'C', 'D'].map((letter) => ({ id: 'laptop-' + letter.toLowerCase(), label: 'Laptop ' + letter, laneId: 'piece-tray' })) }) }, { args: GOOD }], expect: { outcome: 'drafted', requests: 2, retry: /“Laptop A”, “Laptop B”, “Laptop C” are only a phrase and a number or letter/ } },
+  { id: 'no-behavior', prompt: 'packing-list', answers: [{ args: plain }, { args: GOOD }], expect: { outcome: 'drafted', requests: 2, retry: /Give the board at least one rule: a lane capacity, allowedLaneIds on a card, or a rule such as one-step\./ } },
+  { id: 'too-few-cards', prompt: 'german-moving', answers: [{ args: board({ cards: GOOD.cards.slice(0, 1) }) }, { args: GOOD }], expect: { outcome: 'drafted', requests: 2, retry: /Give the board at least three cards people will drag\./ } },
+  { id: 'toy-twice', prompt: 'owner-printable-pieces', answers: [{ args: toy }, { args: toy }], expect: { outcome: 'starter', requests: 2 } },
 
   // ---- answers that are not boards: the retry names what was wrong, and a good second answer is used ----
   { id: 'empty-arguments', prompt: 'reading-list', answers: [{ args: '{}' }, { args: GOOD }], expect: { outcome: 'drafted', requests: 2, retry: /The last draft could not be used: The draft_workshop call came with no board/ } },
@@ -70,12 +92,12 @@ export const RECORDED = Object.freeze([
   { id: 'too-many-cards-twice', prompt: 'worksheet-generator', answers: [{ args: board({ cards: manyCards }) }, { args: board({ cards: manyCards }) }], expect: { outcome: 'starter', requests: 2 } },
   { id: 'wrong-types-twice', prompt: 'gantt-dependencies', answers: [{ args: { version: 1, title: 'Plan', lanes: { design: 'Design' }, cards: 4 } }, { args: { version: 1, title: 7, lanes: [], cards: [] } }], expect: { outcome: 'starter', requests: 2 } },
   { id: 'prose-twice', prompt: 'vague-organize', answers: [{ text: 'You could sort things by room.' }, { text: 'Try boxes labeled by room.' }], expect: { outcome: 'starter', requests: 2 } },
-  { id: 'map-instead-of-lanes', prompt: 'odd-dragon-hoard', answers: [{ args: { version: 1, title: 'Hoard', lanes: [{ id: 'cave', label: 'Cave', station: { column: 0, row: 0, next: ['bed'], outcome: 'Dark' } }, { id: 'bed', label: 'Bedroom', station: { column: 1, row: 0, next: ['cave'], outcome: 'Cozy' } }], cards: [{ id: 'cup', label: 'Golden cup', laneId: 'cave' }] } }], expect: { outcome: 'starter', requests: 1 } },
+  { id: 'map-instead-of-lanes', prompt: 'odd-dragon-hoard', answers: [{ args: { version: 1, title: 'Hoard', lanes: [{ id: 'cave', label: 'Cave', station: { column: 0, row: 0, next: ['bed'], outcome: 'Dark' } }, { id: 'bed', label: 'Bedroom', station: { column: 1, row: 0, next: ['cave'], outcome: 'Cozy' } }], cards: [{ id: 'cup', label: 'Golden cup', laneId: 'cave' }] } }], expect: { outcome: 'starter', requests: 2, retry: /Draft a board of plain lanes/ } },
   { id: 'business-kind', prompt: 'hiring-pipeline', answers: [{ args: { ...GOOD, kind: 'pipeline' } }, { args: { ...GOOD, kind: 'pipeline' } }], expect: { outcome: 'starter', requests: 2 } },
   { id: 'endpoint-fails', prompt: 'owner-printable-pieces', answers: [], expect: { outcome: 'starter', requests: 1 } },
 
   // ---- no agent to draft: the starter at once, no model call ----
-  { id: 'guest', prompt: 'owner-printable-pieces', answers: [], as: 'guest', expect: { outcome: 'starter', requests: 0, title: 'Snappable congruent pieces to compose new printable materials', lanes: ['Kit', 'Compose', 'Ready to print'], rules: ['Compose holds 4.', 'Cards move one column at a time.'] } },
+  { id: 'guest', prompt: 'owner-printable-pieces', answers: [], as: 'guest', expect: { outcome: 'starter', requests: 0, guest: true, title: 'Snappable congruent pieces to compose new printable materials', lanes: ['Pieces', 'Compose', 'Ready to print'], cards: ['square-piece', 'triangle-piece', 'hexagon-piece', 'half-width-strip', 'title-banner', 'text-box', 'image-frame', 'page-margins'], rules: ['Compose holds 6.', 'Cards move one column at a time.'] } },
   { id: 'no-agent-configured', prompt: 'classroom-manipulatives', answers: [], noAI: true, expect: { outcome: 'starter', requests: 0 } },
   { id: 'part-turned-off', prompt: 'recipe-card-builder', answers: [], off: { message: 'Drafting boards is turned off on this server.' }, expect: { outcome: 'starter', requests: 0 } },
 
