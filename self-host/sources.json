@@ -1,7 +1,7 @@
 {
   "engine": {
     "repo": "https://github.com/Slatebox/slateboxjs",
-    "commit": "d22e7b6757808c02bee55edf65e72e0e1578dedb"
+    "commit": "0df289fadab56973926fb8f28c2ac3bdd1fdb055"
   },
   "relay": {
     "repo": "https://github.com/Slatebox/y-websocket",

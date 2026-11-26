@@ -20,6 +20,14 @@ shipped early. The next release is 2.0.0, which is above both lines.
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-11-26
+
+### Fixed
+
+- **library:** list the categories there are; a tool description that asks for nothing ([64b82b67](https://github.com/Slatebox/slatebox/commit/64b82b67058efe034a3a4725b91e30e52a266872))
+- **boards:** /new/grid opens the printable grid sheet ([1e2fb6e6](https://github.com/Slatebox/slatebox/commit/1e2fb6e64d85a198ed06987b079d0fb287b5c94f))
+- **updates:** the Updates page uses the full page width; slatebox upgrade is a command, not an upsell ([029d904d](https://github.com/Slatebox/slatebox/commit/029d904d995165b6fa1abc1e697319ac2c761933))
+
 ## [2.1.0] - 2026-11-26
 
 ### Added
@@ -1413,7 +1421,8 @@ Self-host image preview `ghcr.io/slatebox/slatebox:0.1.0` (index `sha256:94f761b
 
 - Removed unused imports and fixed import naming conflict in `Main.jsx`.
 
-[Unreleased]: https://github.com/Slatebox/slatebox/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/Slatebox/slatebox/compare/v2.1.1...HEAD
+[2.1.1]: https://github.com/Slatebox/slatebox/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/Slatebox/slatebox/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/Slatebox/slatebox/compare/v0.2.2...v2.0.0
 [0.2.2]: https://github.com/Slatebox/slatebox/compare/v0.2.1...v0.2.2
