@@ -14,12 +14,15 @@ export const DEFAULT_PERSONAL_ALLOWANCE = Object.freeze({
   interview: 20,
   // runs of For you ideas
   'personal.suggest': 5,
+  // builds of a For you idea (workshops.js draftForYou): a board draft metered under its own key, so
+  // ordinary board drafts ('workshop') stay outside the allowance
+  'personal.build': 3,
 })
 
 // The meter features the allowance pays for today. A feature joins by being added here, once its
-// requests run inside runAIAction under that feature name ('personal.suggest', then 'profile.sources'
-// and 'profile.import' with a default above).
-export const PERSONAL_FEATURES = Object.freeze(['interview'])
+// requests run inside runAIAction under that feature name ('profile.sources' and 'profile.import'
+// next, with a default above).
+export const PERSONAL_FEATURES = Object.freeze(['interview', 'personal.suggest', 'personal.build'])
 
 // What a person reads when today's allowance for a feature is used up and the meter has nothing
 // else for them (no Pro, no balance). `own`: own keys are on here (settings.ownKeys).
@@ -31,6 +34,10 @@ const USED_UP = Object.freeze({
   'personal.suggest': {
     own: "You've used today's free ideas from Slatebox. They come back tomorrow, or keep going with Pro or your own key.",
     cloud: "You've used today's free ideas from Slatebox. They come back tomorrow, or keep going with Pro.",
+  },
+  'personal.build': {
+    own: "You've used today's free builds of your ideas. They come back tomorrow, or keep going with Pro or your own key.",
+    cloud: "You've used today's free builds of your ideas. They come back tomorrow, or keep going with Pro.",
   },
 })
 const USED_UP_ANY = Object.freeze({

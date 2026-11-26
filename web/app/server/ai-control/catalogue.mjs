@@ -84,8 +84,11 @@ export const SURFACES = defineSurfaces([
   { id: 'images.search', title: 'Finding pictures on the web', builtinOnly: true, requestFeatures: ['image-search'], meterFeatures: ['image-search'], estimate: 5000 },
   { id: 'shape', title: 'Drawing custom shapes', follows: 'default', needs: ['tools'], requestFeatures: ['shape'], meterFeatures: ['shape'], estimate: 8000, ceiling: 60000 },
   { id: 'workshop', title: 'Lane and map board conversation', follows: 'chat', needs: ['tools'], requestFeatures: ['lane-chat', 'map-chat'], meterFeatures: ['lane-chat', 'map-chat'], estimate: 3000, ceiling: 50000 },
-  // Board drafting owns the `workshop` meter key; the canvas conversation and the agent meter under it too.
-  { id: 'workshop.draft', title: 'Drafting a new board or its rules', follows: 'workshop', needs: ['tools'], requestFeatures: ['workshop'], meterFeatures: ['workshop'], estimate: 5000 },
+  // Board drafting owns the `workshop` meter key; the canvas conversation and the agent meter under it too. A For you
+  // build (workshops.js draftForYou) is a board draft on this surface metered under `personal.build`, a key of its own
+  // so the personalization allowance (metering/allowance.mjs) can pay for it without paying for every board draft;
+  // it has this row's estimate and ceiling (5,000 µ$, and the meter's default 50,000 µ$).
+  { id: 'workshop.draft', title: 'Drafting a new board or its rules', follows: 'workshop', needs: ['tools'], requestFeatures: ['workshop'], meterFeatures: ['workshop', 'personal.build'], estimate: 5000 },
   { id: 'canvas', title: 'Canvas conversation (drawing chat)', follows: 'chat', needs: ['tools'], requestFeatures: ['canvas'] },
   { id: 'agent.slatebox', title: 'The Slatebox agent (tasks, ask_agent, @mentions)', follows: 'canvas', needs: ['tools'], requestFeatures: ['agent'] },
   // Library refinement (server/library/refine-ai.mjs) has a row on the settings page of its own;
@@ -99,10 +102,8 @@ export const SURFACES = defineSurfaces([
   { id: 'interview', title: 'Getting to know you (the interview)', follows: 'chat', needs: ['tools'], requestFeatures: ['interview'], meterFeatures: ['interview'], estimate: 2000, ceiling: 50000 },
   // For you (server/personal): from what the person keeps in About you and the names of the tools they connected, the
   // agent suggests 3 to 6 smart components and printable pages made for their work. One forced tool call (and at most
-  // one retry), metered under its own key; building one is board drafting (workshop.draft, the workshop meter key).
-  // TODO(personalization allowance): add 'personal.suggest' to the list of personal meter features when that list lands,
-  // and decide there whether a For you build (metered under 'workshop' through workshops.js draftForYou) counts toward
-  // the allowance too: it would need its own meter key, as 'workshop' is every board draft's.
+  // one retry), metered under its own key; building one is board drafting (workshop.draft, metered under 'personal.build').
+  // Both are part of the personalization allowance (metering/allowance.mjs PERSONAL_FEATURES).
   { id: 'personal.suggest', title: 'Ideas made for you (For you)', follows: 'chat', needs: ['tools'], requestFeatures: ['personal.suggest'], meterFeatures: ['personal.suggest'], estimate: 3000, ceiling: 50000 },
   // Prompt test runs and eval gates name their model per call; the row keeps them out of `chat`.
   { id: 'admin.test', title: 'Admin test runs', follows: null, useKey: false, estimate: 30000, ceiling: 200000 },

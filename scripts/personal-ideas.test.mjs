@@ -160,7 +160,8 @@ test("the personal draft's instructions: the component's or page's own, then the
   // the idea's brief (the agent's words from the facts and tools) is the user turn as data, and the instructions say so
   assert.match(workshops, /: forYou \? wrapData\('brief', brief\.trim\(\)\) : brief\.trim\(\)/);
   assert.match(promptText("workshop.draft.personal", { instructions: "X", why: "Because.", hasFacts: false, hasTools: false }), /The next message is the idea's brief, given as data/);
-  assert.match(workshops, /export function draftForYou\(\{ userId, brief, format, personal \}\) \{\n  return runAIAction\(\{ feature: 'workshop', userId \}/);
+  // metered under its own key, part of the personalization allowance (metering/allowance.mjs, 2026-11-26)
+  assert.match(workshops, /export function draftForYou\(\{ userId, brief, format, personal \}\) \{\n  return runAIAction\(\{ feature: 'personal\.build', userId \}/);
 });
 
 test("eval cases: For you's samples pass good ideas and fail generic ones, unconnected tools and sensitive words", () => {

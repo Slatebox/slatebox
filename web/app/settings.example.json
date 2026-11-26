@@ -96,10 +96,11 @@
     "//": "Slatebox Cloud only: its AI and call meter. It runs only where public.edition is cloud and enterprise.license holds Slatebox Cloud's own key (server/cloud-lock.mjs): anywhere else there is no meter, whatever this says. Leave it off for local development and self-hosting. See server/metering/README.md.",
     "enabled": false,
     "alertEmail": "",
-    "//personalAllowance": "Slatebox Cloud only, with the meter: what each signed-in person (never a guest) gets a day, by UTC day, of the features that get to know them, served on Slatebox's own models and costing them nothing. interview: turns of the talk in About you (starting it counts as one); personal.suggest: runs of For you ideas. 0 turns one off. Past it the meter applies as always. A request on a person's own key never uses it. Counted in the shared budget, so its ceiling bounds it. See server/metering/allowance.mjs.",
+    "//personalAllowance": "Slatebox Cloud only, with the meter: what each signed-in person (never a guest) gets a day, by UTC day, of the features that get to know them, served on Slatebox's own models and costing them nothing. interview: turns of the talk in About you (starting it counts as one); personal.suggest: runs of For you ideas; personal.build: builds of a For you idea. 0 turns one off. Past it the meter applies as always. A request on a person's own key never uses it. Counted in the shared budget, so its ceiling bounds it. See server/metering/allowance.mjs.",
     "personalAllowance": {
       "interview": 20,
-      "personal.suggest": 5
+      "personal.suggest": 5,
+      "personal.build": 3
     }
   },
   "public": {

@@ -70,6 +70,8 @@ test('fixed prices, estimates and per-action ceilings', () => {
     interview: 2000,
     // For you (S4, 2026-11-26): one suggestion, a forced call and at most one retry
     'personal.suggest': 3000,
+    // building a For you idea (2026-11-26): a board draft under its own key, so board drafting's estimate
+    'personal.build': 5000,
   })
   assert.equal(actionCeilingMicros('interview'), 50_000)
   assert.equal(actionCeilingMicros('personal.suggest'), 50_000)
@@ -77,6 +79,7 @@ test('fixed prices, estimates and per-action ceilings', () => {
   // A custom shape is a short prompt and at most one retry.
   assert.equal(actionCeilingMicros('shape'), 60_000)
   assert.equal(actionCeilingMicros('workshop'), 50_000)
+  assert.equal(actionCeilingMicros('personal.build'), 50_000)
 })
 
 // ---------- AI control S3: prices set on models in AI control (spec 1.3) ----------

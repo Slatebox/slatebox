@@ -230,11 +230,13 @@ function personalInstructions(instructions, forYou) {
 
 /**
  * For you (server/personal): one idea drafted for the person it was suggested to, through the same drafting as
- * workshops.draft (its switch, its one-draft-a-minute lock, its quality gate and retry), metered as a draft under
- * 'workshop'. Server only. → the drafted board (parseComponentDraft or parseGridDraft)
+ * workshops.draft (its switch, its one-draft-a-minute lock, its quality gate and retry), metered under
+ * 'personal.build', its own key: the personalization allowance pays for a few a day (metering/allowance.mjs), and past
+ * it the meter applies as for any board draft. Ordinary drafts stay on 'workshop'. Server only.
+ * → the drafted board (parseComponentDraft or parseGridDraft)
  */
 export function draftForYou({ userId, brief, format, personal }) {
-  return runAIAction({ feature: 'workshop', userId }, async () => {
+  return runAIAction({ feature: 'personal.build', userId }, async () => {
     const user = userId ? await Meteor.users.findOneAsync({ _id: userId }) : null
     return draftWorkshop(brief, format, undefined, { user, personal })
   })

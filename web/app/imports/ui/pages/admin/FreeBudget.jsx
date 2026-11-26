@@ -143,7 +143,7 @@ export default function FreeBudget() {
       <Typography>AI {usd(kinds.ai || 0)} · image search {usd(kinds.imageSearch || 0)} · voice {usd(kinds.voice || 0)} · video {usd(kinds.video || 0)}</Typography>
       <Typography>Today: {usd(data.todayMicros)} of the {usd(data.dailyCeilingMicros)} daily ceiling. 7-day average {usd(data.sevenDayAverageMicros)}. Projected month end {usd(data.projectedMicros)}.</Typography>
       <Typography>People at a cap: {data.atCapToday} today, {data.atCapMonth} this month. Own-key share {(data.ownKeyShare * 100).toFixed(0)}%. Balance spend {usd(data.balanceSpendMicros)}. Pro credits spent {usd(data.proSpentMicros || 0)} (outside the shared budget).</Typography>
-      <Typography data-admin-allowance="">Free talks with the agent (the personalization allowance, {data.personalAllowance?.interview ?? 0} interview turns a day a person): {usd(data.allowanceSpentMicros || 0)} this month, inside the shared budget.</Typography>
+      <Typography data-admin-allowance="">Free talks with the agent (the personalization allowance, a day a person: {data.personalAllowance?.interview ?? 0} interview turns, {data.personalAllowance?.['personal.suggest'] ?? 0} runs of For you ideas, {data.personalAllowance?.['personal.build'] ?? 0} builds of an idea): {usd(data.allowanceSpentMicros || 0)} this month, inside the shared budget.</Typography>
       <Typography>Top-ups {data.topUps.count} ({usd(data.topUps.micros)}), refunds {data.refunds.count} ({usd(-data.refunds.micros)}).</Typography>
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', my: 2, flexWrap: 'wrap' }}>
         <TextField label="Budget for this month ($)" type="number" size="small" value={budget} onChange={e => setBudget(e.target.value)} />

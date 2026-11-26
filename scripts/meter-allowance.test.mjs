@@ -32,20 +32,23 @@ const turn = (costMicros = 3000) => runAIAction({ feature: 'interview' }, async 
 })
 test.afterEach(() => installMeter(null))
 
-test('the defaults live in one place: 20 interview turns and 5 For you runs a day; the interview is what it pays for today', () => {
-  assert.deepEqual({ ...DEFAULT_PERSONAL_ALLOWANCE }, { interview: 20, 'personal.suggest': 5 })
+test('the defaults live in one place: 20 interview turns, 5 For you runs and 3 For you builds a day, all three paid for', () => {
+  assert.deepEqual({ ...DEFAULT_PERSONAL_ALLOWANCE }, { interview: 20, 'personal.suggest': 5, 'personal.build': 3 })
   assert.equal(DEFAULT_METERING.personalAllowance, DEFAULT_PERSONAL_ALLOWANCE)
-  assert.deepEqual(resolveMetering().personalAllowance, { interview: 20, 'personal.suggest': 5 })
-  assert.deepEqual([...PERSONAL_FEATURES], ['interview'])
+  assert.deepEqual(resolveMetering().personalAllowance, { interview: 20, 'personal.suggest': 5, 'personal.build': 3 })
+  // For you joined on 2026-11-26 (owner): its ideas and building one
+  assert.deepEqual([...PERSONAL_FEATURES], ['interview', 'personal.suggest', 'personal.build'])
   const settings = resolveMetering()
   assert.equal(allowancePerDay('interview', settings), 20)
-  // For you joins by being added to the list; until then it is metered as before
-  assert.equal(allowancePerDay('personal.suggest', settings), 0)
+  assert.equal(allowancePerDay('personal.suggest', settings), 5)
+  assert.equal(allowancePerDay('personal.build', settings), 3)
+  // an ordinary board draft is not part of it
   assert.equal(allowancePerDay('workshop', settings), 0)
   // one field per feature on the person's day, with no dots for Mongo
   assert.equal(allowanceField('personal.suggest'), 'allowance_personal_suggest')
+  assert.equal(allowanceField('personal.build'), 'allowance_personal_build')
   const example = JSON.parse(read('web/app/settings.example.json'))
-  assert.deepEqual(example.metering.personalAllowance, { interview: 20, 'personal.suggest': 5 })
+  assert.deepEqual(example.metering.personalAllowance, { interview: 20, 'personal.suggest': 5, 'personal.build': 3 })
   assert.match(example.metering['//personalAllowance'], /UTC day/)
 })
 
@@ -174,10 +177,10 @@ test('past the allowance the meter applies unchanged: Pro credits, a balance, or
 })
 
 test('settings: the operator overrides the defaults (checked at start), a stored value wins, 0 turns it off', () => {
-  assert.deepEqual(resolveMetering({ deploy: { personalAllowance: { interview: 3 } } }).personalAllowance, { interview: 3, 'personal.suggest': 5 })
+  assert.deepEqual(resolveMetering({ deploy: { personalAllowance: { interview: 3 } } }).personalAllowance, { interview: 3, 'personal.suggest': 5, 'personal.build': 3 })
   assert.deepEqual(resolveMetering({ deploy: { personalAllowance: { interview: 3 } }, stored: { personalAllowance: { interview: 7 } } }).personalAllowance.interview, 7)
   // a settings file's notes are not features
-  assert.deepEqual(resolvePersonalAllowance({ deploy: { '//': 'note', interview: 10 } }), { interview: 10, 'personal.suggest': 5 })
+  assert.deepEqual(resolvePersonalAllowance({ deploy: { '//': 'note', interview: 10 } }), { interview: 10, 'personal.suggest': 5, 'personal.build': 3 })
   for (const bad of [{ interview: -1 }, { interview: 2.5 }, { interview: '20' }, { workshop: 5 }, [], 'twenty']) {
     assert.throws(() => resolveMetering({ deploy: { personalAllowance: bad } }), /personalAllowance/, JSON.stringify(bad))
   }
@@ -305,4 +308,73 @@ test('operators find allowance spenders: the top free spenders include the allow
   const meteor = read('web/app/server/metering/meteor.js')
   assert.match(meteor, /\$match: \{ month, route: \{ \$in: \['free', 'allowance'\] \} \}/)
   assert.doesNotMatch(meteor, /\$match: \{ month, route: 'free' \}/)
+})
+
+// For you (owner, 2026-11-26): its ideas (personal.suggest, 5 runs a day) and building one (personal.build, 3 a day)
+// are part of the allowance. A build is a board draft metered under its own key, so ordinary board drafts ('workshop')
+// stay on the meter as before.
+const IDEAS_USED_UP = "You've used today's free ideas from Slatebox. They come back tomorrow, or keep going with Pro or your own key."
+const BUILDS_USED_UP = "You've used today's free builds of your ideas. They come back tomorrow, or keep going with Pro or your own key."
+const forYouRun = (feature, costMicros = 3000) => runAIAction({ feature }, async action => {
+  await chargeProviderCall({ ref: 'for-you-' + refs++, provider: 'p', model: 'm', usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 }, costMicros })
+  return action.route
+})
+
+for (const [feature, perDay, usedUp] of [['personal.suggest', 5, IDEAS_USED_UP], ['personal.build', 3, BUILDS_USED_UP]]) {
+  test(`${feature}: ${perDay} a day are counted and cost the person nothing; used up, the meter decides with its own words`, async () => {
+    const w = await meterWorld({ person: fresh, settings: cloud() })
+    for (let i = 0; i < perDay; i++) assert.equal(await forYouRun(feature), 'allowance', `run ${i + 1}`)
+    assert.equal(dayRow(w)[allowanceField(feature)], perDay)
+    // the other features' uses are their own
+    assert.equal(turnsTaken(w), 0)
+    // used up, no Pro and no balance: refused as Pro is, in the allowance's words for this feature
+    await assert.rejects(forYouRun(feature), error => error.error === 'pro' && error.reason === usedUp)
+    assert.equal(dayRow(w)[allowanceField(feature)], perDay, 'a refused run takes nothing')
+    assert.deepEqual(w.spent(), { drafts: 0, todayMicros: 0, monthMicros: 0, heldDay: 0, heldMonth: 0 })
+    assert.equal(w.stores.counters.get('global:2026-11')['allowanceByFeature.' + allowanceField(feature).slice('allowance_'.length)], perDay * 3000)
+    // the words without own keys, and the route's own answer
+    assert.equal(usedUpWords(feature, { ownKeys: true }), usedUp)
+    assert.equal(usedUpWords(feature, { ownKeys: false }), usedUp.replace(' or your own key.', '.'))
+    const ask = (person, over = {}) => route({ kind: 'ai', feature, person: { id: 'p1', anonymous: false, emailVerified: true, ...person }, keys: {}, usage: { allowanceToday: { [feature]: perDay } }, wallets: {}, global: {}, estimateMicros: 3000, settings: cloud(), now: NOW, ...over })
+    assert.deepEqual([ask(fresh).code, ask(fresh).message, ask(fresh).allowance], ['pro', usedUp, 'used-up'])
+    // past it: Pro credits, or a balance, as for any request
+    assert.equal(ask(withPro).route, 'free')
+    assert.equal(ask(fresh, { wallets: { personal: { balanceMicros: 1_000_000 } } }).route, 'balance')
+    const paying = await meterWorld({ person: fresh, settings: cloud(), wallet: { balanceMicros: 1_000_000, refundableMicros: 1_000_000 } })
+    for (let i = 0; i < perDay; i++) await forYouRun(feature)
+    assert.equal(await forYouRun(feature), 'balance')
+    assert.equal(dayRow(paying)[allowanceField(feature)], perDay)
+  })
+
+  test(`${feature}: an own key never uses the allowance, nor a run served on the person's own connection`, async () => {
+    const w = await meterWorld({ person: fresh, settings: cloud(), keys: { ai: true } })
+    assert.equal(await forYouRun(feature), 'byok')
+    assert.equal(dayRow(w)[allowanceField(feature)] || 0, 0)
+    assert.equal(w.paid(), 0)
+    const own = await meterWorld({ person: fresh, settings: cloud() })
+    assert.equal(await runAIAction({ feature }, async action => { ownConnection(); return action.route }), 'allowance')
+    assert.equal(dayRow(own)[allowanceField(feature)] || 0, 0)
+  })
+}
+
+test('a For you build is metered under personal.build; every other board draft stays on workshop, outside the allowance', async () => {
+  const workshops = read('web/app/server/methods/workshops.js')
+  const forYou = workshops.slice(workshops.indexOf('export function draftForYou'))
+  assert.match(forYou, /^export function draftForYou\(\{ userId, brief, format, personal \}\) \{\n\s*return runAIAction\(\{ feature: 'personal\.build', userId \}/)
+  assert.match(workshops, /'workshops\.draft'\(brief, format = 'lanes', currentDraft\) \{\n\s*return runAIAction\(\{ feature: 'workshop' \}/)
+  assert.equal((workshops.match(/feature: 'personal\.build'/g) || []).length, 1, 'only draftForYou uses it')
+  // the build keeps the draft's gates: the surface switch, the one-draft-a-minute lock and the quality gate
+  const draft = workshops.slice(workshops.indexOf('async function draftWorkshop'), workshops.indexOf('export function draftForYou'))
+  assert.match(draft, /surfaceOffFor\(\{ feature: 'workshop', userId: user\._id \}\)/)
+  assert.match(draft, /workshopDraftAvailableAt: now \+ 60000/)
+  assert.match(draft, /componentDraftCheck\(toolCall/)
+  assert.match(draft, /gridDraftCheck\(toolCall/)
+  // and its model request is board drafting's (the workshop.draft surface)
+  assert.match(draft, /req\(\{\n\s*feature: 'workshop',/)
+  // an ordinary board draft past nothing: the meter, never the allowance
+  const w = await meterWorld({ person: fresh, settings: cloud() })
+  await assert.rejects(forYouRun('workshop'), error => error.error === 'pro' && error.reason === OWN_KEY_COPY.getPro)
+  assert.deepEqual(Object.keys(dayRow(w)).filter(key => key.startsWith('allowance_')), [])
+  // the For you suggestion stays metered under its own key
+  assert.match(read('web/app/server/personal/meteor.js'), /const FEATURE = 'personal\.suggest'[\s\S]*run: refusing\(\(userId, fn\) => runAIAction\(\{ feature: FEATURE, userId \}, fn\)\)/)
 })

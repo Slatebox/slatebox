@@ -39,9 +39,11 @@ const ESTIMATES_BEFORE = {
 }
 // Surfaces that landed after the catalogue, each with the estimate and ceiling its row names: the interview (S2,
 // 2026-11-26) is a conversation turn, metered as chat's (2,000 and 50,000 µ$); For you's suggestion (S4, 2026-11-26) is
-// one forced call with at most one retry over the person's facts (3,000 and 50,000 µ$).
-const ESTIMATES_ADDED = { interview: 2000, 'personal.suggest': 3000 }
-const CEILINGS_ADDED = { interview: 50_000, 'personal.suggest': 50_000 }
+// one forced call with at most one retry over the person's facts (3,000 and 50,000 µ$); building a For you idea
+// (2026-11-26) is a board draft on workshop.draft under a meter key of its own (personal.build), so it has board
+// drafting's estimate and the meter's default ceiling (5,000 and 50,000 µ$).
+const ESTIMATES_ADDED = { interview: 2000, 'personal.suggest': 3000, 'personal.build': 5000 }
+const CEILINGS_ADDED = { interview: 50_000, 'personal.suggest': 50_000, 'personal.build': 50_000 }
 const CEILINGS_BEFORE = { generation: 200_000, vision: 200_000, presentation: 200_000, shape: 60_000 }
 
 test('every request feature reaches the same choice as before the catalogue', () => {
@@ -117,6 +119,15 @@ test('the features people choose first are the catalogue rows that follow defaul
   assert.deepEqual({ ...USE_FALLBACK }, { library: 'chat' })
   assert.deepEqual(USE_KEYS, USE_SURFACES.map((s) => s.id))
   for (const key of ['default', 'chat', 'generation', 'presentation', 'vision', 'images', 'shape', 'library', 'connectors', 'agent.slatebox']) assert.ok(USE_KEYS.includes(key), key)
+})
+
+test('a For you build meters under its own key on board drafting\'s row, never as a surface of its own', () => {
+  assert.deepEqual([...surface('workshop.draft').meterFeatures], ['workshop', 'personal.build'])
+  assert.deepEqual([...surface('workshop.draft').requestFeatures], ['workshop'])
+  assert.equal(SURFACES.filter((s) => s.meterFeatures.includes('personal.build')).length, 1)
+  assert.equal(surface('personal.build'), null)
+  assert.equal(METER_ESTIMATES['personal.build'], METER_ESTIMATES.workshop)
+  assert.equal(actionCeilingMicros('personal.build'), actionCeilingMicros('workshop'))
 })
 
 test('the meter keeps every estimate and ceiling', () => {
