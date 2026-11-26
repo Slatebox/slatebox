@@ -126,7 +126,7 @@
     "react-router-dom": "^6.27.0",
     "rgb-hex": "^4.1.0",
     "run": "2.1.13",
-    "sharp": "^0.33.5",
+    "sharp": "^0.35.5",
     "slateboxjs": "file:../../../slateboxjs-v2",
     "static-kdtree": "^1.0.2",
     "string-similarity": "^4.0.4",
