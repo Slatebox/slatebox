@@ -94,7 +94,7 @@ export function capabilityGap(surfaceId, model) {
 
 function bindingProblem(doc, { models }) {
   const at = surfaceById(doc.surface)
-  if (!at || !at.useKey) return `${doc.surface} is not a part of Slatebox that can be bound`
+  if (!at || !at.bindable) return `${doc.surface} is not a part of Slatebox that can be bound`
   if (doc._id !== doc.surface) return `the id should be ${doc.surface}`
   if (!BINDING_USES.includes(doc.use)) return 'use is model or off'
   if (doc.use === 'off') return doc.surface === 'default' ? 'everything not set cannot be turned off here; use the switch for everyone' : null

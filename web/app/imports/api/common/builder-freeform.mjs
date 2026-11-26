@@ -135,11 +135,27 @@ const quote = (labels) => labels.slice(0, 3).map((label) => `“${String(label).
 
 // A lane where finished work ends up: done, ready, printed, shipped, archived …
 const FINISHED = /\b(done|finished|complete|completed|ready|print|printed|printable|archive|archived|shipped|published|filed|discard|discarded|exported|delivered|closed|resolved|fixed|achieved|harvested|terminad[ao]s?|fini|erledigt|fertig|完了)\b|完了/i
+// A lane named only as finished, wherever it sits ("Done", "Archive", "Shipped").
+const FINAL_NAME = /^(?:all )?(?:done|finished|complete|completed|shipped|archive|archived|closed|resolved|delivered|published|terminad[ao]s|erledigt|fertig|完了)$/i
+// A last lane named as finished ("Ready to print", "Done this week", "Fixed", "Shipped to customers").
+const LAST_NAME = /^(?:all )?(?:done|finished|complete|completed|ready to (?:print|ship|send|publish|go|serve|file|launch)|printed|shipped|published|filed|archive|archived|exported|delivered|closed|resolved|fixed|achieved|harvested|terminad[ao]s?|fini|erledigt|fertig)\b/i
 const NUMBER_WORD = new RegExp(`^(\\d{1,3}|${SPELLED.join('|')})$`)
 
 /**
- * The lanes whose capacity stops the board once they fill: a lane filed as an archive (an archive rule), or the last
- * lane of a flow (cards move one column at a time) named as where finished work goes ("Done", "Ready to print").
+ * Whether a lane is where finished work ends up, by its name and place: named only as finished anywhere ("Done",
+ * "Archive"); the last lane named as finished ("Ready to print", "Fixed"); or, when cards move one lane at a time
+ * (`flow`), the last lane with a finished word anywhere in its name ("Proofed and printed").
+ */
+export function finishedLane(label, index, count, flow = false) {
+  const name = String(label ?? '').replace(/\s+/g, ' ').trim()
+  if (FINAL_NAME.test(name)) return true
+  return count >= 2 && index === count - 1 && (LAST_NAME.test(name) || (flow && FINISHED.test(name)))
+}
+
+/**
+ * The lanes whose capacity stops the board once they fill: a lane filed as an archive (an archive rule), or a lane
+ * named as where finished work goes (finishedLane: "Done" anywhere, a last lane "Ready to print"), whether or not
+ * cards move one lane at a time. A capacity is a lane's own or a capacity rule on it.
  * → [{ lane, capacity, ambiguous }], `ambiguous` when the person's words give a number beside the lane's own words
  * ("done holds 5"), so the limit may be theirs.
  */
@@ -153,8 +169,7 @@ export function finishedLaneCaps(workshop, { message = '' } = {}) {
   lanes.forEach((lane, index) => {
     const caps = [lane.capacity, ...rules.filter((rule) => rule.kind === 'capacity' && rule.where === lane.id).map((rule) => rule.max)].filter((n) => n !== undefined)
     if (!caps.length) return
-    const finished = archived.has(lane.id) || (flow && index === lanes.length - 1 && lanes.length >= 2 && FINISHED.test(lane.label))
-    if (!finished) return
+    if (!archived.has(lane.id) && !finishedLane(lane.label, index, lanes.length, flow)) return
     const own = new Set(tokens(lane.label).filter((word) => word.length > 2).flatMap((word) => [word, singular(word)]))
     const ambiguous = words.some((word, i) => (own.has(word) || own.has(singular(word))) && words.slice(Math.max(0, i - 4), i + 5).some((near) => NUMBER_WORD.test(near)))
     out.push({ lane, capacity: caps[0], ambiguous })
@@ -190,7 +205,11 @@ export function componentQuality(workshop, { message = '' } = {}) {
     const parts = tokens(card.label)
     if (parts.length >= 2) { const tail = tailWord(parts.at(-1)); tails.set(tail, (tails.get(tail) ?? 0) + 1) }
   }
-  const shared = [...tails].find(([, count]) => cards.length >= 4 && count * 3 > cards.length * 2)
+  // A head noun the person's own words name is the domain's ("Login page, Pricing page" for "the pages of our
+  // website", "Tomato soup, Lentil soup" for a soup rotation): natural, unless it is a generic piece noun. Only the
+  // person's words count: a lane or title the draft names itself ("Square tray") would let any shared word through.
+  const domain = new Set(tokens(message).flatMap((word) => [word, singular(word), tailWord(word)]))
+  const shared = [...tails].find(([tail, count]) => cards.length >= 4 && count * 3 > cards.length * 2 && (GENERIC.has(singular(tail)) || !domain.has(tail)))
   if (shared) {
     // The words those cards share at their end ("square tile 2x2"), said as they are written.
     const ends = cards.map((card) => tokens(card.label)).filter((parts) => parts.length >= 2 && tailWord(parts.at(-1)) === shared[0])
@@ -279,17 +298,29 @@ export function statedLimit(message) {
 // ('categories'), or every lane in order ('flow').
 const lang = (text, table) => table[Object.keys(table).find((key) => key !== 'default' && new RegExp(key).test(text))] ?? table.default
 const KITS = [
-  { test: /lesson|\bclass period|curriculum/, lanes: ['Activity bank', 'Warm-up', 'Main activity', 'Practice', 'Exit ticket'], limits: { 1: 5, 2: 5, 3: 5, 4: 5 }, ordered: false, list: 'categories',
+  { test: /\bretros?\b|\bretrospectives?\b|\bwent well\b|\bto improve\b|\blessons learned\b|\bpost-?mortems?\b/, lanes: ['Went well', 'To improve', 'Action items'], limits: { 2: 3 }, ordered: false,
+    cards: () => ['Fast code reviews', 'Flaky tests', 'Unclear priorities', 'Great pairing', 'Smooth release', 'Too many meetings'] },
+  { test: /\bevent ?storming\b|\bdomain events?\b/, lanes: ['Event pile', 'Timeline', 'Hot spots'], limits: {}, ordered: false,
+    cards: () => ['Cart updated', 'Coupon applied', 'Order placed', 'Payment authorized', 'Payment declined', 'Order shipped', 'Refund issued'] },
+  { test: /\bonboard(?:ing)?\b|\bnew (?:hires?|starters?|employees?)\b|\bfirst (?:day|week)\b/, lanes: ['To do', 'This week', 'Done'], limits: { 1: 4 }, ordered: true,
+    cards: () => ['Laptop and accounts set up', 'Meet your onboarding buddy', 'Security training', 'Read the team handbook', 'Ship a first small change', '30-day check-in'] },
+  { test: /\bpitch(?:es)?\b|\bslide decks?\b|\bslides\b|\binvestor (?:decks?|updates?|meetings?)\b/, lanes: ['Slide ideas', 'Draft order', 'Final deck'], limits: { 1: 10 }, ordered: true,
+    cards: () => ['The problem', 'Our solution', 'Market size', 'Business model', 'Traction so far', 'The team', 'The ask'] },
+  { test: /\bseat(?:s|ing)?\b|(?<!\b(?:help|service|front|stand-?up|standing)\s)\bdesks?\b/, lanes: ['Unassigned', 'Table one', 'Table two'], limits: { 1: 4, 2: 4 }, ordered: false,
+    cards: () => ['Ava', 'Ben', 'Chloe', 'Diego', 'Emma', 'Farah', 'Gus', 'Hana'] },
+  { test: /\blesson(?:s|\s+plans?)?\b(?!\s+learn)|\bclass periods?\b|\bcurricul(?:um|a)\b/, lanes: ['Activity bank', 'Warm-up', 'Main activity', 'Practice', 'Exit ticket'], limits: { 1: 5, 2: 5, 3: 5, 4: 5 }, ordered: false, list: 'categories',
     cards: () => ['Think-pair-share', 'Mini whiteboard quiz', 'Reading circle', 'Vocabulary match', 'Worked example', 'Gallery walk', 'One-minute summary'] },
-  { test: /married|wedding/, lanes: ['Not started', 'Someone owns it', 'Stuck', 'Done'], limits: { 1: 4 }, ordered: false,
+  { test: /\bmarried\b|\bweddings?\b/, lanes: ['Not started', 'Someone owns it', 'Stuck', 'Done'], limits: { 1: 4 }, ordered: false,
     cards: () => ['Book the caterer', 'Finalize the guest list', 'Order flowers', 'Book the band', 'Send invitations', 'Choose the cake', 'Venue walkthrough'] },
-  { test: /\bhir(?:e|ing)|candidate|interview|recruit/, lanes: ['Applied', 'Interviewing', 'Offer'], limits: { 1: 4, 2: 2 }, ordered: true,
+  { test: /\bhir(?:e|ing)\b|\bcandidates?\b|\binterview(?:s|ing)?\b|\brecruit(?:s|ing|ment)?\b/, lanes: ['Applied', 'Interviewing', 'Offer'], limits: { 1: 4, 2: 2 }, ordered: true,
     cards: () => ['Sam Lee', 'Priya Shah', 'Marco Ruiz', 'Jo Kim', 'Alex Chen', 'Nia Okafor'] },
-  { test: /\bhaiku|\bpoem|poetry|\bverses?\b/, lanes: ['Word bank', 'Line one', 'Line two', 'Line three'], limits: { 1: 4, 2: 5, 3: 4 }, ordered: false,
+  { test: /\bhaikus?\b|\bpoems?\b|\bpoetry\b|\bverses?\b/, lanes: ['Word bank', 'Line one', 'Line two', 'Line three'], limits: { 1: 4, 2: 5, 3: 4 }, ordered: false,
     cards: () => ['Old pond', 'A frog leaps', 'Splash of water', 'Autumn moon', 'Silent', 'Cherry blossoms', 'Evening wind', 'Falling'] },
-  { test: /\bband\b|setlist|set list|\bgig\b|\bsongs?\b|concert/, lanes: ['Song bank', 'First set', 'Second set', 'Encore'], limits: { 3: 2 }, ordered: false,
+  { test: /\bworkouts?\b|\bexercises?\b|\bgym\b|\bfitness\b|\btraining plans?\b|\bruns?\b.*\bweek/, lanes: ['Exercise bank', 'Today', 'Done'], limits: { 1: 5 }, ordered: true,
+    cards: () => ['Squats', 'Push-ups', 'Plank', 'Walking lunges', 'Deadlifts', 'Jump rope', 'Cool-down stretch'] },
+  { test: /\bband\b(?!\s+(?:workouts?|exercises?|stretch\w*))|\bset ?lists?\b|\bgigs?\b|\bsongs?\b|\bconcerts?\b/, lanes: ['Song bank', 'First set', 'Second set', 'Encore'], limits: { 3: 2 }, ordered: false,
     cards: () => ['Johnny B. Goode', 'Brown Eyed Girl', 'Proud Mary', 'Superstition', 'Stand by Me', 'Twist and Shout', 'Mustang Sally', 'Sweet Caroline'] },
-  { test: /flash ?cards?|vocab|\bwords? (?:list|cards?)\b|\bvocabulario|\bvokabeln/, lanes: ['New words', 'Learning', 'Review', 'Known'], limits: { 1: 5 }, ordered: true,
+  { test: /\bflash ?cards?\b|\bvocab(?:ulary)?\b|\bwords? (?:lists?|cards?)\b|\bvocabulario\b|\bvokabeln\b/, lanes: ['New words', 'Learning', 'Review', 'Known'], limits: { 1: 5 }, ordered: true,
     cards: ({ text }) => lang(text, {
       'spanish|español|espanol': ['hola · hello', 'gracias · thank you', 'la casa · house', 'el perro · dog', 'la biblioteca · library', 'correr · to run', 'mañana · tomorrow', 'el agua · water'],
       'french|français|francais': ['bonjour · hello', 'merci · thank you', 'la maison · house', 'le chien · dog', 'la bibliothèque · library', 'courir · to run', 'demain · tomorrow', "l'eau · water"],
@@ -298,78 +329,72 @@ const KITS = [
       'biology|science|chemistry|physics': ['Photosynthesis', 'Mitosis', 'Osmosis', 'Ecosystem', 'Covalent bond', "Newton's first law", 'Evaporation', 'Enzyme'],
       default: ['Ubiquitous', 'Ephemeral', 'Candid', 'Meticulous', 'Resilient', 'Ambiguous', 'Benevolent', 'Concise'],
     }) },
-  { test: /invest|portfolio (?:rebalanc|allocation|tracker)|\bstocks?\b|rebalanc|\betfs?\b|index funds?/, lanes: ['Holdings', 'Over target', 'Under target', 'Rebalanced'], limits: {}, ordered: false,
+  { test: /\binvest(?:ing|ments?)?\b|\bportfolio (?:rebalanc\w*|allocations?|tracker)\b|\bstocks?\b|\brebalanc\w*|\betfs?\b|\bindex funds?\b/, lanes: ['Holdings', 'Over target', 'Under target', 'Rebalanced'], limits: {}, ordered: false,
     cards: () => ['US total market fund', 'International stocks', 'Bond index fund', 'Real estate (REIT)', 'Emerging markets', 'Cash reserve', 'Tech sector ETF'] },
-  { test: /budget|expenses?|spending|\bbills\b|finances/, lanes: ['Unplanned', 'This month', 'Paid'], limits: {}, ordered: true,
+  { test: /\bbudget(?:s|ing)?\b|\bexpenses?\b|\bspending\b|\bbills\b|\bfinances?\b/, lanes: ['Unplanned', 'This month', 'Paid'], limits: {}, ordered: true,
     cards: () => ['Rent', 'Groceries', 'Electricity', 'Phone plan', 'Car insurance', 'Savings transfer', 'Eating out', 'Gym membership'] },
-  { test: /workout|exercise|\bgym\b|fitness|training plan|\bruns?\b.*week/, lanes: ['Exercise bank', 'Today', 'Done'], limits: { 1: 5 }, ordered: true,
-    cards: () => ['Squats', 'Push-ups', 'Plank', 'Walking lunges', 'Deadlifts', 'Jump rope', 'Cool-down stretch'] },
-  { test: /garden|\bhorta|planting|\bseeds?\b|sementes|vegetables/, lanes: ['Seeds', 'Seedlings', 'In the bed', 'Harvested'], limits: {}, ordered: true, list: 'flow',
+  { test: /\bgarden(?:s|ing)?\b|\bhorta\b|\bplanting\b|\bseeds?\b|\bsementes\b|\bvegetables?\b/, lanes: ['Seeds', 'Seedlings', 'In the bed', 'Harvested'], limits: {}, ordered: true, list: 'flow',
     cards: ({ text }) => (/horta|sementes|canteiro|colheita/.test(text) ? ['Tomate', 'Manjericão', 'Alface', 'Cenoura', 'Abobrinha', 'Pimentão'] : ['Tomatoes', 'Basil', 'Lettuce', 'Carrots', 'Zucchini', 'Bell peppers']) },
-  { test: /hoard|treasure|\bloot\b|inventory/, lanes: ['Unsorted', 'Shiniest', 'Bedroom pile', 'Cursed vault'], limits: { 2: 5 }, ordered: false,
+  { test: /\bhoards?\b|\btreasures?\b|\bloot\b|\binventory\b/, lanes: ['Unsorted', 'Shiniest', 'Bedroom pile', 'Cursed vault'], limits: { 2: 5 }, ordered: false,
     allowed: { 'Cursed amulet': [0, 3], 'Hexed goblet': [0, 3] },
     cards: () => ['Gold crown', 'Ruby ring', 'Pearl necklace', 'Cursed amulet', 'Tarnished shield', 'Jeweled dagger', 'Hexed goblet'] },
-  { test: /\blunch|takeout|take-out|food order|order run/, lanes: ['Menu', 'This order run', 'Ordered'], limits: { 1: 6 }, ordered: true,
+  { test: /\blunch(?:es)?\b|\btake-?out\b|\bfood orders?\b|\border runs?\b/, lanes: ['Menu', 'This order run', 'Ordered'], limits: { 1: 6 }, ordered: true,
     cards: () => ['Margherita pizza', 'Cheeseburger', 'Chicken tacos', 'Caesar salad', 'Veggie wrap', 'Pad thai', 'Sushi combo'] },
-  { test: /restaurant|\bmenu\b|entr[ée]es|desserts|\bplats\b/, lanes: ['Dish ideas', 'Starters', 'Mains', 'Desserts'], limits: { 1: 3, 2: 3, 3: 3 }, ordered: false, list: 'categories',
+  { test: /\brestaurants?\b|\bmenus?\b|\bentr[ée]es\b|\bdesserts\b|\bplats\b/, lanes: ['Dish ideas', 'Starters', 'Mains', 'Desserts'], limits: { 1: 3, 2: 3, 3: 3 }, ordered: false, list: 'categories',
     cards: () => ['Soupe à l’oignon', 'Salade niçoise', 'Bœuf bourguignon', 'Coq au vin', 'Ratatouille', 'Crème brûlée', 'Tarte Tatin', 'Mousse au chocolat'] },
-  { test: /\brecipe|ingredient/, lanes: ['Pantry', 'Recipe card', 'Ready to print'], limits: { 1: 8 }, ordered: true,
+  { test: /\brecipes?\b|\bingredients?\b/, lanes: ['Pantry', 'Recipe card', 'Ready to print'], limits: { 1: 8 }, ordered: true,
     cards: () => ['Flour', 'Eggs', 'Butter', 'Sugar', 'Preheat the oven', 'Mix the dry ingredients', 'Bake for 25 minutes', 'Serves four'] },
-  { test: /grocer|shopping list/, lanes: ['Need', 'In the cart', 'Bought'], limits: {}, ordered: true,
+  { test: /\bgrocer(?:y|ies)\b|\bshopping lists?\b/, lanes: ['Need', 'In the cart', 'Bought'], limits: {}, ordered: true,
     cards: () => ['Milk', 'Eggs', 'Sourdough bread', 'Apples', 'Coffee beans', 'Spinach', 'Olive oil'] },
-  { test: /\bmeals?\b|dinner|breakfast/, lanes: ['Meal ideas', 'Monday', 'Tuesday', 'Wednesday', 'Thursday'], limits: { 1: 1, 2: 1, 3: 1, 4: 1 }, ordered: false,
+  { test: /\bmeals?\b|\bdinners?\b|\bbreakfasts?\b/, lanes: ['Meal ideas', 'Monday', 'Tuesday', 'Wednesday', 'Thursday'], limits: { 1: 1, 2: 1, 3: 1, 4: 1 }, ordered: false,
     cards: () => ['Tacos', 'Pasta bake', 'Vegetable stir-fry', 'Soup and bread', 'Salmon and rice', 'Pizza night'] },
-  { test: /\bfraction|manipulative|\bhalves|\bthirds|\bquarters/, lanes: ['Tile bank', 'Build a whole', 'Checked'], limits: { 1: 4 }, ordered: true,
+  { test: /\bfractions?\b|\bmanipulatives?\b|\bhalves\b|\bthirds\b|\bquarters\b/, lanes: ['Tile bank', 'Build a whole', 'Checked'], limits: { 1: 4 }, ordered: true,
     cards: () => ['One half', 'One third', 'One quarter', 'One sixth', 'One eighth', 'Whole bar'] },
-  { test: /\bchore/, lanes: ['Chore jar', 'Maya', 'Leo', 'Ava', 'Done'], limits: { 1: 2, 2: 2, 3: 2 }, ordered: false,
+  { test: /\bchores?\b/, lanes: ['Chore jar', 'Maya', 'Leo', 'Ava', 'Done'], limits: { 1: 2, 2: 2, 3: 2 }, ordered: false,
     cards: () => ['Feed the cat', 'Empty the dishwasher', 'Water the plants', 'Take out recycling', 'Make the beds', 'Fold laundry', 'Sweep the porch'] },
-  { test: /classroom jobs|\bjobs?\b.*\b(kids?|students?|class)\b|line leader/, lanes: ['Bench', 'Line leader', 'Door holder', 'Plant waterer', 'Librarian'], limits: { 1: 1, 2: 1, 3: 1, 4: 1 }, ordered: false,
+  { test: /\bclassroom jobs\b|\bjobs?\b.*\b(?:kids?|students?|class)\b|\bline leaders?\b/, lanes: ['Bench', 'Line leader', 'Door holder', 'Plant waterer', 'Librarian'], limits: { 1: 1, 2: 1, 3: 1, 4: 1 }, ordered: false,
     cards: () => ['Mia', 'Jamal', 'Sofia', 'Ethan', 'Priya', 'Noah', 'Lucia'] },
-  { test: /volunteer|\bshifts?\b|roster|sign-?up/, lanes: ['Available', 'Morning shift', 'Afternoon shift'], limits: { 1: 4, 2: 4 }, ordered: false,
+  { test: /\bvolunteer(?:s|ing)?\b|\bshifts?\b|\brosters?\b|\bsign-?ups?\b/, lanes: ['Available', 'Morning shift', 'Afternoon shift'], limits: { 1: 4, 2: 4 }, ordered: false,
     cards: () => ['Rosa', 'Malik', 'Jen', 'Tomás', 'Aisha', 'Pedro', 'Lena', 'Sam'] },
-  { test: /\bseat|\bdesk/, lanes: ['Unassigned', 'Table one', 'Table two'], limits: { 1: 4, 2: 4 }, ordered: false,
-    cards: () => ['Ava', 'Ben', 'Chloe', 'Diego', 'Emma', 'Farah', 'Gus', 'Hana'] },
-  { test: /\bretro|went well|to improve/, lanes: ['Went well', 'To improve', 'Action items'], limits: { 2: 3 }, ordered: false,
-    cards: () => ['Fast code reviews', 'Flaky tests', 'Unclear priorities', 'Great pairing', 'Smooth release', 'Too many meetings'] },
-  { test: /card sort|help (?:center|centre)|\barticles\b|\btopics\b/, lanes: ['Unsorted topics', 'Account', 'Billing', 'Troubleshooting'], limits: {}, ordered: false,
+  { test: /\bcard sort(?:ing)?\b|\bhelp (?:center|centre)\b|\barticles\b|\btopics\b/, lanes: ['Unsorted topics', 'Account', 'Billing', 'Troubleshooting'], limits: {}, ordered: false,
     cards: () => ['Reset your password', 'Update payment method', 'Download invoices', 'Fix sync errors', 'Invite teammates', 'Cancel a subscription', 'Change your email'] },
-  { test: /\blaunch(?:ing)?\b.*\b(?:feature|product|marketing)|\b(?:feature|product) launch/, lanes: ['To do', 'In progress', 'Blocked', 'Done'], limits: { 1: 3 }, ordered: false,
+  { test: /\blaunch(?:ing)?\b.*\b(?:features?|products?|marketing)\b|\b(?:feature|product) launch(?:es)?\b/, lanes: ['To do', 'In progress', 'Blocked', 'Done'], limits: { 1: 3 }, ordered: false,
     cards: () => ['Launch blog post', 'Demo video', 'Sales deck', 'Support docs', 'Fix release bugs', 'Pricing page update', 'Press email'] },
-  { test: /\bbug|triage|\bissues?\b|tickets?|support queue/, lanes: ['New', 'Triaged', 'Fixed'], limits: { 1: 5 }, ordered: true, list: 'categories',
+  { test: /\bbugs?\b|\btriage\b|\bissues?\b|\btickets?\b|\bsupport queues?\b|\bhelp ?desk\b/, lanes: ['New', 'Triaged', 'Fixed'], limits: { 1: 5 }, ordered: true, list: 'categories',
     cards: () => ['Sign-in fails on Safari', 'Crash when saving offline', 'Typo on the pricing page', 'Slow search results', 'Export drops images'] },
-  { test: /\bsales|\bleads?\b|\bdeals?\b|\bcrm\b|prospects?/, lanes: ['Lead', 'Contacted', 'Proposal sent', 'Won'], limits: { 2: 5 }, ordered: true,
+  { test: /\bsales\b|\bleads?\b|\bdeals?\b|\bcrm\b|\bprospects?\b/, lanes: ['Lead', 'Contacted', 'Proposal sent', 'Won'], limits: { 2: 5 }, ordered: true,
     cards: () => ['Acme Corp', 'Northwind Traders', 'Globex', 'Blue Harbor Cafe', 'Summit Dental', 'Riverside Gym'] },
-  { test: /\bbracket|tournament/, lanes: ['First round', 'Semifinals', 'Final'], limits: { 1: 4, 2: 2 }, ordered: true,
+  { test: /\bbrackets?\b|\btournaments?\b/, lanes: ['First round', 'Semifinals', 'Final'], limits: { 1: 4, 2: 2 }, ordered: true,
     cards: () => ['Falcons', 'Tigers', 'Sharks', 'Wolves', 'Comets', 'Rockets', 'Bears', 'Hawks'] },
-  { test: /board game|card game|\bdeck\b|hand limit/, lanes: ['Deck', 'Hand', 'Played', 'Discard'], limits: { 1: 5 }, ordered: true,
+  { test: /\bboard games?\b|\bcard games?\b|(?<!\b(?:pitch|slide|sales|investor)\s)\bdecks?\b|\bhand limits?\b/, lanes: ['Deck', 'Hand', 'Played', 'Discard'], limits: { 1: 5 }, ordered: true,
     cards: () => ['Draw two', 'Skip a turn', 'Swap hands', 'Wild card', 'Double move', 'Reverse order', 'Steal a point'] },
-  { test: /conference|\btalks\b|agenda|speakers?/, lanes: ['Talk pool', 'Morning', 'Afternoon', 'Evening'], limits: { 1: 3, 2: 3, 3: 3 }, ordered: false, list: 'categories',
+  { test: /\bconferences?\b|\btalks\b|\bagendas?\b|\bspeakers?\b/, lanes: ['Talk pool', 'Morning', 'Afternoon', 'Evening'], limits: { 1: 3, 2: 3, 3: 3 }, ordered: false, list: 'categories',
     cards: () => ['Keynote: the year ahead', 'Scaling design systems', 'Hands-on accessibility', 'Live demo: data pipelines', 'Panel on remote teams', 'Lightning talks', 'Closing fireside chat'] },
-  { test: /\bhabit/, lanes: ['Not yet', 'Done today', 'Skipped'], limits: {}, ordered: false,
+  { test: /\bhabits?\b/, lanes: ['Not yet', 'Done today', 'Skipped'], limits: {}, ordered: false,
     cards: () => ['Drink water', 'Read 20 minutes', 'Walk outside', 'Stretch', 'Journal', 'No screens after ten'] },
-  { test: /\bpack(?:ing)?\b|camping|\btrip\b|travel/, lanes: ['To pack', 'Packed', 'In the car'], limits: {}, ordered: true,
-    cards: () => ['Tent', 'Sleeping bag', 'Headlamp', 'Water filter', 'First aid kit', 'Rain jacket'] },
-  { test: /umzug|moving (?:house|home|day|boxes)|\bmove (?:out|in|house)\b|\bmovers?\b|relocat/, lanes: ['To pack', 'Labeled', 'In the van', 'Unpacked'], limits: {}, ordered: true, list: 'flow',
+  { test: /\bumzug\w*|\bmoving (?:house|home|day|boxes)\b|\bmove (?:out|in|house)\b|\bmovers?\b|\brelocat(?:e|es|ed|ing|ion)\b/, lanes: ['To pack', 'Labeled', 'In the van', 'Unpacked'], limits: {}, ordered: true, list: 'flow',
     cards: ({ text }) => (/umzug|kisten|auspacken/.test(text) ? ['Küche', 'Bücher', 'Winterkleidung', 'Badezimmer', 'Spielzeug', 'Werkzeug'] : ['Kitchen dishes', 'Books', 'Winter clothes', 'Bathroom supplies', 'Toys', 'Tools']) },
-  { test: /\bread(?:ing)? list|\bbooks?\b/, lanes: ['Want to read', 'Reading now', 'Finished'], limits: { 1: 2 }, ordered: true,
+  { test: /\bpack(?:ing)?\b|\bcamping\b|\btrips?\b|\btravel(?:s|ing|ling)?\b/, lanes: ['To pack', 'Packed', 'In the car'], limits: {}, ordered: true,
+    cards: () => ['Tent', 'Sleeping bag', 'Headlamp', 'Water filter', 'First aid kit', 'Rain jacket'] },
+  { test: /\bread(?:ing)? lists?\b|\bbooks?\b/, lanes: ['Want to read', 'Reading now', 'Finished'], limits: { 1: 2 }, ordered: true,
     cards: () => ['Project Hail Mary', 'The Overstory', 'Educated', 'Dune', 'Atomic Habits', 'The Hobbit'] },
-  { test: /\bparty|birthday|\bevent/, lanes: ['Ideas', 'Booked', 'Done'], limits: { 1: 4 }, ordered: true,
+  { test: /\bpart(?:y|ies)\b|\bbirthdays?\b|\bevents?\b(?!\s+storm)/, lanes: ['Ideas', 'Booked', 'Done'], limits: { 1: 4 }, ordered: true,
     cards: () => ['Venue', 'Guest list', 'Invitations', 'Food and drinks', 'Music', 'Decorations', 'Cake'] },
-  { test: /\bcomic/, lanes: ['Characters and bubbles', 'Panel layout', 'Ready to print'], limits: { 1: 6 }, ordered: true,
+  { test: /\bcomics?\b/, lanes: ['Characters and bubbles', 'Panel layout', 'Ready to print'], limits: { 1: 6 }, ordered: true,
     cards: () => ['Captain Comet', 'Robot sidekick', 'Speech bubble', 'Thought bubble', 'Shout bubble: Bam!', 'City skyline backdrop', 'Narration box'] },
-  { test: /\bstory|\bscenes?\b|\bpanels?\b|\bad\b|\bvideo\b/, lanes: ['Scene pool', 'Sequence', 'Final cut'], limits: { 1: 6 }, ordered: true, list: 'categories',
+  { test: /\bstor(?:y|ies|yboards?)\b|\bscenes?\b|\bpanels?\b|\bads?\b|\bvideos?\b/, lanes: ['Scene pool', 'Sequence', 'Final cut'], limits: { 1: 6 }, ordered: true, list: 'categories',
     cards: () => ['Opening shot', 'The problem', 'Product reveal', 'Customer smile', 'Logo and tagline'] },
-  { test: /mood ?board|\bbrand/, lanes: ['Inspiration', 'Color', 'Type', 'Imagery'], limits: {}, ordered: false, list: 'categories',
+  { test: /\bmood ?boards?\b|\bbrand(?:s|ing)?\b/, lanes: ['Inspiration', 'Color', 'Type', 'Imagery'], limits: {}, ordered: false, list: 'categories',
     cards: () => ['Warm coral swatch', 'Deep navy swatch', 'Geometric sans headline', 'Serif body text', 'Sunlit office photo', 'Hand-drawn texture'] },
-  { test: /science fair|hypothesis|experiment/, lanes: ['Step cards', 'In order', 'Checked'], limits: { 1: 5 }, ordered: true,
+  { test: /\bscience fairs?\b|\bhypothes[ie]s\b|\bexperiments?\b/, lanes: ['Step cards', 'In order', 'Checked'], limits: { 1: 5 }, ordered: true,
     cards: () => ['Ask a question', 'Form a hypothesis', 'Run the experiment', 'Record results', 'Draw a conclusion'] },
-  { test: /試験|勉強|\bstudy|\bexams?\b|finals|revision/, lanes: ['Not started', 'Studying', 'Review', 'Done'], limits: { 1: 3 }, ordered: true, list: 'flow',
+  { test: /試験|勉強|\bstudy(?:ing)?\b|\bexams?\b|\bfinals\b|\brevision\b/, lanes: ['Not started', 'Studying', 'Review', 'Done'], limits: { 1: 3 }, ordered: true, list: 'flow',
     cards: ({ text }) => (/[぀-ヿ一-鿿]/.test(text) ? ['数学', '英語', '歴史', '理科', '国語', '地理'] : ['Algebra review', 'Biology chapter 4', 'Essay outline', 'Chemistry practice test', 'History timeline', 'Spanish vocabulary']) },
-  { test: /\btareas?\b|deberes/, lanes: ['Pendientes', 'En progreso', 'Terminadas'], limits: { 1: 3 }, ordered: true, list: 'flow',
+  { test: /\btareas?\b|\bdeberes\b/, lanes: ['Pendientes', 'En progreso', 'Terminadas'], limits: { 1: 3 }, ordered: true, list: 'flow',
     cards: () => ['Leer el capítulo 3', 'Ejercicios de matemáticas', 'Proyecto de ciencias', 'Redacción en inglés', 'Mapa de geografía', 'Estudiar vocabulario'] },
-  { test: /\brooms?\b|floor plan|\bhouse|apartment/, lanes: ['Unplaced rooms', 'Ground floor', 'Upstairs'], limits: { 1: 4, 2: 4 }, ordered: false,
+  { test: /\brooms?\b|\bfloor plans?\b|\bhouse\b|\bapartments?\b/, lanes: ['Unplaced rooms', 'Ground floor', 'Upstairs'], limits: { 1: 4, 2: 4 }, ordered: false,
     cards: () => ['Kitchen', 'Living room', 'Bedroom', 'Bathroom', 'Office', 'Hallway'] },
-  { test: /\bpodcast|\bblog|newsletter|content calendar|social posts?/, lanes: ['Ideas', 'Drafting', 'Scheduled', 'Published'], limits: { 1: 3 }, ordered: true,
+  { test: /\bpodcasts?\b|\bblogs?\b|\bnewsletters?\b|\bcontent calendars?\b|\bsocial posts?\b/, lanes: ['Ideas', 'Drafting', 'Scheduled', 'Published'], limits: { 1: 3 }, ordered: true,
     cards: () => ['Guest interview: a founder story', 'Listener questions', 'Behind the scenes', 'Top five tools', 'Myth-busting episode', 'Year in review'] },
   { test: /\b(?:laptops?|phones?|cars?|apartments?|cameras?|headphones)\b/, lanes: ['Considering', 'Shortlist', 'Chosen'], limits: { 1: 3, 2: 1 }, ordered: true,
     cards: ({ text }) => lang(text, {
@@ -380,22 +405,22 @@ const KITS = [
       camera: ['Sony A7 IV', 'Fujifilm X-T5', 'Canon R6 II', 'Nikon Z6 III', 'Ricoh GR III', 'Panasonic S5 II'],
       default: ['Sony WH-1000XM5', 'Bose QC Ultra', 'AirPods Max', 'Sennheiser Momentum 4', 'Anker Space One', 'Beats Studio Pro'],
     }) },
-  { test: /\bwine|tasting/, lanes: ['To taste', 'Tasted', 'Favorites'], limits: { 2: 3 }, ordered: true,
+  { test: /\bwines?\b|\btastings?\b/, lanes: ['To taste', 'Tasted', 'Favorites'], limits: { 2: 3 }, ordered: true,
     cards: () => ['Pinot Noir', 'Sauvignon Blanc', 'Malbec', 'Chardonnay', 'Rioja', 'Prosecco', 'Riesling'] },
-  { test: /\bprint|worksheet|handout|flyer|poster|\bpages?\b/, lanes: ['Pieces', 'Compose', 'Ready to print'], limits: { 1: 6 }, ordered: true,
+  { test: /\bprint(?:s|ed|able|ables|ing)?\b|\bworksheets?\b|\bhandouts?\b|\bflyers?\b|\bposters?\b/, lanes: ['Pieces', 'Compose', 'Ready to print'], limits: { 1: 6 }, ordered: true,
     cards: ({ noun, text }) => (/\bmath|worksheet/.test(text)
       ? ['Addition drill', 'Fraction strip', 'Word problem', 'Number line', 'Times table grid', 'Answer box', 'Name and date line', 'Title banner']
       : [`Square ${noun}`, `Triangle ${noun}`, `Hexagon ${noun}`, 'Half-width strip', 'Title banner', 'Text box', 'Image frame', 'Page margins']) },
-  { test: /puzzle|jigsaw/, lanes: ['Loose pieces', 'Top row', 'Bottom row'], limits: { 1: 2, 2: 2 }, ordered: false,
+  { test: /\bpuzzles?\b|\bjigsaws?\b/, lanes: ['Loose pieces', 'Top row', 'Bottom row'], limits: { 1: 2, 2: 2 }, ordered: false,
     allowed: { 'Barn roof (top left)': [0, 1], 'Blue sky (top right)': [0, 1], 'Green field (bottom left)': [0, 2], 'Duck pond (bottom right)': [0, 2] },
     cards: () => ['Barn roof (top left)', 'Blue sky (top right)', 'Green field (bottom left)', 'Duck pond (bottom right)', 'Spare edge with a fence'] },
-  { test: /\blego|\bbricks?\b/, lanes: ['Unsorted', 'Small', 'Large', 'Plates and slopes'], limits: {}, ordered: false,
+  { test: /\blegos?\b|\bbricks?\b/, lanes: ['Unsorted', 'Small', 'Large', 'Plates and slopes'], limits: {}, ordered: false,
     cards: () => ['Red 2x4', 'Blue 1x2', 'Yellow 2x2', 'Green 1x1 round', 'Gray 1x6 plate', 'Red slope 45°', 'Black arch'] },
   { test: /\bblocks?\b|\btiles?\b|\bpieces?\b|\bshapes?\b|\bmodules?\b|\bparts?\b|bill of materials/, lanes: ['Tray', 'Build', 'Finished'], limits: { 1: 6 }, ordered: true,
     cards: ({ noun, text }) => (/bookshel|shelf|wood|furniture|bill of materials/.test(text)
       ? ['Side panel (2)', 'Shelf board (4)', 'Back panel', 'Wood screws', 'Shelf pins', 'Wood glue', 'Sandpaper']
       : [`Square ${noun}`, 'Long bar', 'L-shaped corner', 'Edge strip', 'Center plate', 'Connector peg']) },
-  { test: /\bkanban|\btasks?\b|\bsprint|\bprojects?\b|\blaunch|\bwork\b|\bteam\b|\bokrs?\b|monday|weekly/, lanes: ['Backlog', 'In progress', 'In review', 'Done'], limits: { 1: 3, 2: 2 }, ordered: true,
+  { test: /\bkanban\b|\btasks?\b|\bsprints?\b|\bprojects?\b|\blaunch(?:es|ing)?\b|\bwork\b|\bteams?\b|\bokrs?\b|\bmondays?\b|\bweekly\b/, lanes: ['Backlog', 'In progress', 'In review', 'Done'], limits: { 1: 3, 2: 2 }, ordered: true,
     cards: ({ text }) => (/\bokrs?\b|objectives?|key results?/.test(text)
       ? ['Grow weekly active users 20%', 'Cut support response to 4 hours', 'Launch the mobile app', 'Hire two engineers', 'Raise NPS to 50', 'Reduce churn below 3%']
       : ['Write the brief', 'Design review', 'Fix open bugs', 'Update the docs', 'Prepare the demo', 'Share release notes']) },
@@ -535,8 +560,8 @@ export function componentStarter(message, { now = new Date(), by = 'Slatebox' } 
   const laneIds = uniqueIds(lanes, 'lane')
   const cardIds = uniqueIds(cards, noun || 'piece')
   const set = { by, at: new Date(now).toISOString(), via: 'preset' }
-  // A limit fits the cards that start in its lane (all start in the first), and never sits on the last lane of a flow.
-  const rules = Object.entries(limits).filter(([index, max]) => Number(index) > 0 && Number(index) < lanes.length && max >= 1 && !(ordered && Number(index) === lanes.length - 1 && lanes.length >= 3 && FINISHED.test(lanes[index])))
+  // A limit fits the cards that start in its lane (all start in the first), and never sits on a finished lane (finishedLane).
+  const rules = Object.entries(limits).filter(([index, max]) => Number(index) > 0 && Number(index) < lanes.length && max >= 1 && !finishedLane(lanes[index], Number(index), lanes.length, ordered))
     .map(([index, max]) => ({ id: `${laneIds[index]}-holds`.slice(0, 60), kind: 'capacity', where: laneIds[index], max: Math.min(24, max), on: true, severity: 'refuse', set }))
   if (ordered && lanes.length >= 3) rules.push({ id: 'one-step', kind: 'path', from: 'any', noSkip: true, on: true, severity: 'refuse', set })
   const allowed = kit && !flow.length && !stages && !placesListed ? kit.allowed ?? {} : {}

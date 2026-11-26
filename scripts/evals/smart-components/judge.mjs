@@ -3,12 +3,21 @@
 // fits what the person asked for. So each board the person was shown is scored 1 to 5 against one fixed rubric by
 // a model, with a short reason, and the run fails when the mean is under 4 or more than 10% score 2 or less.
 //
-// The model is the app's own choice, never named here: the AI control route of the `eval` part when the catalogue
-// has one (an administrator's binding for it), else the route the drafting part resolves to (workshop.draft, the
-// same connection that drafted the boards), read from the app's database (--mongo) with the resolver the request
-// path uses (ai-control/resolve.mjs). Its key is the provider's active key in providerKeys, opened with the app's
-// SLATEBOX_KEY_ENCRYPTION_KEY (the same environment the app runs with), or the environment variable --judge-key-env
-// names. Live only: the CI layer tests the rubric, the parsing and the summary with fixtures, and never calls a model.
+// The judge must tell toys from tools, so every run first scores a fixed set of known-bad control boards
+// (CALIBRATION: counted-off pieces, one word on every card, the wrong domain, a capped Done lane, the request's own
+// words handed back), each expected at 2 or less. A judge that scores any of them higher fails the run: its scores
+// of the real boards say nothing.
+//
+// The model is the app's own choice, never named here: the AI control route of the `eval` part (an administrator's
+// binding in Admin › AI control; unset, it falls to the default), read from the app's database (--mongo) with the
+// resolver the request path uses (ai-control/resolve.mjs). When that route is the drafting part's (workshop.draft),
+// the drafter would grade its own boards, a known self-preference bias: live.mjs refuses that run unless asked for
+// it (--allow-self-judge), and then marks the run self-graded. Its key is the provider's active key in
+// providerKeys, opened with the app's SLATEBOX_KEY_ENCRYPTION_KEY (the same environment the app runs with), or the
+// environment variable --judge-key-env names. Live only: the CI layer tests the rubric, the controls, the parsing
+// and the summary with fixtures, and never calls a model.
+import 'slateboxjs/workshops/behaviour'
+import { rulebook, validateWorkshop } from 'slateboxjs/workshops/model'
 import { surface as surfaceById } from '../../../web/app/server/ai-control/catalogue.mjs'
 import { buildSnapshot } from '../../../web/app/server/ai-control/snapshot.mjs'
 import { resolveModel } from '../../../web/app/server/ai-control/resolve.mjs'
@@ -85,8 +94,75 @@ export function judgeSummary(judged, { mean: meanTarget = 4, lowShare: lowTarget
   return { judged: n, unjudged, mean: Number(mean.toFixed(3)), distribution, lowShare: n ? Number((low / n).toFixed(3)) : 0, pass: !problems.length, problems }
 }
 
-/** The part whose route judges: `eval` when the catalogue has it, else the drafting part (or the one asked for). */
+/** The part whose route judges: `eval` (the catalogue's judge part), or the one asked for. */
 export const judgeSurface = (asked) => asked || (surfaceById('eval') ? 'eval' : 'workshop.draft')
+/** The part that drafts the boards the judge scores. */
+export const DRAFT_SURFACE = 'workshop.draft'
+
+/** Whether two routes are the same model on the same provider (the judge grading the drafter's own work). */
+export const sameModel = (a, b) => Boolean(a && b && !a.error && !b.error) && a.provider === b.provider && a.model === b.model
+
+// ---- Calibration: known-bad boards the judge must score low on every run ----
+
+const SET = { by: 'Slatebox eval', at: '2026-11-25T00:00:00.000Z', via: 'chat' }
+const rule = (r) => ({ on: true, severity: 'refuse', set: SET, ...r })
+const ONE_STEP = rule({ id: 'one-step', kind: 'path', from: 'any', noSkip: true })
+const lanesOf = (labels) => labels.map(([label, capacity]) => ({ id: label.toLowerCase().replace(/[^a-z0-9]+/g, '-'), label, ...(capacity && { capacity }) }))
+const control = (id, prompt, title, lanes, cards, why) => {
+  const laneList = lanesOf(lanes)
+  return { id, prompt, why, max: 2, board: { version: 1, title, lanes: laneList, cards: cards.map((label, i) => ({ id: `c${i + 1}`, label, laneId: laneList[0].id })), behaviour: { version: 1, rev: 1, rules: [ONE_STEP] } } }
+}
+const OWNER = 'snappable congruent pieces to compose new printable materials'
+
+/**
+ * Known-bad control boards, fixed: each a toy the judge must score at most `max` (2) for the run's scores to mean
+ * anything. Two the gate refuses too (counted-off pieces, one shared word), and three it lets through or repairs: the
+ * wrong domain, a capped Done lane, the request's words handed back as cards.
+ */
+export const CALIBRATION = Object.freeze([
+  control('counted-pieces', OWNER, 'Printable pieces', [['Pieces'], ['Compose', 6], ['Ready to print']],
+    ['Piece 1', 'Piece 2', 'Piece 3', 'Piece 4', 'Piece 5', 'Piece 6'], 'placeholders counted off'),
+  control('one-word', OWNER, 'Printable squares', [['Square tray'], ['Page', 6], ['Ready to print']],
+    ['Title square', 'Instruction square', 'Question square', 'Diagram square', 'Picture square', 'Answer square'], 'one word on every card, nothing to compose with'),
+  control('wrong-domain', 'a tool for my band setlist', 'Band setlist', [['Holdings'], ['Over target', 3], ['Under target'], ['Rebalanced']],
+    ['US total market fund', 'International stocks', 'Bond index fund', 'Real estate (REIT)', 'Emerging markets', 'Cash reserve'], 'an investment board for a setlist'),
+  control('capped-done', "a kanban board for my team's weekly work", 'Team kanban', [['Backlog'], ['In progress', 3], ['Done', 1]],
+    ['Write the launch brief', 'Fix the login bug', 'Update the API docs', 'Design review', 'Prepare the demo', 'Share release notes'], 'Done holds one card, so the board stops after the first task'),
+  control('echoed-words', 'a weekly meal planner for my family', 'Weekly meal planner', [['To sort'], ['In use', 4], ['Done']],
+    ['Weekly', 'Meal', 'Planner', 'Family', 'My'], "the request's own words handed back as cards"),
+])
+
+/** The controls as boards the judge reads: validated, with the rulebook's sentences. → [{ id, prompt, why, max, workshop, rules }] */
+export function calibrationCases() {
+  return CALIBRATION.map((item) => {
+    const workshop = validateWorkshop(item.board)
+    return { id: item.id, prompt: item.prompt, why: item.why, max: item.max, workshop, rules: rulebook().lines(workshop) }
+  })
+}
+
+/**
+ * The judge's calibration: every control scored at most its `max`, and every one scored at all. `rows`:
+ * [{ id, max, score } | { id, max, error }]. → { pass, problems, rows }
+ */
+export function calibrationSummary(rows) {
+  const problems = []
+  if (!rows.length) problems.push('no control board was judged')
+  for (const row of rows) {
+    if (!Number.isInteger(row.score)) problems.push(`the judge could not score the control board ${row.id}: ${row.error ?? 'no score'}`)
+    else if (row.score > row.max) problems.push(`the judge scored the known-bad control board ${row.id} ${row.score} (at most ${row.max} expected): it does not tell toys from tools`)
+  }
+  return { pass: !problems.length, problems, rows: rows.map(({ id, max, score, reason, error }) => ({ id, max, ...(Number.isInteger(score) ? { score, reason } : { error: error ?? 'no score' }) })) }
+}
+
+/** Scores every control board with the judge. → calibrationSummary */
+export async function runCalibration(judge, { judgeImpl = judgeBoard, options = {} } = {}) {
+  const rows = []
+  for (const item of calibrationCases()) {
+    try { rows.push({ id: item.id, max: item.max, ...(await judgeImpl(judge, item.prompt, item.workshop, item.rules, options)) }) }
+    catch (error) { rows.push({ id: item.id, max: item.max, error: String(error?.message ?? error).slice(0, 200) }) }
+  }
+  return calibrationSummary(rows)
+}
 
 /**
  * The judge's route and key, from the app's database: the AI control documents the request path reads, resolved for
@@ -114,7 +190,13 @@ export function judgeRoute({ mongoJSON, surface, env = process.env, keyEnv = '' 
   }
   if (!apiKey) throw new Error(`no key for ${route.providerLabel || route.provider}: set --judge-key-env`)
   const provider = raw.providers.find((item) => item._id === route.provider)
-  return { surface: part, source: resolved.source, route: { ...route, auth: provider?.auth ?? { style: 'bearer' }, extraHeaders: provider?.extraHeaders ?? {} }, apiKey }
+  // The drafting part's route, to tell whether the judge would grade the drafter's own boards.
+  const drafting = resolveModel(buildSnapshot(raw), { surface: DRAFT_SURFACE })
+  const drafter = drafting.route && !drafting.route.error ? { provider: drafting.route.provider, model: drafting.route.model, label: drafting.route.label, source: drafting.source } : null
+  return {
+    surface: part, source: resolved.source, route: { ...route, auth: provider?.auth ?? { style: 'bearer' }, extraHeaders: provider?.extraHeaders ?? {} }, apiKey,
+    drafter, selfGraded: part === DRAFT_SURFACE || sameModel(route, drafter),
+  }
 }
 
 // Room for a reasoning model to think before its one line of JSON (Muse Ember spent ~1,300 tokens thinking per board, and now and then over 4,000).

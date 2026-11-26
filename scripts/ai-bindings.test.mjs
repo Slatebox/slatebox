@@ -16,7 +16,7 @@ async function world() {
 }
 
 test('the parts that can be bound: default and every part a call site sends', () => {
-  assert.deepEqual(BINDABLE_SURFACES, ['default', 'chat', 'chat.route', 'generation', 'presentation', 'vision', 'images', 'shape', 'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors'])
+  assert.deepEqual(BINDABLE_SURFACES, ['default', 'chat', 'chat.route', 'generation', 'presentation', 'vision', 'images', 'shape', 'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors', 'eval'])
 })
 
 test('set, clear and turn off per part; the next request goes to the new model', async () => {

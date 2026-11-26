@@ -20,9 +20,10 @@ const fail = (message, status = 400, details) => {
 /**
  * The parts an administrator can bind in this build: chosen per part, not served by a built-in
  * service only, and sent by some call site (generation.notes has no request of its own yet, so a
- * binding of it would do nothing); default is what every other part follows.
+ * binding of it would do nothing); default is what every other part follows. The eval judge is bound
+ * here although people never choose it (catalogue `bindable`).
  */
-export const BINDABLE_SURFACES = Object.freeze(SURFACES.filter((s) => s.useKey && s.inBuild && s.id !== 'admin.test' && (s.id === 'default' || s.requestFeatures.length)).map((s) => s.id))
+export const BINDABLE_SURFACES = Object.freeze(SURFACES.filter((s) => s.bindable && s.inBuild && s.id !== 'admin.test' && (s.id === 'default' || s.requestFeatures.length)).map((s) => s.id))
 
 /**
  * Checks one change: { surface, use: 'default' | 'model' | 'off', model? }. → the document to store,

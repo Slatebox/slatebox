@@ -14,7 +14,9 @@
 //      account: every card and lane of the kept board is drawn on #slateCanvas, with no page error;
 //   5. usefulness, separately from the gate (judge.mjs): the board the person was shown, scored 1 to 5 against a fixed
 //      rubric (domain fit, variety, sensible rules, would a person use it today) by the app's own configured model
-//      (the `eval` part's route if AI control has one, else the drafting part's), with a short reason;
+//      for the `eval` part (Admin › AI control), with a short reason. Before the cases, the judge scores the fixed
+//      known-bad control boards (judge.mjs CALIBRATION), each expected at 2 or less; and a judge whose model is the
+//      drafter's is refused (it would grade its own boards) unless --allow-self-judge, which marks the run self-graded;
 //   6. latency, and tokens and cost from the app's aiAudit rows for that account (--mongo; cost for a model with a
 //      price in --prices or the EVAL_PRICES env, dollars per million tokens: {"<model>": [in, out]}, else in the
 //      app's own model table, aiModels).
@@ -22,10 +24,11 @@
 //
 //   node scripts/evals/smart-components/live.mjs --origin http://127.0.0.1:3660 --mongo mongodb://127.0.0.1:3661/meteor \
 //     [--only id,id] [--concurrency 3] [--no-render] [--out report.json] [--shots dir] [--keep]
-//     [--no-judge] [--judge-surface <part>] [--judge-key-env <ENV>] [--judge-mean 4] [--judge-low 0.10]
+//     [--no-judge] [--judge-surface <part>] [--judge-key-env <ENV>] [--judge-mean 4] [--judge-low 0.10] [--allow-self-judge]
 // SLATEBOX_CHROMIUM names a Chromium executable for the render step (as the browser specs read it).
 // Exit code: 0 when the pass rate meets --target (default 0.95), the quality rate --quality-target (default 0.90), and
-// the judge passes (mean ≥ --judge-mean, at most --judge-low of the boards scoring 2 or less), else 1. The judge needs
+// the judge passes (every control board at 2 or less, mean ≥ --judge-mean, at most --judge-low of the boards scoring 2
+// or less, and not self-graded unless --allow-self-judge), else 1. The judge needs
 // --mongo (the route and key are the app's) and the app's SLATEBOX_KEY_ENCRYPTION_KEY in this environment. See README.md beside this file for what a run needs.
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
@@ -35,7 +38,7 @@ import '../../../web/app/imports/api/common/library.mjs'
 import { builderDescription } from '../../../web/app/imports/api/common/builder-freeform.mjs'
 import { previewProblems, qualityProblems } from './checks.mjs'
 import { DDP } from './ddp.mjs'
-import { judgeBoard, judgeRoute, judgeSummary } from './judge.mjs'
+import { judgeBoard, judgeRoute, judgeSummary, runCalibration } from './judge.mjs'
 import { PROMPTS } from './prompts.mjs'
 
 const { values: args } = parseArgs({
@@ -59,6 +62,7 @@ const { values: args } = parseArgs({
     'judge-key-env': { type: 'string', default: '' },
     'judge-mean': { type: 'string', default: '4' },
     'judge-low': { type: 'string', default: '0.10' },
+    'allow-self-judge': { type: 'boolean', default: false },
   },
 })
 const RUN = 'e' + Date.now().toString(36)
@@ -76,7 +80,21 @@ let judge = null
 if (judging) {
   if (!args.mongo) { console.error('The judge reads the app\'s AI control route and key: pass --mongo, or --no-judge.'); process.exit(2) }
   judge = judgeRoute({ mongoJSON: (script) => JSON.parse(mongo(script)), surface: args['judge-surface'], keyEnv: args['judge-key-env'] })
-  console.log(`judge: ${judge.route.label} (${judge.route.providerLabel}), the route of ${judge.surface} (${judge.source})`)
+  console.log(`judge: ${judge.route.label} (${judge.route.providerLabel}), the route of ${judge.surface} (${judge.source}); drafting: ${judge.drafter ? `${judge.drafter.label} (${judge.drafter.source})` : 'unknown'}`)
+  if (judge.selfGraded) {
+    if (!args['allow-self-judge']) {
+      console.error(`The judge's model (${judge.route.label}) is the one that drafts the boards: it would grade its own work. Bind "Grading eval runs (the judge)" to another model in Admin › AI control, or pass --allow-self-judge to run self-graded.`)
+      process.exit(2)
+    }
+    console.warn('WARNING: self-graded run: the judge is the drafting model, so its scores are not an independent measure.')
+  }
+}
+// The judge's calibration, first: known-bad boards it must score low, or its scores of the real boards mean nothing.
+let calibration = null
+if (judge) {
+  calibration = await runCalibration(judge)
+  for (const row of calibration.rows) console.log(`control ${row.id}: ${row.score ?? 'error'} (at most ${row.max})${row.reason ? ' ' + row.reason : row.error ? ' ' + row.error : ''}`)
+  if (!calibration.pass) console.warn('judge calibration failed: ' + calibration.problems.join('; '))
 }
 
 async function renderCheck(token, userId, shareId, workshop, id) {
@@ -204,6 +222,8 @@ if (args.mongo) {
         row.outage = true
         row.problems.push(`the model endpoint failed: ${lost.map((a) => a.status + (a.responseStatus ? ' ' + a.responseStatus : '')).join(', ')}`)
       }
+      // The model that drafted, for the judge's independence: the judge's own model drafting any board makes the run self-graded.
+      if (judge && row.models.includes(judge.route.model)) judge.selfGraded = true
       const price = row.models.length === 1 ? prices[row.models[0]] : null
       if (price) row.costUsd = (row.inputTokens * price[0] + row.outputTokens * price[1]) / 1e6
     }
@@ -212,6 +232,17 @@ if (args.mongo) {
     try {
       mongo(`const ids=${JSON.stringify(ids)}; db.slates.deleteMany({userId:{$in:ids}}); db.users.deleteMany({_id:{$in:ids}}); print('removed')`)
     } catch (error) { console.warn('could not remove the eval accounts:', error.message) }
+  }
+}
+
+// The judge's verdict: its scores of the boards, its calibration, and whether it graded the drafter's own work.
+function judgeVerdict() {
+  const scored = judgeSummary(rows.filter((r) => r.judge).map((r) => r.judge), { mean: Number(args['judge-mean']), lowShare: Number(args['judge-low']) })
+  const problems = [...scored.problems, ...calibration.problems]
+  if (judge.selfGraded && !args['allow-self-judge']) problems.push(`the judge model (${judge.route.model}) drafted boards in this run: self-graded`)
+  return {
+    model: judge.route.label, surface: judge.surface, source: judge.source, drafter: judge.drafter, selfGraded: judge.selfGraded,
+    ...scored, scoresPass: scored.pass, calibration, pass: !problems.length, problems,
   }
 }
 
@@ -234,11 +265,12 @@ const summary = {
   models: [...new Set(rows.flatMap((r) => r.models ?? []))],
   calls: sum('calls'), inputTokens: sum('inputTokens'), outputTokens: sum('outputTokens'),
   ...(rows.some((r) => r.costUsd != null) && { costUsd: Number(sum('costUsd').toFixed(4)) }),
-  ...(judging && { judge: { model: judge.route.label, surface: judge.surface, ...judgeSummary(rows.filter((r) => r.judge).map((r) => r.judge), { mean: Number(args['judge-mean']), lowShare: Number(args['judge-low']) }) } }),
+  ...(judging && { judge: judgeVerdict() }),
   failures: rows.filter((r) => !r.ok).map((r) => ({ id: r.id, problems: r.problems })),
   judgeLow: rows.filter((r) => r.judge && !(r.judge.score >= 3)).map((r) => ({ id: r.id, judge: r.judge, cards: r.cards, lanes: r.board?.lanes })),
   qualityFailures: rows.filter((r) => !r.qualityOk).map((r) => ({ id: r.id, quality: r.quality ?? [], cards: r.cards })),
 }
 console.log('\n' + JSON.stringify(summary, null, 2))
+if (judging && summary.judge.selfGraded) console.warn('WARNING: self-graded run: the judge model also drafted boards.')
 if (args.out) writeFileSync(args.out, JSON.stringify({ summary, rows }, null, 2))
 process.exit(summary.passRate >= Number(args.target) && summary.qualityRate >= Number(args['quality-target']) && (!judging || summary.judge.pass) ? 0 : 1)

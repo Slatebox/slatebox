@@ -9,7 +9,7 @@ import { presetsView, providersView } from './models.mjs'
 
 const publicSurface = (s) => ({
   id: s.id, title: s.title, follows: s.follows, followsTitle: s.follows ? surfaceById(s.follows)?.title ?? null : null,
-  needs: [...s.needs], builtinOnly: s.builtinOnly, bindable: s.useKey,
+  needs: [...s.needs], builtinOnly: s.builtinOnly, bindable: s.bindable,
   inBuild: s.inBuild, ...(s.branch && { branch: s.branch }), ...(s.edition && { edition: s.edition }),
   estimate: s.estimate, ceiling: s.ceiling,
 })
@@ -99,7 +99,7 @@ export function createAIControl({ holder, choiceHolders = async () => ({ ownProv
     const rows = surface ? [surfaceById(surface) || surfaceById(toSurface(surface))].filter(Boolean) : SURFACES
     const out = []
     for (const s of rows) {
-      if (!s.useKey) {
+      if (!s.bindable) {
         out.push({ ...publicSurface(s), resolved: null, note: s.builtinOnly ? 'Served by a built-in service' : 'Names its model per call' })
         continue
       }

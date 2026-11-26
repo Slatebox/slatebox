@@ -72,6 +72,11 @@ test('the follows tree: one table, every chain ends at default', () => {
   assert.equal(surface('images.search').useKey, false, 'image search is a built-in service, not a choice')
   assert.equal(surface('admin.test').useKey, false, 'admin test runs name their model per call')
   assert.equal(surface('admin.test').follows, null)
+  // The eval judge: an administrator binds it, people never choose it, and unset it falls to the default.
+  assert.equal(surface('eval').useKey, false)
+  assert.equal(surface('eval').bindable, true)
+  assert.equal(surface('eval').follows, null)
+  assert.equal(surfaceForRequest('eval'), 'eval')
   const roots = { chat: 'chat', 'chat.route': 'chat', workshop: 'chat', 'workshop.draft': 'chat', canvas: 'chat', 'agent.slatebox': 'chat',
     library: 'library', connectors: 'chat', 'generation.notes': 'generation', generation: 'generation', images: 'images', default: 'default' }
   for (const [id, root] of Object.entries(roots)) assert.equal(rootSurface(id), root, id)

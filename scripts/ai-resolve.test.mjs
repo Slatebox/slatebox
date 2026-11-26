@@ -114,3 +114,12 @@ test('a person\'s own AI comes first on a self-hosted server, never on Cloud, an
   const onCloud = await cloud.aiSettings.resolveFor({ userId: 'ana', feature: 'chat' })
   assert.equal(onCloud.scope, 'server', 'own AI is never used on Cloud')
 })
+
+test('the eval judge part: bound, it answers with its own model; unset, the default; never a person\'s choice', () => {
+  const bound = resolveModel(snap({ bindings: [bind('eval', 'model', 'deepinfra:google/gemini-3.5-flash')] }), { surface: 'eval' })
+  assert.equal(bound.source, 'part')
+  assert.equal(bound.route.model, 'google/gemini-3.5-flash')
+  assert.equal(resolveModel(snap({ bindings: [bind('eval', 'model', 'deepinfra:google/gemini-3.5-flash')] }), { surface: 'workshop.draft' }).route.model, 'muse-ember-1.0', 'drafting is untouched')
+  assert.equal(resolveModel(snap(), { surface: 'eval' }).source, 'builtin')
+  assert.equal(resolveModel(snap({ bindings: [bind('default', 'model', 'meta:muse-spark-1.3')] }), { surface: 'eval' }).route.model, 'muse-spark-1.3')
+})

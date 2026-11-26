@@ -16,6 +16,8 @@
 //                   to each of them
 //   builtinOnly     served by a built-in service, never a model choice (image search)
 //   useKey          false: not a choice people make (admin test runs name their model per call)
+//   bindable        an administrator binds it to a model in AI control (default: when people choose it too);
+//                   true with useKey false: an administrator's choice only (the eval judge)
 //   ownRow          true: a row of its own on the AI settings page although it follows another
 //                   surface (library follows chat but people choose it on the first row too)
 //   branch          the surface ships on that branch; until it lands it is "Not in this build"
@@ -56,6 +58,7 @@ function defineSurfaces(rows) {
       ceiling: row.ceiling ?? null,
       builtinOnly: Boolean(row.builtinOnly),
       useKey: row.useKey !== false && !row.builtinOnly,
+      bindable: row.bindable ?? (row.useKey !== false && !row.builtinOnly),
       ownRow: Boolean(row.ownRow),
       branch: row.branch ?? null,
       edition: row.edition ?? null,
@@ -93,6 +96,9 @@ export const SURFACES = defineSurfaces([
   { id: 'connectors', title: 'Outside agents: planning and laying out results', follows: 'chat', needs: ['tools'], requestFeatures: ['connectors'], meterFeatures: ['connectors'], edition: 'cloud' },
   // Prompt test runs and eval gates name their model per call; the row keeps them out of `chat`.
   { id: 'admin.test', title: 'Admin test runs', follows: null, useKey: false, estimate: 30000, ceiling: 200000 },
+  // The judge of the live evals (scripts/evals): an administrator's choice only, never a person's, so a model other
+  // than the one that drafted can grade the drafts. Unset, it falls to the default, which may be the drafter's.
+  { id: 'eval', title: 'Grading eval runs (the judge)', follows: null, useKey: false, bindable: true, requestFeatures: ['eval'] },
 ])
 
 const BY_ID = new Map(SURFACES.map((s) => [s.id, s]))
