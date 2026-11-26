@@ -4,7 +4,9 @@
 import { isProxyAddress } from './client-address.mjs'
 
 const AI = ['openai.chat', 'openai.welcome', 'openai.routeSlateMessage', 'workshops.draft', 'workshops.laneChat', 'workshops.mapChat',
-  'nativeCanvas.preview', 'canvasConversation.preview', 'presentations.analyze', 'images.search', 'stabilityai.generate']
+  'nativeCanvas.preview', 'canvasConversation.preview', 'presentations.analyze', 'images.search', 'stabilityai.generate',
+  // the interview in About you: each turn asks the agent
+  'interview.start', 'interview.turn']
 const CALLS = ['daily.join', 'daily.useVideo']
 const MONEY = ['wallet.refund', 'pro.portal',
   // the pay sheet's Manage pane (server/pro-manage.mjs): changes to Pro itself

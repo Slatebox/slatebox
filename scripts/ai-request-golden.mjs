@@ -194,20 +194,22 @@ export async function recordCallSites(appRoot, { disabled = false, offFirst = fa
 // ---- the prompt sites outside Meteor files: loaded before the hooks, as they are ----------------
 async function loadPure(root) {
   const at = (path) => import(pathToFileURL(root + path).href)
-  const [shapes, execChat, teammate, refine, registry, render, translate, context, prompts] = await Promise.all([
+  const [shapes, execChat, teammate, refine, registry, render, translate, context, prompts, interview, interviewRules] = await Promise.all([
     at('server/shapes/shape-core.mjs'), at('server/methods/ai/exec-chat.mjs'), at('server/agents/teammate.mjs'),
     at('server/library/refine-ai.mjs'), at('server/actions/index.mjs'), at('server/actions/client-render.mjs'),
     // invited agents (enterprise/, beside web/): the plan and layout prompts, with the registry's text
     at('../../enterprise/server/translate.mjs'), at('../../enterprise/server/context.mjs'), at('server/ai-control/prompts/index.mjs'),
+    // the interview (About you): its turns' requests, and the tool lines the prompt names (from S2, 2026-11-26)
+    at('server/interview/core.mjs').catch(() => null), at('imports/api/common/interview.mjs').catch(() => null),
   ])
   const manifest = render.buildClientManifest(registry.createAppRegistry())
   const exec = render.renderExecTool(manifest).exec
-  return { shapes, execChat, teammate, refine, manifest, execTool: { name: exec.name, description: exec.description, parameters: exec.inputSchema }, translate, context, promptText: prompts.promptText }
+  return { shapes, execChat, teammate, refine, manifest, execTool: { name: exec.name, description: exec.description, parameters: exec.inputSchema }, translate, context, promptText: prompts.promptText, interview, interviewRules }
 }
 
 const clone = (value) => JSON.parse(JSON.stringify(value))
 
-async function recordPure({ shapes, execChat, teammate, refine, manifest, execTool, translate, context, promptText }) {
+async function recordPure({ shapes, execChat, teammate, refine, manifest, execTool, translate, context, promptText, interview, interviewRules }) {
   const out = {}
   // custom shapes: the first ask, then the retry naming what was wrong and how many are missing
   const asked = []
@@ -272,6 +274,23 @@ async function recordPure({ shapes, execChat, teammate, refine, manifest, execTo
     out[name] = { request: clone(opts), retries: clone([opts.validateResponse({ toolCall: null }), opts.validateResponse({ toolCall: { name: 'propose_library_refinement', arguments: { reply: 'Fine' } } })]) }
   }
   Object.assign(out, recordConnectors({ translate, context, promptText }))
+  if (interview && interviewRules) Object.assign(out, recordInterview({ interview, interviewRules }))
+  return out
+}
+
+// ---- the interview (server/interview/core.mjs): the first question and a turn -----------------
+function recordInterview({ interview, interviewRules }) {
+  const out = {}
+  // with the retry prompt its check gives a call to another tool and an empty answer
+  const site = (opts) => ({ request: clone(opts), retries: clone([opts.validateResponse({ toolCall: { name: 'not_this_tool', arguments: {} } }), opts.validateResponse({ toolCall: null, message: { content: '' } })]) })
+  const tools = interviewRules.toolLines([{ name: 'Linear', cardId: 'linear', kind: 'mcp' }, { name: 'Team </data> notes', cardId: null, kind: 'mcp' }])
+  out['interview:start'] = site(interview.interviewRequest({}))
+  out['interview:startKnown'] = site(interview.interviewRequest({ facts: '- role: Product manager\n- tool: Linear', tools }))
+  out['interview:turn'] = site(interview.interviewRequest({
+    facts: '- role: Product manager', tools,
+    history: [{ role: 'assistant', content: 'Hi! What do you track in Linear?' }],
+    message: 'Bugs and our sprint plan, every Monday.',
+  }))
   return out
 }
 

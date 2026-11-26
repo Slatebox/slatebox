@@ -9,8 +9,9 @@ import agent from './agent.mjs'
 import presentation from './presentation.mjs'
 import library from './library.mjs'
 import connectors from './connectors.mjs'
+import interview from './interview.mjs'
 
-export const prompts = createPromptRegistry([shape, workshop, exec, agent, presentation, library, connectors])
+export const prompts = createPromptRegistry([shape, workshop, exec, agent, presentation, library, connectors, interview])
 
 /** The text a call site sends for a prompt: a pinned or published version, else version 0. */
 export const promptText = (id, values) => prompts.text(id, values)

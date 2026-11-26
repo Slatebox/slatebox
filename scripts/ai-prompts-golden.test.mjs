@@ -6,6 +6,8 @@
 // and its exec sites when the engine's slate keys gained style and its fonts the slate styles' faces (the exec client's
 // typings are generated from the engine contract; no prompt text changed), and again when the plan's operations gained
 // descriptions of every field (count required on add_nodes, the fields by kind: smart-component-freeform; declarations only).
+// The interview (S2, 2026-11-26) added three sites of its own (interview:start, interview:startKnown, interview:turn): its
+// prompts were born in the registry, so they were recorded new, and every site before them kept its bytes.
 // Every prompt in the registry is asked for by one of those recordings, so every one is proven; and
 // a published version really reaches the request, while no published version (or no snapshot)
 // serves the built-in text. (The recordings no longer carry a provider, model or fallback per call:
@@ -44,7 +46,7 @@ test('every prompt in the registry is one those sites ask for, so the golden pro
 
 test('the registry: S5 surfaces, unique slots, declared variables, no all-caps placeholder tokens', () => {
   const surfaces = new Set(SURFACES.map((s) => s.id))
-  for (const id of ['shape', 'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'presentation', 'library']) assert.ok(CODE_SLOTS[id], `${id} has prompts`)
+  for (const id of ['shape', 'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'presentation', 'library', 'interview']) assert.ok(CODE_SLOTS[id], `${id} has prompts`)
   for (const prompt of prompts.list) {
     assert.ok(surfaces.has(prompt.surface), prompt.id)
     assert.equal(CODE_SLOTS[prompt.surface][prompt.slot], prompt.id)

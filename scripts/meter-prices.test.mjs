@@ -66,7 +66,10 @@ test('fixed prices, estimates and per-action ceilings', () => {
   assert.deepEqual(ESTIMATES, {
     workshop: 5000, 'lane-chat': 3000, 'map-chat': 3000, welcome: 2000, generation: 30000,
     presentation: 10000, 'image-search': 5000, 'image-generation': 30000, shape: 8000,
+    // the interview (S2, 2026-11-26): one conversation turn, chat's estimate
+    interview: 2000,
   })
+  assert.equal(actionCeilingMicros('interview'), 50_000)
   assert.equal(actionCeilingMicros('generation'), 200_000)
   // A custom shape is a short prompt and at most one retry.
   assert.equal(actionCeilingMicros('shape'), 60_000)

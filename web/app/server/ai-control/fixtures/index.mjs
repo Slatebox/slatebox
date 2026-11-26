@@ -10,6 +10,7 @@ import agent from './agent.mjs'
 import presentation from './presentation.mjs'
 import library from './library.mjs'
 import connectors from './connectors.mjs'
+import interview from './interview.mjs'
 
-export const FIXTURES = Object.freeze(Object.fromEntries([shape, workshop, workshopDraft, canvas, agent, presentation, library, connectors].map((f) => [f.surface, f])))
+export const FIXTURES = Object.freeze(Object.fromEntries([shape, workshop, workshopDraft, canvas, agent, presentation, library, connectors, interview].map((f) => [f.surface, f])))
 export const fixtureFor = (surface) => FIXTURES[surface] || null

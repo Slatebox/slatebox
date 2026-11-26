@@ -32,8 +32,14 @@ function takeFocusAfterReload(shareId) {
  * and keeps its newest turn in sight (a reply taller than the area opens at the question it answers:
  * common/newestTurn.mjs). What is read from the top (the empty slate's first turn, the
  * library) is anchored at the 'top' and opens there, never scrolled to its foot.
+ *
+ * The same panel holds other talks with the agent away from a slate (the interview in Profile ›
+ * About you): `title` names it, `inline` lays it in the page's column instead of beside a canvas,
+ * and `returnFocus` is the control × gives focus back to (the one that opened it). `headingLevel`
+ * puts its name under the page's own heading (h3 inside a section); inline, the name can take focus
+ * (data-conversation-title), so the talk can be announced the moment it opens.
  */
-export default function ConversationPanel({ onClose, children, composer, anchor = 'bottom' }) {
+export default function ConversationPanel({ onClose, children, composer, anchor = 'bottom', title = 'Ask Slatebox', inline = false, returnFocus = '[data-conversation-toggle]', headingLevel = 'h2' }) {
   const history = useRef(null)
   const grown = useRef(0)
   // In sight: a conversation the slate opened by itself is here now (its button closes it after a moment).
@@ -61,9 +67,11 @@ export default function ConversationPanel({ onClose, children, composer, anchor 
   // bar's on a narrow screen), not to the page.
   const close = () => {
     onClose()
-    requestAnimationFrame(() => document.querySelector('[data-conversation-toggle]')?.focus())
+    requestAnimationFrame(() => document.querySelector(returnFocus)?.focus())
   }
-  return <Paper component="aside" square elevation={3} aria-label="Ask Slatebox" sx={{position:'relative',zIndex:1200,flexShrink:0,boxSizing:'border-box',
+  // In a page's column: as wide as the column, a bordered card of its own height, under nothing.
+  const placed = inline ? {zIndex:'auto',width:'100%',height:'min(70dvh, 640px)',maxHeight:'none',border:1,borderColor:'divider',borderRadius:2,[wide]:{width:'100%'}} : {}
+  return <Paper component="aside" square={!inline} elevation={inline ? 0 : 3} aria-label={title} sx={{position:'relative',zIndex:1200,flexShrink:0,boxSizing:'border-box',
     display:'flex',flexDirection:'column',minHeight:0,width:'auto',borderTop:1,borderColor:'divider',
     // Under the canvas, it leaves the canvas at least 130px (after the header, the bar under it and an
     // unanswered cookie notice), so what a preview draws can be seen before it is kept; but it keeps
@@ -71,9 +79,9 @@ export default function ConversationPanel({ onClose, children, composer, anchor 
     maxHeight:'min(57dvh, max(130px, calc(100dvh - 250px - var(--sb-cookie-room, 0px))))',
     // Held sideways, it takes all of that, and the conversation gets what the message box leaves.
     '@media (max-height:500px) and (max-width:999.98px)':{height:'min(57dvh, max(130px, calc(100dvh - 250px - var(--sb-cookie-room, 0px))))'},
-    [wide]:{width:344,maxHeight:'none',borderTop:0}}}>
+    [wide]:{width:344,maxHeight:'none',borderTop:0},...placed}}>
     <Box sx={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:1,flex:'none',px:2.5,pt:1.5,pb:.5,[wide]:{pt:2.5},[short]:{pt:.5,pb:0}}}>
-      <Typography component="h2" variant="h6">Ask Slatebox</Typography>
+      <Typography component={headingLevel} variant="h6" tabIndex={inline ? -1 : undefined} data-conversation-title={inline ? '' : undefined} sx={inline ? {outline:'none'} : undefined}>{title}</Typography>
       <Tooltip title="Close"><IconButton aria-label="Close conversation" onClick={close} sx={{mr:-1}}><CloseIcon /></IconButton></Tooltip>
     </Box>
     <Box ref={setIntroSlot} data-conversation-intro="" sx={{flex:'none',px:2.5,'&:empty':{display:'none'}}} />

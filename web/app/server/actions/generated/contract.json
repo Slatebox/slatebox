@@ -10184,6 +10184,14 @@
                 ],
                 "maxLength": 48,
                 "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
+              },
+              "interview": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 48,
+                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
               }
             },
             "additionalProperties": false,
@@ -10803,6 +10811,7 @@
               "agent.slatebox",
               "library",
               "connectors",
+              "interview",
               "eval"
             ],
             "description": "For target binding: the part of Slatebox."
@@ -10869,7 +10878,11 @@
               "connectors.recipe.context7",
               "connectors.recipe.wolfram",
               "connectors.recipe.firecrawl",
-              "connectors.recipe.exa"
+              "connectors.recipe.exa",
+              "interview.system",
+              "interview.opening",
+              "interview.retry",
+              "tool.remember"
             ],
             "description": "For target prompt: the prompt."
           },
@@ -11828,7 +11841,7 @@
           "changes": {
             "type": "array",
             "minItems": 1,
-            "maxItems": 15,
+            "maxItems": 16,
             "items": {
               "type": "object",
               "properties": {
@@ -11849,6 +11862,7 @@
                     "agent.slatebox",
                     "library",
                     "connectors",
+                    "interview",
                     "eval"
                   ],
                   "description": "The part of Slatebox, for example shape or agent.slatebox; default is everything not set."
@@ -12057,7 +12071,11 @@
               "connectors.recipe.context7",
               "connectors.recipe.wolfram",
               "connectors.recipe.firecrawl",
-              "connectors.recipe.exa"
+              "connectors.recipe.exa",
+              "interview.system",
+              "interview.opening",
+              "interview.retry",
+              "tool.remember"
             ],
             "description": "The prompt, for example shape.system."
           }
@@ -12198,7 +12216,11 @@
               "connectors.recipe.context7",
               "connectors.recipe.wolfram",
               "connectors.recipe.firecrawl",
-              "connectors.recipe.exa"
+              "connectors.recipe.exa",
+              "interview.system",
+              "interview.opening",
+              "interview.retry",
+              "tool.remember"
             ],
             "description": "The prompt, for example shape.system."
           },
@@ -12368,7 +12390,11 @@
               "connectors.recipe.context7",
               "connectors.recipe.wolfram",
               "connectors.recipe.firecrawl",
-              "connectors.recipe.exa"
+              "connectors.recipe.exa",
+              "interview.system",
+              "interview.opening",
+              "interview.retry",
+              "tool.remember"
             ],
             "description": "The prompt, for example shape.system."
           },
@@ -12537,7 +12563,11 @@
               "connectors.recipe.context7",
               "connectors.recipe.wolfram",
               "connectors.recipe.firecrawl",
-              "connectors.recipe.exa"
+              "connectors.recipe.exa",
+              "interview.system",
+              "interview.opening",
+              "interview.retry",
+              "tool.remember"
             ],
             "description": "The prompt, for example shape.system."
           },
@@ -12585,6 +12615,7 @@
               "agent.slatebox",
               "library",
               "connectors",
+              "interview",
               "eval"
             ],
             "description": "Whose binding (model chain) to test against."

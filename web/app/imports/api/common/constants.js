@@ -287,6 +287,12 @@ const CONSTANTS = {
         set: 'profile.settings.set',
       },
     },
+    // The interview in About you (server/methods/interview.js): the agent's turns, and keeping what it proposed
+    interview: {
+      start: 'interview.start',
+      turn: 'interview.turn',
+      keep: 'interview.keep',
+    },
     users: {
       createAnonymous: 'users.createAnonymous',
       identify: 'users.identify',

@@ -162,6 +162,19 @@ export function publicIntegration(doc, { slates = [], cards = GALLERY } = {}) {
   }
 }
 
+/**
+ * What personalization may know of an integration (the interview plans its questions from it,
+ * web/app/server/profile/integration-hooks.mjs): its name, the gallery card it came from and its kind.
+ * Never its address, a token, its tools or anything it holds.
+ */
+export function profileIntegration(doc, cards = GALLERY) {
+  return {
+    name: String(doc?.name || ''),
+    cardId: doc?.galleryId || cardFor(doc?.address, cards)?.id || null,
+    kind: doc?.kind || 'mcp',
+  }
+}
+
 /** The principal an invited agent's work runs as: the inviter's account, named after the agent. */
 export const connectorPrincipal = (connection, runId) => ({
   kind: 'agent',

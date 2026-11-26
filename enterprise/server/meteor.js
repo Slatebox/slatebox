@@ -28,10 +28,11 @@ import { presence } from '/server/presence/meteor'
 import { firstNameOf, sanitizeClientName } from '/imports/api/common/agent-label.mjs'
 import { AIAgents, LibraryItems, Slates } from '/imports/api/common/models'
 import { setLibraryIntegrations } from '/server/library/integration-hooks.mjs'
+import { setProfileIntegrations } from '/server/profile/integration-hooks.mjs'
 import { loadMasterKey } from '/server/metering/vault.mjs'
 import { createMcpFetch } from './mcp-fetch.mjs'
 import { callTool, discover } from './mcp-session.mjs'
-import { ConnectorRefused, createConnectorService, meterRefusal } from './service.mjs'
+import { ConnectorRefused, createConnectorService, meterRefusal, profileIntegration } from './service.mjs'
 import { connectorSettings } from './connector-settings.mjs'
 import { cardFor, retiredFor } from '../common/gallery.mjs'
 import { communityCard, liveGallery } from './gallery-admin.mjs'
@@ -345,6 +346,16 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     probe: unlockedOr((address) => service.reviewProbe(address)),
     covered: async (address) => Boolean(cardFor(address, await gallery())),
     changed: async () => { galleryCache = { at: 0, cards: null } },
+  })
+  // The interview (About you) plans its questions from the tools a person connected: names, cards and
+  // kinds only, never an address, a token or anything a tool holds; none while the license does not hold.
+  setProfileIntegrations({
+    connected: async (userId) => {
+      if (!isUnlocked() || !userId) return []
+      const cards = await gallery()
+      const rows = await integrationsStore.find({ ownerId: userId })
+      return rows.map((doc) => profileIntegration(doc, cards))
+    },
   })
   // Keeping an action card's note approves its change: the app's suggestions.decide asks the service
   // first (only while enterprise code is unlocked; a locked server has no cards).

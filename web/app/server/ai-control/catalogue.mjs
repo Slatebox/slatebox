@@ -94,6 +94,9 @@ export const SURFACES = defineSurfaces([
   // the meter's workshop estimate and default ceiling apply (5,000 and 50,000 µ$).
   { id: 'library', title: 'Library review and refinement', follows: 'chat', ownRow: true, needs: ['tools'], requestFeatures: ['library-refine'], meterFeatures: ['library-refine'] },
   { id: 'connectors', title: 'Outside agents: planning and laying out results', follows: 'chat', needs: ['tools'], requestFeatures: ['connectors'], meterFeatures: ['connectors'] },
+  // The interview (About you): the agent asks about the person's work, one question a turn, and proposes facts
+  // with its remember tool for the person to keep. A conversation turn, metered as one (chat's estimate and ceiling).
+  { id: 'interview', title: 'Getting to know you (the interview)', follows: 'chat', needs: ['tools'], requestFeatures: ['interview'], meterFeatures: ['interview'], estimate: 2000, ceiling: 50000 },
   // Prompt test runs and eval gates name their model per call; the row keeps them out of `chat`.
   { id: 'admin.test', title: 'Admin test runs', follows: null, useKey: false, estimate: 30000, ceiling: 200000 },
   // The judge of the live evals (scripts/evals): an administrator's choice only, never a person's, so a model other

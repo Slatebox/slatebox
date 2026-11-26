@@ -36,6 +36,8 @@ import './methods/creative-slates'
 import './methods/first-slate'
 import './methods/native-conversation'
 import './methods/canvas-conversation'
+// the interview in About you: the agent gets to know the person's work (server/interview/core.mjs)
+import './methods/interview'
 import './methods/excalidraw-share'
 import './agents/meteor'
 import './agents/suggestions-meteor'

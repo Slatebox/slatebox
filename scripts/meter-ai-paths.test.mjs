@@ -72,6 +72,8 @@ test('every AI entry point calls runAIAction', () => {
     ['server/methods/images.js', 'method[CONSTANTS.methods.images.search]'],
     // exec: the in-app conversation's AI path (the model writes exec code); every model call of the turn
     ['server/methods/canvas-conversation.js', 'const result = useAI ?'],
+    // the interview in About you (S2): each turn's one model call, through server/interview/core.mjs's run
+    ['server/methods/interview.js', 'run: (userId, fn) =>'],
   ]
   for (const [file, marker] of entries) {
     const text = source(file)
@@ -99,6 +101,8 @@ test('the set of files that call req is known, and each is reached only through 
     'server/methods/ai/processTemplateAugment.js',
     // the in-app conversation on exec: its AI turn runs inside runAIAction
     'server/methods/canvas-conversation.js',
+    // the interview's turns: every request runs inside runAIAction({ feature: 'interview' }) (server/interview/core.mjs)
+    'server/methods/interview.js',
     'server/methods/openai.js',
     'server/methods/presentations.js',
     'server/methods/workshops.js',

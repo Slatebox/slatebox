@@ -31,7 +31,12 @@ test("the canvas page has no floating Ask Slatebox button and names its panel As
   const canvas = await read("pages/Canvas.jsx");
   assert.doesNotMatch(canvas, /position:'fixed',right:16,top:76/);
   const panel = await read("components/ConversationPanel.jsx");
-  assert.match(panel, /aria-label="Ask Slatebox"/);
+  // Its name is its title, Ask Slatebox unless another talk names it (the interview in About you, 2026-11-26).
+  assert.match(panel, /title = 'Ask Slatebox'/)
+  assert.match(panel, /aria-label=\{title\}/)
+  // an h2 by default; the interview puts it under its section's h2 as an h3 (headingLevel, 2026-11-26)
+  assert.match(panel, /headingLevel = 'h2'/)
+  assert.match(panel, /<Typography component=\{headingLevel\} variant="h6"[^>]*>\{title\}<\/Typography>/);
   assert.doesNotMatch(panel, />Slatebox</);
 });
 

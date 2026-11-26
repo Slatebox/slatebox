@@ -7,6 +7,7 @@ import agent from './agent.mjs'
 import presentation from './presentation.mjs'
 import library from './library.mjs'
 import connectors from './connectors.mjs'
+import interview from './interview.mjs'
 
-export const EVALS = Object.freeze({ shape, workshop, 'workshop.draft': workshopDraft, canvas, 'agent.slatebox': agent, presentation, library, connectors })
+export const EVALS = Object.freeze({ shape, workshop, 'workshop.draft': workshopDraft, canvas, 'agent.slatebox': agent, presentation, library, connectors, interview })
 export const evalsFor = (surface) => EVALS[surface] || []

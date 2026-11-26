@@ -14,11 +14,13 @@ import CONSTANTS from '../../../api/common/constants'
 import confirmService from '../../common/confirm'
 import { FACT_KINDS, KIND_LABELS, LIMITS, groupFacts, profileDownload, sourceLine } from '../../../api/common/personal-facts.mjs'
 import { AccountActions, AccountPanel, AccountSection, FinePrint, SPACE } from '../../common/AccountLayout'
+import Interview from './Interview'
 
 // Profile › About you: what Slatebox knows about the person, so it can suggest boards and slates
 // made for their work. Only they see it. Every fact says where it came from and can be changed,
 // hidden or removed; personalization can be switched off; everything can be downloaded or
-// deleted. The same actions serve the API, exec and MCP (server/actions/profile.mjs).
+// deleted. The same actions serve the API, exec and MCP (server/actions/profile.mjs). "Talk with
+// Slatebox about your work" opens the interview (Interview.jsx): the agent asks, the person keeps.
 const M = CONSTANTS.methods.profile
 const reason = (error, fallback) => error?.reason || error?.message || fallback
 const field = { maxWidth: 480 }
@@ -134,6 +136,8 @@ export default function AboutYou() {
   const [error, setError] = useState({ at: '', message: '' })
   // Said to screen readers after each change ("Added.", "Hidden."), the same words again too.
   const [status, setStatus] = useState('')
+  // The interview is open here (Interview.jsx).
+  const [talking, setTalking] = useState(false)
   const busy = useRef(false)
   const addField = useRef(null)
   const statusTimer = useRef(null)
@@ -234,6 +238,23 @@ export default function AboutYou() {
     })
   }
   const toggle = (on) => run('page', async () => setSwitches(await Meteor.callAsync(M.settings.set, { on })), on ? 'Personalization is on.' : 'Personalization is off.')
+  // The interview as a source: on until switched off (personal-facts.mjs sourceOn).
+  const interviewOn = settings.sources?.interview !== false
+  const canTalk = loaded && settings.on && interviewOn
+  const toggleInterview = (on) => run('talk', async () => setSwitches(await Meteor.callAsync(M.settings.set, { sources: { interview: on } })),
+    on ? 'Learning from talks with the agent is on.' : 'Learning from talks with the agent is off.')
+  const openTalk = () => {
+    if (!canTalk) return
+    setTalking(true)
+    // focus goes to the talk's name as it opens (Interview.jsx); the scroll respects reduced motion
+    const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    later(() => document.querySelector('[data-about-you-interview]')?.scrollIntoView({ block: 'start', behavior: still ? 'auto' : 'smooth' }))
+  }
+  const endTalk = (kept) => {
+    setTalking(false)
+    announce(kept?.length ? `The talk ended. ${kept.length === 1 ? 'One thing was' : `${kept.length} things were`} kept.` : 'The talk ended.')
+    later(() => document.querySelector('[data-interview-open]')?.focus())
+  }
 
   const download = () => {
     const doc = profileDownload({ facts, settings: switches })
@@ -290,6 +311,26 @@ export default function AboutYou() {
         <Box role="status" aria-live="polite" sx={visuallyHidden}>{status}</Box>
       </AccountSection>
 
+      <AccountSection title="Talk with Slatebox" data-about-you-interview="">
+        {talking ? <Interview onKept={load} onDone={endTalk} /> : (
+          <>
+            <Typography>The agent asks about your role, your team and the work you do, one question at a time. You choose what to keep, and you can skip anything.</Typography>
+            <FinePrint>To ask better questions, the agent sees the names of the tools you connected to Slatebox, never what they hold.</FinePrint>
+            <FormControlLabel
+              sx={{ alignSelf: 'flex-start' }}
+              control={<Switch checked={loaded && interviewOn} onChange={(e) => toggleInterview(e.target.checked)} disabled={!loaded || !settings.on} slotProps={{ input: { role: 'switch' } }} />}
+              label="Learn from talks with the agent"
+            />
+            {loaded && !settings.on && <FinePrint>Turn on personalization above to talk with the agent.</FinePrint>}
+            {loaded && settings.on && !interviewOn && <FinePrint>Switch on &ldquo;Learn from talks with the agent&rdquo; to start a talk.</FinePrint>}
+            {errorAt('talk') && <Alert severity="warning" role="alert">{errorAt('talk')}</Alert>}
+            <AccountActions>
+              <Button variant="contained" color="secondary" onClick={openTalk} disabled={!canTalk} data-interview-open="">Talk with Slatebox about your work</Button>
+            </AccountActions>
+          </>
+        )}
+      </AccountSection>
+
       <AccountSection title="Add something about you">
         <Box component="form" onSubmit={add} sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: SPACE.text }} aria-label="Add something about you">
           <TextField id="about-you-text" inputRef={addField} size="small" label="What Slatebox should know" placeholder="Product manager on a team of six"
@@ -306,9 +347,18 @@ export default function AboutYou() {
         {facts === null && !loadFailed && <FinePrint>Reading…</FinePrint>}
         {facts === null && loadFailed && <FinePrint>Your facts show here once About you can be read.</FinePrint>}
         {loaded && groups.length === 0 && (
-          <FinePrint data-about-you-empty="">
-            Nothing here yet. Add something above, such as your role or the tools you use. An interview with the agent is coming, to help you fill this in.
-          </FinePrint>
+          <>
+            <FinePrint data-about-you-empty="">
+              {canTalk
+                ? 'Nothing here yet. Add something above, such as your role or the tools you use, or talk with Slatebox about your work and keep what you choose.'
+                : 'Nothing here yet. Add something above, such as your role or the tools you use.'}
+            </FinePrint>
+            {canTalk && !talking && (
+              <AccountActions>
+                <Button variant="outlined" color="secondary" onClick={openTalk} data-about-you-empty-talk="">Start a talk with Slatebox</Button>
+              </AccountActions>
+            )}
+          </>
         )}
         {groups.map((group) => (
           <Box key={group.kind} sx={{ display: 'flex', flexDirection: 'column', gap: SPACE.tight }}>

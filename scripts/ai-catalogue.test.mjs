@@ -37,6 +37,10 @@ const ESTIMATES_BEFORE = {
   workshop: 5000, 'lane-chat': 3000, 'map-chat': 3000, welcome: 2000, generation: 30000,
   presentation: 10000, 'image-search': 5000, 'image-generation': 30000, shape: 8000,
 }
+// Surfaces that landed after the catalogue, each with the estimate and ceiling its row names: the interview (S2,
+// 2026-11-26) is a conversation turn, metered as chat's (2,000 and 50,000 µ$).
+const ESTIMATES_ADDED = { interview: 2000 }
+const CEILINGS_ADDED = { interview: 50_000 }
 const CEILINGS_BEFORE = { generation: 200_000, vision: 200_000, presentation: 200_000, shape: 60_000 }
 
 test('every request feature reaches the same choice as before the catalogue', () => {
@@ -50,6 +54,7 @@ test('request features name their own surface; a router step belongs to its feat
     presentation: 'presentation', vision: 'vision', 'image-generation': 'images', images: 'images', shape: 'shape',
     'lane-chat': 'workshop', 'map-chat': 'workshop', workshop: 'workshop.draft', canvas: 'canvas', agent: 'agent.slatebox',
     'library-refine': 'library', connectors: 'connectors', 'generation-route': 'generation', 'canvas-route': 'canvas',
+    interview: 'interview', 'interview-route': 'interview',
     'image-search': null, call: null, 'not-a-feature-yet': 'chat',
   }
   for (const [feature, at] of Object.entries(expected)) assert.equal(surfaceForRequest(feature), at, feature)
@@ -78,7 +83,10 @@ test('the follows tree: one table, every chain ends at default', () => {
   assert.equal(surface('eval').follows, null)
   assert.equal(surfaceForRequest('eval'), 'eval')
   const roots = { chat: 'chat', 'chat.route': 'chat', workshop: 'chat', 'workshop.draft': 'chat', canvas: 'chat', 'agent.slatebox': 'chat',
-    library: 'library', connectors: 'chat', 'generation.notes': 'generation', generation: 'generation', images: 'images', default: 'default' }
+    library: 'library', connectors: 'chat', interview: 'chat', 'generation.notes': 'generation', generation: 'generation', images: 'images', default: 'default' }
+  // the interview follows the conversation until an administrator binds it
+  assert.deepEqual(followChain('interview'), ['interview', 'chat', 'default'])
+  assert.equal(choiceFeatureFor('interview'), 'chat')
   for (const [id, root] of Object.entries(roots)) assert.equal(rootSurface(id), root, id)
 })
 
@@ -88,7 +96,7 @@ test('library and connectors have landed: both are in this build; connectors run
   assert.equal(surface('connectors').edition, null)
   const inBuild = SURFACES.filter((s) => s.inBuild && s.useKey).map((s) => s.id)
   assert.deepEqual(inBuild, ['default', 'chat', 'chat.route', 'generation', 'generation.notes', 'presentation', 'vision', 'images', 'shape',
-    'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors'])
+    'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors', 'interview'])
 })
 
 test('the features people choose first are the catalogue rows that follow default, unchanged, then library (a row of its own that follows chat)', () => {
@@ -107,11 +115,12 @@ test('the features people choose first are the catalogue rows that follow defaul
 })
 
 test('the meter keeps every estimate and ceiling', () => {
-  assert.deepEqual({ ...ESTIMATES }, ESTIMATES_BEFORE)
+  assert.deepEqual({ ...ESTIMATES }, { ...ESTIMATES_BEFORE, ...ESTIMATES_ADDED })
   assert.equal(ESTIMATES, METER_ESTIMATES)
   for (const feature of [...Object.keys(ESTIMATES_BEFORE), 'vision', 'canvas', 'agent', 'library-refine', 'connectors', 'unknown']) {
     assert.equal(actionCeilingMicros(feature), CEILINGS_BEFORE[feature] ?? 50_000, feature)
   }
+  for (const [feature, ceiling] of Object.entries(CEILINGS_ADDED)) assert.equal(actionCeilingMicros(feature), ceiling, feature)
   // a ceiling the catalogue names for a feature always beats the default
   for (const [feature, ceiling] of Object.entries(METER_CEILINGS)) assert.equal(actionCeilingMicros(feature), ceiling, feature)
 })

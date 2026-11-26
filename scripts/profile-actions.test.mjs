@@ -316,9 +316,14 @@ test("the About you tab: the explanation, the switch, facts by kind with edit, h
   assert.match(tab, /e\.key === 'Escape'/);
   assert.match(tab, /editButton\.current\?\.focus\(\)/);
   assert.match(tab, /aria-label=\{`Edit: \$\{fact\.text\}`\}/);
-  // The empty state names only what is coming, the interview, and promises nothing else.
-  const empty = tab.slice(tab.indexOf("data-about-you-empty"), tab.indexOf("</FinePrint>", tab.indexOf("data-about-you-empty")));
-  assert.match(empty, /An interview with the agent is coming/);
+  // The empty state offers the interview, now real (S2, 2026-11-26: it said "is coming" until then), and promises nothing else.
+  const empty = tab.slice(tab.indexOf("data-about-you-empty"), tab.indexOf("</AccountActions>", tab.indexOf("data-about-you-empty")));
+  assert.match(empty, /or talk with Slatebox about your work and keep what you choose\./);
+  // its own name, so it is not a second "Talk with Slatebox about your work" on the page; offered only when a talk can start
+  assert.match(empty, /onClick=\{openTalk\}[^>]*>Start a talk with Slatebox</);
+  assert.match(empty, /canTalk\s*\?\s*'Nothing here yet\. Add something above, such as your role or the tools you use, or talk with Slatebox/);
+  assert.match(empty, /: 'Nothing here yet\. Add something above, such as your role or the tools you use\.'/);
+  assert.doesNotMatch(empty, /coming/);
   assert.doesNotMatch(empty, /LinkedIn|Facebook|Instagram|Notion|Slack|connect|upload/i);
   // Plain words: no all-caps placeholders, "agent" rather than "AI".
   const copy = [
@@ -331,6 +336,8 @@ test("the About you tab: the explanation, the switch, facts by kind with edit, h
 });
 
 test("MIT core: About you imports nothing from enterprise/", () => {
-  for (const file of ["imports/api/common/personal-facts.mjs", "server/profile/store.mjs", "server/profile/meteor.js", "server/actions/profile.mjs", "imports/ui/components/profile/AboutYou.jsx"])
+  for (const file of ["imports/api/common/personal-facts.mjs", "server/profile/store.mjs", "server/profile/meteor.js", "server/actions/profile.mjs", "imports/ui/components/profile/AboutYou.jsx",
+    // the interview (S2): its rules, its turns, its methods and its panel
+    "imports/api/common/interview.mjs", "server/interview/core.mjs", "server/methods/interview.js", "imports/ui/components/profile/Interview.jsx"])
     assert.doesNotMatch(app(file), /enterprise/i, file);
 });
