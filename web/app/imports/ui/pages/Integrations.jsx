@@ -1,7 +1,7 @@
 // /integrations: every outside agent and Google account a person connected once, to invite onto any
-// slate (owner, 2026-11-24). The page itself is enterprise code (the integrations.page slot): on an
-// install where enterprise code is locked there is no such page, so the address goes to Profile and
-// no control here offers what the server would refuse.
+// slate (owner, 2026-11-24; free everywhere since 2026-11-26). The page itself is enterprise code
+// (the integrations.page slot): on a build without it there is no such page, so the address goes to
+// Profile and no control here offers what the server would refuse.
 import React from 'react'
 import { Meteor } from 'meteor/meteor'
 import { Navigate } from 'react-router-dom'

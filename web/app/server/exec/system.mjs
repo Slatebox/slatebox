@@ -31,19 +31,8 @@ export function createExecSystem({
   const isReplay = async (subject, key) => (await idempotency?.get(subject, key))?.state === 'done'
   const gate = createGate({ registry, manifest, limits, readSlate, audienceOf, isReplay, store, now })
   const pool = sharedPool || createRunnerPool({ childPath, runEntry, limits, nodePath, now, ...(log && { log }) })
-  const service = createExecService({ gate, pool, store, wrap: (code) => wrapScript(prelude, code), limits, now, presence, redact: liveRedactor(registry), ...(log && { log }) })
+  const service = createExecService({ gate, pool, store, wrap: (code) => wrapScript(prelude, code), limits, now, presence, redact: createCodeRedactor(registry), ...(log && { log }) })
   return { manifest, prelude, store, gate, pool, service }
-}
-
-// The redactor for the registry as it stands: built again when actions join after start
-// (registry.extend), so a secret field of a late action (an outside agent's key) is never kept in a record.
-export function liveRedactor(registry) {
-  let built = { version: null, redact: null }
-  return (code) => {
-    const version = typeof registry.version === 'function' ? registry.version() : 0
-    if (built.version !== version) built = { version, redact: createCodeRedactor(registry) }
-    return built.redact(code)
-  }
 }
 
 // The registry every HTTP route is mounted with: a call that carries exec headers goes through

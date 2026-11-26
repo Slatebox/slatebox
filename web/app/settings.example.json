@@ -64,7 +64,7 @@
     "zoneIdForCacheToClear": ""
   },
   "googleDocs": {
-    "//": "The OAuth client for the Google integration (enterprise: Pro or Business on Cloud, licensed installs; docs/integrations.md). A Google Cloud web application client whose consent screen asks only for drive.file; add the app's origin to its Authorized JavaScript origins (the sign-in is Google's popup, so no redirect address is used). Server only.",
+    "//": "The OAuth client for the Google integration (enterprise: free for everyone, on Cloud and on every self-hosted install; docs/integrations.md). A Google Cloud web application client whose consent screen asks only for drive.file; add the app's origin to its Authorized JavaScript origins (the sign-in is Google's popup, so no redirect address is used). Server only.",
     "web": {
       "client_id": "",
       "client_secret": "",
@@ -126,7 +126,7 @@
     }
   },
   "enterprise": {
-    "//": "Enterprise features (enterprise/: outside agent connections, invited agents and their integrations) run on Slatebox Cloud (with Cloud's own signed key, kind cloud) and on a self-hosted install once a license key from Slatebox LLC unlocks them (Upgrade on prem). Each key names the host names it covers (public.baseUrl), one install per on-prem license. license: the key itself; or licenseFile: a file holding it; or the SLATEBOX_LICENSE or SLATEBOX_LICENSE_FILE environment variables. Checked offline at start (server/enterprise-license.mjs). Single sign-on with the bundled Keycloak needs no license.",
+    "//": "Integrations (enterprise/: outside agent connections, invited agents and Google) are free everywhere: they run on every self-hosted install with no key, and on Slatebox Cloud, which proves itself with Cloud's own signed key (kind cloud, naming Cloud's host names in public.baseUrl). Slatebox Cloud only: license holds that key; or licenseFile a file holding it; or the SLATEBOX_LICENSE or SLATEBOX_LICENSE_FILE environment variables. Checked offline at start (server/enterprise-license.mjs). A self-hosted install leaves both empty.",
     "license": "",
     "licenseFile": ""
   },

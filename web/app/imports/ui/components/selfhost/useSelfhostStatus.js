@@ -1,11 +1,8 @@
-// What the header button and its panel know (the selfhost.status method): who asks, the team, the
-// license and the flows under way. Asked once per account and shared; refresh() asks again.
-// The enterprise state itself is live: enterprise code unlocked while the page is open re-renders
-// every component that reads it (enterpriseClient.subscribe).
-import React, { useSyncExternalStore } from 'react'
+// What the header's Move to Cloud, its panel and the moved banner know (the selfhost.status method):
+// who asks, the team and the move under way. Asked once per account and shared; refresh() asks again.
+import React from 'react'
 import { Meteor } from 'meteor/meteor'
 import { useTracker } from 'meteor/react-meteor-data'
-import { enterpriseClient } from '../../../api/client/enterprise-slots.mjs'
 import { editionOf } from '../../../api/common/edition.mjs'
 
 const asked = new Map()
@@ -27,9 +24,6 @@ export function refreshSelfhostStatus() {
   notify()
 }
 
-/** Re-renders when enterprise code is unlocked on this page. */
-export const useEnterpriseGeneration = () => useSyncExternalStore(enterpriseClient.subscribe, enterpriseClient.generation)
-
 export default function useSelfhostStatus() {
   const { userId, guest } = useTracker(() => ({ userId: Meteor.userId(), guest: Boolean(Meteor.user()?.isAnonymous) }))
   const [state, setState] = React.useState({ userId: null, status: null })
@@ -41,7 +35,7 @@ export default function useSelfhostStatus() {
   }, [])
   React.useEffect(() => {
     let live = true
-    // Slatebox Cloud asks nothing: there is nothing to offer there.
+    // Slatebox Cloud asks nothing: there is nothing to move there.
     if (!userId || guest || editionOf(Meteor.settings) === 'cloud') {
       setState({ userId, status: null })
       return undefined

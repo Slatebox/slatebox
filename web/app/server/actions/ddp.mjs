@@ -10,8 +10,7 @@ export function mountDdp(registry, options) {
   return Object.keys(methods)
 }
 
-// The Meteor methods for some of the registry's actions: all of them at start (mountDdp), or those
-// that joined later (registry.extend: enterprise code a license unlocked while the server ran).
+// The Meteor methods for the registry's actions (mountDdp, at start).
 export function ddpMethodsFor(registry, actions, { makeError, loadUser, scopes }) {
   const methods = {}
   for (const action of actions) {

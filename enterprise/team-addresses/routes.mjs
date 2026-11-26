@@ -12,7 +12,7 @@
 // closed() and gate() are checked on every request. On Slatebox Cloud with the Cloudflare settings
 // missing or paused (settings.cloudflare.teamClaims absent, incomplete or paused: true), every route
 // answers 503 paused with a plain message and nothing reaches Cloudflare. Off Slatebox Cloud (no
-// Cloud key, an on-prem license), every route answers the same 404 as an unknown /api/v1 route.
+// Cloud key: every self-hosted install), every route answers the same 404 as an unknown /api/v1 route.
 // Every answer is Cache-Control: no-store; errors are {error:{code,message}} like the rest of /api/v1.
 import { CLAIM_ID, TeamAddressError } from './claims.mjs'
 

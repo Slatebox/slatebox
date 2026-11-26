@@ -1,7 +1,8 @@
 # Integrations: connect once, invite anywhere
 
-Integrations are part of Slatebox Pro and Slatebox Business on Slatebox Cloud, and of every
-self-hosted install with a Slatebox license. Plans and prices: <https://slatebox.com/plans/>.
+Integrations are free for everyone: on Slatebox Cloud with any account, and on every self-hosted
+install with no key. The agent work they run counts like any other agent request: on Slatebox Cloud
+against your Slatebox Pro credits; on a self-hosted install on the agent keys its administrator sets.
 
 ## What an integration is
 

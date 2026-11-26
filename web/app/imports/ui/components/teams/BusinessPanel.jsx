@@ -97,7 +97,7 @@ export default function BusinessPanel() {
     ) : <Typography variant="body2" sx={{ color: 'text.secondary' }}>The team&apos;s owner and admins manage it.</Typography>
   } else if (onSale && manager) {
     status = { label: 'Not active', tone: 'off' }
-    facts = 'A shared AI and call pool for the team, and every member can invite outside agents onto slates.'
+    facts = 'A shared AI and call pool for the team.'
     fine = <>{BUSINESS.summary} You pay for the {offer.members} {offer.members === 1 ? 'member who has' : 'members who have'} joined; invitations not yet accepted are not counted until they are. {pricing}</>
     actions = (
       <>

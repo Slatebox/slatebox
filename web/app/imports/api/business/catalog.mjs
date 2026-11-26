@@ -19,8 +19,6 @@ export const BUSINESS = Object.freeze({
   summary: 'A team on Slatebox Cloud, shared and fully managed, paid per member monthly or yearly, plus tax where applicable.',
   includes: Object.freeze([
     'A shared AI and call pool for the team: each member adds the same amount Slatebox Pro includes',
-    'Inviting outside agents onto slates, for every member: Business counts as Slatebox Pro for this (membership.mjs)',
-    'Moving a self-hosted Slatebox across (coming)',
     'Hands-on help for large teams',
   ]),
   // what every member adds to the team's pool: Slatebox Pro's credits (pro/catalog.mjs)

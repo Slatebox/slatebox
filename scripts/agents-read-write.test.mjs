@@ -77,7 +77,6 @@ function makeWorld({ writes = [{ tool: 'create_issue', arguments: { title: 'Retr
       forToken: async (principal, shareId) => (shareId === 'shareA' && roles[principal.userId] ? { slate, canRead: true, canEdit: roles[principal.userId] === 'edit' } : null),
       reload: async () => slate,
     },
-    pro: async () => true,
     firstName: async (userId) => userId[0].toUpperCase() + userId.slice(1),
     sanitizeName: sanitizeClientName,
     presence: { plan: async () => {}, step: async () => {}, saved: async () => {}, end: async () => {} },

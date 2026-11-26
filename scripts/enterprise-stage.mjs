@@ -2,8 +2,8 @@
 // ('/enterprise/server', '/enterprise/client'). Meteor builds only web/app, and the repository's
 // enterprise/ directory (enterprise/LICENSE, not MIT) sits outside it.
 //
-// Every image carries enterprise/: Slatebox Cloud runs it, and a self-hosted install runs it only
-// once a license key unlocks it (web/app/server/enterprise-license.mjs).
+// Every image carries enterprise/ (integrations, free everywhere): Slatebox Cloud runs it by Cloud's
+// key, and every self-hosted install runs it with no key (web/app/server/enterprise-license.mjs).
 //
 //   node scripts/enterprise-stage.mjs link                 local development: web/app/enterprise → ../../enterprise
 //   node scripts/enterprise-stage.mjs copy <meteor app>    a build context: a real copy of enterprise/

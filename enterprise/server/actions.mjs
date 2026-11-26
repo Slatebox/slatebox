@@ -4,7 +4,7 @@
 // Outside agents as registry actions: each one is a Meteor method (the slate's walkthrough and
 // agent chips call these), an /api/v1 route, an exec call and an MCP tool, with the same checks
 // (exec everywhere). The service (service.mjs) runs only where enterprise code is unlocked (nothing registers elsewhere),
-// Pro for the inviter, inviter-only calls and edit rights; the registry adds scopes, rate limits
+// a signed-in inviter, inviter-only calls and edit rights; the registry adds scopes, rate limits
 // and input validation.
 import { defineAction } from '/server/actions/registry.mjs'
 import { shareIdInput } from '/server/actions/slate-schemas.mjs'
@@ -16,7 +16,7 @@ const cardIdInput = { type: 'string', minLength: 7, maxLength: 41, pattern: '^o[
 const cardOut = { type: 'object', description: 'An action card: cardId, connectionId, agentId, system, label ("Create Linear issue"), tool, preview { title, body, target, item, more[] (every other argument, "Name: value") }, args (exactly what approving it sends), destructive (by its tool, or by its arguments: an update that closes, cancels or archives), state (waiting, running, done, failed, unclear: sent but no answer came back, so it may have been made; declined), link (when done), error (when failed or unclear), decidedBy, actedWithoutAsking, mine.' }
 const obj = (properties) => ({ type: 'object', properties })
 const OUT = {
-  list: obj({ connections: { type: 'array', items: { type: 'object' } }, pro: { type: 'boolean' }, canInvite: { type: 'boolean' } }),
+  list: obj({ connections: { type: 'array', items: { type: 'object' } }, canInvite: { type: 'boolean' } }),
   gallery: obj({ cards: { type: 'array', items: { type: 'object' } }, canInvite: { type: 'boolean' } }),
   discover: obj({ address: { type: 'string' }, host: { type: 'string' }, suggestedName: { type: 'string' }, tools: { type: 'array', items: { type: 'object' } }, summary: { type: ['object', 'null'] }, signIn: { type: 'object', description: 'Present when the server needs sign-in first: method (oauth or key), authHost, needsClientId, keyAllowed.' }, alreadyHere: { type: 'object', description: 'Present when you already invited this server onto the slate: its connectionId, agentId and name (inviting it again is refused with already_here, unless lookAgain is true: its tools changed or none is left, so inviting again updates that agent).' } }),
   signIn: obj({ flowId: { type: 'string' }, authHost: { type: 'string' } }),
@@ -71,7 +71,7 @@ export function connectorActions(service) {
     defineAction({
       id: 'connectors.gallery',
       title: 'List the agent gallery',
-      description: 'The gallery of outside agents you can invite: each card\'s name, address, what it adds, and whether you may invite agents (Slatebox Pro or Business).',
+      description: 'The gallery of outside agents you can invite: each card\'s name, address, what it adds, and whether you may invite agents (anyone signed in).',
       toolset: 'connectors',
       kind: 'read',
       scope: 'slates:read',
@@ -85,7 +85,7 @@ export function connectorActions(service) {
     defineAction({
       id: 'connectors.discover',
       title: 'Look at an outside agent',
-      description: 'Reach an MCP server\'s address and say in plain words what it can do: its tools, grouped into lookups and outside changes, each with a hash consent is given to. When the server needs sign-in, says how (a sign-in page, or a pasted key or token) instead. Needs Slatebox Pro.',
+      description: 'Reach an MCP server\'s address and say in plain words what it can do: its tools, grouped into lookups and outside changes, each with a hash consent is given to. When the server needs sign-in, says how (a sign-in page, or a pasted key or token) instead.',
       toolset: 'connectors',
       kind: 'write',
       idempotency: 'optional',
@@ -107,7 +107,7 @@ export function connectorActions(service) {
     defineAction({
       id: 'connectors.signIn',
       title: 'Sign in to an outside agent\'s server',
-      description: 'Start signing in to an MCP server that needs it, from the slate in your own signed-in browser: Slatebox opens the server\'s own sign-in page in a window, and what the server issues is kept encrypted for you alone, never shown to anyone on the slate. People only: an agent token cannot start a sign-in. Needs Slatebox Pro.',
+      description: 'Start signing in to an MCP server that needs it, from the slate in your own signed-in browser: Slatebox opens the server\'s own sign-in page in a window, and what the server issues is kept encrypted for you alone, never shown to anyone on the slate. People only: an agent token cannot start a sign-in.',
       toolset: 'connectors',
       kind: 'write',
       idempotency: 'optional',
@@ -148,7 +148,7 @@ export function connectorActions(service) {
     defineAction({
       id: 'connectors.useKey',
       title: 'Use a key for an outside agent\'s server',
-      description: 'For servers that take a key or token instead of a sign-in page: Slatebox checks it against the server, then keeps it encrypted for you alone. It is never shown to anyone on the slate. Needs Slatebox Pro.',
+      description: 'For servers that take a key or token instead of a sign-in page: Slatebox checks it against the server, then keeps it encrypted for you alone. It is never shown to anyone on the slate.',
       toolset: 'connectors',
       kind: 'write',
       idempotency: 'optional',
@@ -170,7 +170,7 @@ export function connectorActions(service) {
     defineAction({
       id: 'connectors.connect',
       title: 'Invite an outside agent',
-      description: 'Invite an MCP server onto a slate as a named agent. Its suggestions appear on the slate as ghosts anyone who can edit may keep or discard. Only you can ask it. Needs Slatebox Pro.',
+      description: 'Invite an MCP server onto a slate as a named agent. Its suggestions appear on the slate as ghosts anyone who can edit may keep or discard. Only you can ask it.',
       toolset: 'connectors',
       kind: 'write',
       idempotency: 'optional',
@@ -215,7 +215,7 @@ export function connectorActions(service) {
     defineAction({
       id: 'connectors.call',
       title: 'Ask an invited agent',
-      description: 'Ask an outside agent you invited. Slatebox chooses its lookups, sends only what you allowed, and turns what comes back into one live suggestion on the slate (ghosts everyone there sees) that anyone who can edit may keep, discard or undo with suggestions.decide. When you ask for a change elsewhere ("file an issue for this"), the change is not made: it lands in the answer as an action card (cards[]) you approve with approve_agent_change or Keep on its card, unless you let the agent act without asking. Only the person who invited it can ask it. Needs Slatebox Pro.',
+      description: 'Ask an outside agent you invited. Slatebox chooses its lookups, sends only what you allowed, and turns what comes back into one live suggestion on the slate (ghosts everyone there sees) that anyone who can edit may keep, discard or undo with suggestions.decide. When you ask for a change elsewhere ("file an issue for this"), the change is not made: it lands in the answer as an action card (cards[]) you approve with approve_agent_change or Keep on its card, unless you let the agent act without asking. Only the person who invited it can ask it.',
       toolset: 'connectors',
       kind: 'write',
       idempotency: 'optional',
@@ -310,7 +310,7 @@ export function connectorActions(service) {
 
 const integrationId = id('The integration\'s id, as integrations.list gives it.')
 const INT_OUT = {
-  list: obj({ integrations: { type: 'array', items: { type: 'object' }, description: 'Each integration: integrationId, kind, name, host, status, rule, tools and the slates it is on. Never a token.' }, pro: { type: 'boolean' }, canConnect: { type: 'boolean' }, rules: { type: 'array', items: { type: 'string' } } }),
+  list: obj({ integrations: { type: 'array', items: { type: 'object' }, description: 'Each integration: integrationId, kind, name, host, status, rule, tools and the slates it is on. Never a token.' }, rules: { type: 'array', items: { type: 'string' } } }),
   integration: obj({ integrationId: { type: 'string' }, name: { type: 'string' }, status: { type: 'string' }, rule: { type: 'string' } }),
   review: obj({ integrationId: { type: 'string' }, tools: { type: 'array', items: { type: 'object' } }, changed: { type: 'array', items: { type: 'string' } }, needsSignIn: { type: 'boolean' } }),
   disconnected: obj({ ok: { type: 'boolean' }, integrationId: { type: 'string' }, name: { type: 'string' }, removedFrom: { type: 'integer' }, signedOut: { type: 'boolean' }, running: { type: 'integer', description: 'Changes already being made outside Slatebox that could not be stopped (their cards say how they went).' }, say: { type: 'string' }, note: { type: 'string', description: 'Set when its server did not confirm the sign-in ended: forgotten here anyway.' } }),
@@ -349,7 +349,7 @@ export function integrationActions(service) {
       id: 'integrations.discover',
       failure: { code: 'internal_error', message: 'Slatebox could not read that agent\'s server just now. Check the address and try again.' },
       title: 'Look at a server before connecting it',
-      description: 'Reach an MCP server\'s address and say in plain words what it can do (its tools, each with the hash consent is given to), or how to sign in to it first. For connecting it as an integration, apart from any slate. Needs Slatebox Pro or Business.',
+      description: 'Reach an MCP server\'s address and say in plain words what it can do (its tools, each with the hash consent is given to), or how to sign in to it first. For connecting it as an integration, apart from any slate.',
       toolset: 'connectors',
       kind: 'write',
       idempotency: 'optional',
@@ -366,7 +366,7 @@ export function integrationActions(service) {
       id: 'integrations.useKey',
       failure: { code: 'internal_error', message: 'Slatebox could not save that key just now. Try again in a moment.' },
       title: 'Use a key for an integration',
-      description: 'For servers that take a key or token instead of a sign-in page: Slatebox checks it against the server, then keeps it encrypted for you alone. Needs Slatebox Pro or Business.',
+      description: 'For servers that take a key or token instead of a sign-in page: Slatebox checks it against the server, then keeps it encrypted for you alone.',
       toolset: 'connectors',
       kind: 'write',
       idempotency: 'optional',
@@ -383,7 +383,7 @@ export function integrationActions(service) {
       id: 'integrations.connect',
       failure: { code: 'internal_error', message: 'Slatebox could not connect that agent just now. Try again in a moment.' },
       title: 'Connect an integration',
-      description: 'Connect an MCP server once, as an integration you can invite onto any slate without signing in or choosing its tools again. Send each tool from integrations.discover with its hash and allow or off. Connecting one already connected is consenting again, and every slate it is on resumes. Needs Slatebox Pro or Business.',
+      description: 'Connect an MCP server once, as an integration you can invite onto any slate without signing in or choosing its tools again. Send each tool from integrations.discover with its hash and allow or off. Connecting one already connected is consenting again, and every slate it is on resumes.',
       toolset: 'connectors',
       kind: 'write',
       idempotency: 'optional',
@@ -462,7 +462,7 @@ export function integrationActions(service) {
       title: 'Let an integration make changes too',
       failure: { code: 'internal_error', message: 'Slatebox could not turn on that agent\'s changes just now. Try again in a moment.' },
       // People only: an agent never widens an agent's rights.
-      description: 'Turn on the changes an integration\'s server offers that your consent has off (one connected before agents read and write kept them off), on every slate it is on. Each change still waits on a card you approve; ones that delete, close or merge stay off. Only tools you allowed before at the same definition: a changed tool asks for integrations.review first. Needs Slatebox Pro or Business.',
+      description: 'Turn on the changes an integration\'s server offers that your consent has off (one connected before agents read and write kept them off), on every slate it is on. Each change still waits on a card you approve; ones that delete, close or merge stay off. Only tools you allowed before at the same definition: a changed tool asks for integrations.review first.',
       toolset: 'connectors',
       kind: 'write',
       idempotency: 'optional',
@@ -495,7 +495,7 @@ export function integrationActions(service) {
       id: 'integrations.invite',
       failure: { code: 'internal_error', message: 'Slatebox could not invite that agent onto this slate just now. Try again in a moment.' },
       title: 'Invite an integration onto a slate',
-      description: 'Invite one of your integrations onto a slate as a named agent, with no new sign-in or consent. Its suggestions appear as ghosts anyone who can edit may keep or discard; only you can ask it. Needs Slatebox Pro or Business.',
+      description: 'Invite one of your integrations onto a slate as a named agent, with no new sign-in or consent. Its suggestions appear as ghosts anyone who can edit may keep or discard; only you can ask it.',
       toolset: 'connectors',
       kind: 'write',
       idempotency: 'optional',

@@ -80,3 +80,19 @@ export async function migrateIntegrations({ connections, integrations, now = Dat
   }
   return { created, linked }
 }
+
+/**
+ * Integrations are free (owner, 2026-11-26): an integration or agent a lapsed plan had paused (its
+ * status 'pro_ended', from before that decision) works again. Run at every server start and idempotent.
+ * connections, integrations: { find(query), update(id, set) } → { resumed }
+ */
+export async function resumeLapsedIntegrations({ connections, integrations, now = Date.now }) {
+  let resumed = 0
+  for (const store of [integrations, connections]) {
+    for (const doc of await store.find({ status: 'pro_ended' })) {
+      await store.update(doc._id, { status: 'active', proEndedAt: null, updatedAt: new Date(now()) })
+      resumed++
+    }
+  }
+  return { resumed }
+}

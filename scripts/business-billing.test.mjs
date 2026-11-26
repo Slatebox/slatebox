@@ -6,7 +6,7 @@ import {
   businessSource, businessSummary, checkBusinessPrice, handleBusinessEvent, isBusinessSubscription, matchBusinessMembers, mayManageBusiness,
   mayWriteBusiness, pricingPageDiffers, prorationFor, setBusinessRenewal, startBusinessCheckout, syncBusinessSubscription,
 } from '../web/app/server/business-billing.mjs'
-import { businessActive, invitesAgents } from '../web/app/imports/api/business/membership.mjs'
+import { businessActive } from '../web/app/imports/api/business/membership.mjs'
 import { PRO_GRACE_MS } from '../web/app/server/pro-billing.mjs'
 import { businessSheetPath, loginReturn, payRequestFromQuery } from '../web/app/imports/ui/components/billing/pay/pay-url.mjs'
 import { SESSION_ACTIONS, initialSheet, sheetReducer } from '../web/app/imports/ui/components/billing/pay/sheet-machine.mjs'
@@ -201,7 +201,6 @@ test('a paid checkout turns Business on for the team, from the subscription as r
   assert.equal(org.business.members, 3)
   assert.equal(org.business.until, NOW + 30 * DAY + PRO_GRACE_MS)
   assert.equal(businessActive(org, NOW), true)
-  assert.equal(invitesAgents({ pro: false, org }, NOW), true, 'Business counts as Pro for inviting outside agents')
   assert.equal(businessActive(org, NOW + 30 * DAY + PRO_GRACE_MS + 1), false, 'a missed renewal ends it after the grace')
   assert.deepEqual(w.updates, [], 'the quantity already matches the members')
 })

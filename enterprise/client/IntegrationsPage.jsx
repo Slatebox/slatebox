@@ -6,8 +6,8 @@
 // now, what it may use (lookups, and changes that wait on a card for approval), which slates it is
 // on, when it joins slates (its standing rule) and whether it acts without asking, with Review
 // tools, Sign in again and Disconnect (revoked, and removed from every slate). "Connect an
-// agent" is the invite walkthrough without a slate. Free accounts on Slatebox Cloud see every row
-// marked Pro, and connecting opens the in-app Pro sheet (prices live on /plans/, never here).
+// agent" is the invite walkthrough without a slate. Integrations are free for everyone, on Slatebox
+// Cloud and on every self-hosted install (owner, 2026-11-26).
 // A custom agent (connected by its MCP address, not from the gallery) that works offers "Suggest for
 // the library": the library's review queue, free (SuggestIntegration).
 import React, { useCallback, useEffect, useRef, useState } from 'react'
@@ -28,12 +28,9 @@ import MenuItem from '@mui/material/MenuItem'
 import Switch from '@mui/material/Switch'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import { usePaySheet } from '/imports/ui/components/billing/pay/PaySheetHost.jsx'
 import Hexagon from '/imports/ui/components/AgentMark.jsx'
 import { agentColor } from '/imports/ui/components/AgentPresenceListener.jsx'
-import { enterpriseState } from '/imports/api/common/edition.mjs'
 import { enterpriseSlots } from '/imports/api/client/enterprise-slots.mjs'
-import { PRICING_URL } from '/imports/api/common/contact.mjs'
 import InviteWalkthrough from './InviteWalkthrough'
 import { changesOffer, toolSummary } from '../common/integration-words.mjs'
 import GoogleIntegration from './GoogleIntegration'
@@ -44,7 +41,6 @@ export const INTEGRATION_STATUS = {
   active: 'Connected',
   paused: 'Tools changed: review them',
   needs_sign_in: 'Needs sign-in',
-  pro_ended: 'Pro ended',
 }
 export const RULE_WORDS = { ask: 'When I invite it', my_slates: 'On every slate I own' }
 
@@ -141,14 +137,13 @@ function ReviewDialog({ integration, onClose, onDone, onUpgrade }) {
 }
 ReviewDialog.propTypes = { integration: PropTypes.shape({ integrationId: PropTypes.string, name: PropTypes.string, kind: PropTypes.string, writesAt: PropTypes.string, tools: PropTypes.arrayOf(PropTypes.shape({})) }).isRequired, onClose: PropTypes.func.isRequired, onDone: PropTypes.func.isRequired, onUpgrade: PropTypes.func.isRequired }
 
-function IntegrationRow({ integration, pro, cloud, onChanged, onDisconnected, onReview, onSignIn, onUpgrade, onSuggest, highlight }) {
+function IntegrationRow({ integration, onChanged, onDisconnected, onReview, onSignIn, onUpgrade, onSuggest, highlight }) {
   const [confirming, setConfirming] = useState(false)
   const [note, setNote] = useState('')
   const [allowing, setAllowing] = useState(false)
   const offer = changesOffer(integration)
   // One click, the person's own: turns on the changes its server offers (never destructive ones).
   const allowChanges = () => {
-    if (cloud && !pro) return onReview(integration)
     if (offer?.kind === 'address') return onUpgrade(integration)
     setAllowing(true)
     return Meteor.callAsync('integrations.allowChanges', { integrationId: integration.integrationId })
@@ -173,7 +168,6 @@ function IntegrationRow({ integration, pro, cloud, onChanged, onDisconnected, on
           </Typography>
           <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mt: 0.75 }}>
             <Chip size="small" label={INTEGRATION_STATUS[integration.status] || integration.status} color={integration.status === 'active' ? 'success' : 'warning'} variant="outlined" />
-            {cloud && !pro && <Chip size="small" label="Pro" data-integration-pro="" />}
             {integration.signedIn && <Chip size="small" variant="outlined" label={integration.auth?.kind === 'key' ? 'Signed in with your key' : 'Signed in as you'} />}
           </Box>
           <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.75 }} data-integration-tools="">
@@ -190,14 +184,14 @@ function IntegrationRow({ integration, pro, cloud, onChanged, onDisconnected, on
             {integration.lastUsedAt ? ` · Last asked ${new Date(integration.lastUsedAt).toLocaleDateString()}` : ''}
           </Typography>
         </Box>
-        <TextField select size="small" label="Joins slates" value={integration.rule} onChange={(e) => setRule(e.target.value)} disabled={cloud && !pro} sx={{ minWidth: 210 }}
+        <TextField select size="small" label="Joins slates" value={integration.rule} onChange={(e) => setRule(e.target.value)} sx={{ minWidth: 210 }}
           inputProps={{ 'data-integration-rule': integration.name }}>
           {Object.entries(RULE_WORDS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
         </TextField>
       </Box>
       {integration.kind === 'mcp' && writes.length > 0 && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.75, flexWrap: 'wrap' }} data-integration-acting={integration.name}>
-          <FormControlLabel sx={{ m: 0 }} control={<Switch size="small" checked={Boolean(integration.actWithoutAsking)} disabled={cloud && !pro} onChange={(e) => setActing(e.target.checked)} inputProps={{ 'data-integration-acting-switch': '' }} />}
+          <FormControlLabel sx={{ m: 0 }} control={<Switch size="small" checked={Boolean(integration.actWithoutAsking)} onChange={(e) => setActing(e.target.checked)} inputProps={{ 'data-integration-acting-switch': '' }} />}
             label={<Typography variant="body2">Act without asking</Typography>} />
           <Typography variant="caption" color="text.secondary">
             {integration.actWithoutAsking
@@ -241,8 +235,6 @@ function IntegrationRow({ integration, pro, cloud, onChanged, onDisconnected, on
 }
 IntegrationRow.propTypes = {
   integration: PropTypes.shape({ integrationId: PropTypes.string, name: PropTypes.string, kind: PropTypes.string, host: PropTypes.string, status: PropTypes.string, rule: PropTypes.string, tools: PropTypes.arrayOf(PropTypes.shape({})), slates: PropTypes.arrayOf(PropTypes.shape({})), slateCount: PropTypes.number, signedIn: PropTypes.bool, scopes: PropTypes.arrayOf(PropTypes.string), galleryId: PropTypes.string, colorIndex: PropTypes.number, lastUsedAt: PropTypes.oneOfType([PropTypes.string, PropTypes.instanceOf(Date)]), auth: PropTypes.shape({ kind: PropTypes.string }) }).isRequired,
-  pro: PropTypes.bool,
-  cloud: PropTypes.bool,
   onChanged: PropTypes.func.isRequired,
   onDisconnected: PropTypes.func.isRequired,
   onReview: PropTypes.func.isRequired,
@@ -253,27 +245,22 @@ IntegrationRow.propTypes = {
 }
 
 export default function IntegrationsPage() {
-  const [state, setState] = useState({ integrations: null, pro: null })
+  const [state, setState] = useState({ integrations: null })
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  // Arriving just after enterprise features were turned on (the self-hosted header's Unlock): the
-  // gallery opens at once, so the catalog is the first thing seen.
-  const [connecting, setConnecting] = useState(() => new URLSearchParams(window.location.search).get('welcome') === 'enterprise')
+  const [connecting, setConnecting] = useState(false)
   const [reconnect, setReconnect] = useState(null)
   const [reviewing, setReviewing] = useState(null)
   const [upgrade, setUpgrade] = useState(null)
   const [highlight, setHighlight] = useState(null)
   const [suggesting, setSuggesting] = useState(null)
-  const { open: openPay } = usePaySheet()
-  const cloud = enterpriseState(Meteor.settings).via === 'cloud'
   const live = useRef(true)
   useEffect(() => () => { live.current = false }, [])
   const refresh = useCallback(() => Meteor.callAsync('integrations.list', {}).then((answer) => {
-    if (live.current) setState({ integrations: answer.integrations || [], pro: Boolean(answer.pro) })
+    if (live.current) setState({ integrations: answer.integrations || [] })
   }).catch((e) => live.current && setError(errorText(e))), [])
   useEffect(() => { refresh() }, [refresh])
-  const pay = (retry) => openPay({ action: 'pro', from: 'integrations', reason: 'Connect outside agents and Google once, and invite them onto any slate.', retry })
-  const connect = () => (cloud && state.pro === false ? pay(() => { refresh(); setConnecting(true) }) : setConnecting(true))
+  const connect = () => setConnecting(true)
   const mcp = (state.integrations || []).filter((row) => row.kind !== 'google')
   // Its card in the gallery said ✓ Connected · Manage: close the gallery and bring its row into view.
   const manage = (integrationId) => {
@@ -292,14 +279,9 @@ export default function IntegrationsPage() {
     <Box data-integrations-page="" sx={{ display: 'grid', gap: 2 }}>
       <AppPageHeader sx={{ mb: 1 }} title="Integrations"
         subtitle="Connect an agent or your Google account once. Then invite it onto any slate, or let it join every slate you own, with no new sign-in." />
-      {cloud && state.pro === false && (
-        <Box sx={card} data-integrations-pro-note="">
-          <Typography variant="body2">Integrations are part of Slatebox Pro and Slatebox Business. <a href={PRICING_URL} target="_blank" rel="noopener noreferrer">See plans</a></Typography>
-        </Box>
-      )}
       {error && <Typography role="alert" color="error">{error}</Typography>}
       {notice && <Box sx={card} role="status" data-integrations-notice=""><Typography variant="body2">{notice}</Typography></Box>}
-      <GoogleIntegration integrations={state.integrations || []} pro={state.pro !== false || !cloud} onPay={pay} onChanged={refresh} />
+      <GoogleIntegration integrations={state.integrations || []} onChanged={refresh} />
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
         <Typography variant="h6" component="h2" sx={{ flex: 1, fontWeight: 700 }}>Agents</Typography>
         <Button variant="contained" data-integrations-connect="" onClick={connect}>Connect an agent</Button>
@@ -309,8 +291,8 @@ export default function IntegrationsPage() {
         <Box sx={card}><Typography variant="body2" color="text.secondary">No agents connected yet. Connect one Slatebox lists under Existing, or paste any MCP server&apos;s address under Custom.</Typography></Box>
       )}
       {mcp.map((integration) => (
-        <IntegrationRow key={integration.integrationId} integration={integration} pro={Boolean(state.pro)} cloud={cloud} onChanged={refresh}
-          onDisconnected={(text) => { setNotice(text); refresh() }} onReview={(row) => (cloud && !state.pro ? pay(refresh) : setReviewing(row))} onSignIn={(row) => setReconnect({ address: row.address, name: row.name })}
+        <IntegrationRow key={integration.integrationId} integration={integration} onChanged={refresh}
+          onDisconnected={(text) => { setNotice(text); refresh() }} onReview={setReviewing} onSignIn={(row) => setReconnect({ address: row.address, name: row.name })}
           onUpgrade={startUpgrade} onSuggest={setSuggesting} highlight={highlight === integration.integrationId} />
       ))}
       <InviteWalkthrough open={connecting || Boolean(reconnect) || Boolean(upgrade)} reconnect={reconnect} upgrade={upgrade} integrations={mcp} onManageIntegration={manage}

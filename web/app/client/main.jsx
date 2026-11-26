@@ -26,8 +26,8 @@ import { SsoDone, SsoGate } from '../imports/ui/sso/sso'
 import { globalMessage } from '../imports/ui/jotai/atoms'
 // Sign out, and a session ending while a page is open, lead to the sign-in page.
 import '../imports/api/client/signOut'
-// Loads the enterprise/ browser chunk after start where the server says it is unlocked (Cloud, or a
-// licensed self-hosted install); a locked install loads nothing.
+// Loads the enterprise/ browser chunk after start where the server says it runs (Cloud, and every
+// self-hosted install whose build carries it); elsewhere nothing loads.
 import './enterprise'
 
 // Pages a first visit to a slate never opens: each loads when its route is first opened.

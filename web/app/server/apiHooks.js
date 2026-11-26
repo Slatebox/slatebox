@@ -13,8 +13,6 @@ import { mountActions } from './actions/mount'
 import { mountMcp } from './mcp/meteor'
 import { mountOAuth } from './oauth/meteor'
 import { mountLicenses } from './licenses/meteor'
-import { PROOF_PATH } from './licenses/host-proof.mjs'
-import { installProofs } from './selfhost-options/proofs.mjs'
 
 // Every /api/v1 route, its OpenAPI document and the matching Meteor methods come from the
 // action registry (server/actions).
@@ -22,8 +20,6 @@ mountActions(app)
 mountMcp(app) // POST /mcp: the hosted MCP endpoint (exec, describe and one typed tool per client method)
 mountOAuth(app) // /oauth/* and /.well-known/oauth-*: how an MCP app signs a person in to /mcp
 mountLicenses(app) // POST /licenses/key: Slatebox Cloud's enterprise keys for self-hosted servers (Cloud only)
-// This server's one-time proofs that a trial's host is really this server (Cloud fetches them back).
-app.get(`${PROOF_PATH}:id`, installProofs.handler())
 
 if (Meteor.settings.public.env === 'selfhost') {
   app.get('/embed/:shareId', async (request, response) => {

@@ -8,8 +8,8 @@
 // choice), the metered request, the registry (as the agent, with the inviter's rights) and
 // presence; and sign-in (S2b): the vault (mcpCredentials, sealed under the app's master key), the
 // sign-in flows (mcpSignins, 10 minutes, used once) and automatic registrations (mcpClients).
-// Loaded at server start where enterprise code is unlocked (Cloud, or a licensed self-hosted
-// install) unless the kill switch settings.connectors.off is on (index.js).
+// Loaded at server start wherever enterprise code runs (Cloud, and every self-hosted install whose
+// build carries it) unless the kill switch settings.connectors.off is on (index.js).
 /* eslint-disable no-console */
 import { Meteor } from 'meteor/meteor'
 import { Mongo } from 'meteor/mongo'
@@ -24,23 +24,21 @@ import { waitingActions } from '/server/agents/suggestions.mjs'
 import { resolvePresentationSlate } from '/server/methods/creative-slates'
 import req from '/server/methods/ai/req'
 import { runAIAction } from '/server/metering/context.mjs'
-import { proActive } from '/server/pro-billing.mjs'
-import { invitesAgents } from '/imports/api/business/membership.mjs'
 import { presence } from '/server/presence/meteor'
 import { firstNameOf, sanitizeClientName } from '/imports/api/common/agent-label.mjs'
-import { AIAgents, LibraryItems, Organizations, Slates } from '/imports/api/common/models'
+import { AIAgents, LibraryItems, Slates } from '/imports/api/common/models'
 import { setLibraryIntegrations } from '/server/library/integration-hooks.mjs'
 import { loadMasterKey } from '/server/metering/vault.mjs'
 import { createMcpFetch } from './mcp-fetch.mjs'
 import { callTool, discover } from './mcp-session.mjs'
-import { ConnectorRefused, createConnectorService } from './service.mjs'
+import { ConnectorRefused, createConnectorService, meterRefusal } from './service.mjs'
 import { connectorSettings } from './connector-settings.mjs'
 import { cardFor, retiredFor } from '../common/gallery.mjs'
 import { communityCard, liveGallery } from './gallery-admin.mjs'
 import { CLOUD_LIBRARY_LIMITS, CLOUD_ORIGIN, cloudLibraryOn, createCloudCatalog } from './cloud-library.mjs'
 import { createVault } from './credentials.mjs'
 import { createSignIn, probe } from './signin.mjs'
-import { migrateIntegrations } from './integrations-migrate.mjs'
+import { migrateIntegrations, resumeLapsedIntegrations } from './integrations-migrate.mjs'
 import { itemsFromLayout } from './translate.mjs'
 import { createGoogleService, googleConfiguration, googleSettings, GOOGLE_ADDRESS } from './google/google.mjs'
 import { NATIVE_CARDS } from '../common/gallery.mjs'
@@ -63,7 +61,7 @@ const GoogleSlateFiles = new Mongo.Collection('googleSlateFiles')
 // Action cards (an invited agent's changes outside Slatebox, waiting, done, failed or declined) and
 // act-without-asking choices: read through connectors.outsideActions, never published.
 const OutsideActions = new Mongo.Collection('mcpOutsideActions')
-// A licensed install's last good copy of Slatebox Cloud's Community cards (cloud-library.mjs): one row.
+// A self-hosted install's last good copy of Slatebox Cloud's Community cards (cloud-library.mjs): one row.
 const CloudCatalog = new Mongo.Collection('connectorCloudCatalog')
 
 const drawable = (slate) => !slate.creative || slate.nativeCanvasDrawing || slate.creative.model?.kind === 'workshop'
@@ -220,7 +218,7 @@ export const appOrigin = () => String(Meteor.settings.public?.baseUrl || Meteor.
 // The gallery as administrators set it (aiAgents, /admin/ai › Gallery), read at most every few seconds.
 const findGallery = () => AIAgents.find({ kind: 'outbound-connector' }).fetchAsync()
 // The Community cards after the built-in ones: this server's approved suggestions, then Slatebox
-// Cloud's on a licensed install (set once the connectors start).
+// Cloud's on a self-hosted install (set once the connectors start).
 let communitySource = async () => []
 let galleryCache = { at: 0, cards: null }
 async function gallery() {
@@ -264,13 +262,6 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     origin: appOrigin,
     devOrigins: settings.devOrigins,
   })
-  const proOf = async (userId) => {
-    if (via !== 'cloud') return true
-    const user = await Meteor.users.findOneAsync(userId, { fields: { pro: 1, orgId: 1 } })
-    if (proActive(user?.pro)) return true
-    const org = user?.orgId ? await Organizations.findOneAsync(user.orgId, { fields: { business: 1 } }) : null
-    return invitesAgents({ pro: false, org })
-  }
   // Google tells the connector service when it is connected again (set once the service exists).
   let resumeGoogle = async () => {}
   const agentSave = (principal, input, mode) =>
@@ -282,7 +273,6 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     slateFiles: storeOf(GoogleSlateFiles),
     fetch: googleFetch,
     config: google,
-    pro: proOf,
     enabled: googleEnabled,
     access: { forUser, forToken },
     applyOperations: agentSave,
@@ -311,20 +301,12 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     fetch,
     session,
     // The person's own choice for connectors (else their conversation choice), inside one metered request.
+    // Integrations are free (owner, 2026-11-26), the agent work they run is not: the meter's refusal
+    // (no credits left, no Pro on Cloud) reaches the person with its code, words and pay action.
     model: model(),
-    metered: (fn, { userId }) => runAIAction({ feature: 'connectors', userId, countsAsDraft: true }, fn),
+    metered: (fn, { userId }) => runAIAction({ feature: 'connectors', userId, countsAsDraft: true }, fn).catch(meterRefusal),
     applyOperations: agentSave,
     access: { forUser, forToken, reload: (shareId) => Slates.findOneAsync({ shareId }, { fields: { revision: 1 } }) },
-    // Slatebox Pro, or a seat on a team with an active Slatebox Business membership (owner, 2026-11-24:
-    // Business members count as Pro for this), is needed to invite agents on Slatebox Cloud. A licensed
-    // self-hosted install has no Pro: its license is what unlocks invited agents for everyone who may edit there.
-    pro: async (userId) => {
-      if (via !== 'cloud') return true
-      const user = await Meteor.users.findOneAsync(userId, { fields: { pro: 1, orgId: 1 } })
-      if (proActive(user?.pro)) return true
-      const org = user?.orgId ? await Organizations.findOneAsync(user.orgId, { fields: { business: 1 } }) : null
-      return invitesAgents({ pro: false, org })
-    },
     firstName: async (userId) => firstNameOf(await Meteor.users.findOneAsync(userId, { fields: { profile: 1, emails: 1 } })),
     sanitizeName: sanitizeClientName,
     presence,
@@ -344,7 +326,7 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     outside: outsideStore,
   })
   // Community cards: this server's approved suggestions (the library's review queue), then Slatebox
-  // Cloud's on an install an on-prem license unlocks (cloud-library.mjs), each checked again as a card.
+  // Cloud's on a self-hosted install (cloud-library.mjs), each checked again as a card.
   const cloud = cloudLibraryOn({ via, settings: Meteor.settings }) ? startCloudCatalog(settings) : null
   const localCommunity = async () => {
     const rows = await LibraryItems.find({ kind: 'integration', status: 'published' }, { sort: { publishedAt: 1 }, limit: 200, fields: { title: 1, summary: 1, category: 1, kind: 1, status: 1, integration: 1, authorName: 1 } }).fetchAsync()
@@ -353,7 +335,7 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
   communitySource = async () => [...(await localCommunity()), ...(cloud ? await cloud.catalog.cards() : [])]
   galleryCache = { at: 0, cards: null }
   // Suggesting a custom server for everyone goes through the library (library.submit kind integration):
-  // the MIT core asks these, and only while the license holds.
+  // the MIT core asks these, and only while enterprise code is unlocked (Cloud's key holds).
   const unlockedOr = (fn) => async (...args) => {
     if (!isUnlocked()) throw new ConnectorRefused(403, 'enterprise_locked', 'Integrations are not available on this server.')
     return fn(...args)
@@ -365,7 +347,7 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     changed: async () => { galleryCache = { at: 0, cards: null } },
   })
   // Keeping an action card's note approves its change: the app's suggestions.decide asks the service
-  // first (only while the license holds; a locked install has no cards).
+  // first (only while enterprise code is unlocked; a locked server has no cards).
   deps.suggestionGate = (principal, slate, choice) => (isUnlocked() ? service.gate(principal, slate, choice) : null)
   resumeGoogle = (integration) => service.resumeIntegration(integration)
   Meteor.startup(async () => {
@@ -386,6 +368,11 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
       return null
     })
     if (moved?.created || moved?.linked) console.log('[connectors]', JSON.stringify({ kind: 'integrations_migrated', ...moved }))
+    const resumed = await resumeLapsedIntegrations({ connections: connectionsStore, integrations: integrationsStore }).catch((error) => {
+      console.warn('[connectors] resuming lapsed integrations failed', error?.message)
+      return null
+    })
+    if (resumed?.resumed) console.log('[connectors]', JSON.stringify({ kind: 'integrations_resumed', ...resumed }))
   })
   // Hourly: forget (and revoke) sign-ins no agent uses any more.
   const sweep = () => !isUnlocked() ? Promise.resolve() : service.sweep(() => McpCredentials.find({}, { fields: { ownerId: 1, address: 1, createdAt: 1 } }).fetchAsync())
@@ -431,7 +418,7 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
   return { service, google: googleService, signIn, origin: appOrigin, userFor, findGallery, configured, community: () => communitySource() }
 }
 
-// Slatebox Cloud's Community cards on a licensed install: pulled at start and every few hours by one
+// Slatebox Cloud's Community cards on a self-hosted install: pulled at start and every few hours by one
 // server at a time (a lease on the row), the last good copy served in between and while offline.
 function startCloudCatalog(settings) {
   const fetch = createMcpFetch({ devOrigins: settings.devOrigins, userAgent: settings.userAgent, methods: ['GET'], maxRedirects: 0, maxBytes: CLOUD_LIBRARY_LIMITS.maxBytes, timeoutMs: CLOUD_LIBRARY_LIMITS.timeoutMs })

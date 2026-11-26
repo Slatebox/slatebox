@@ -1,5 +1,5 @@
-// Slatebox LLC's side of "Upgrade on prem": signs a license key for one self-hosted install, or
-// Slatebox Cloud's own key (--kind cloud). MIT. The private key never enters this repository; pass
+// Slatebox LLC's side of license keys: signs Slatebox Cloud's own key (--kind cloud), or an on-prem
+// key (what Cloud's license issuer still makes; no self-hosted install needs or reads one now). MIT. The private key never enters this repository; pass
 // its file. Prints the key on one line. Every key names the host names it covers (--host, at least
 // one): one on-prem license covers one install.
 //

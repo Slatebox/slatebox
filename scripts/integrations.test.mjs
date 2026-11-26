@@ -33,7 +33,7 @@ const refusedWith = async (promise, code) => {
 }
 
 // Ada owns slates A and B; Sam owns slate C, where Ada may edit.
-function makeWorld({ pro = ['ada', 'sam'] } = {}) {
+function makeWorld() {
   const slates = {
     shareA: { _id: 'slateA', shareId: 'shareA', userId: 'ada', revision: 1, nodes: [{ options: { id: 'n0', text: 'Checkout', xPos: 0, yPos: 0, width: 200, height: 80 }, relationships: { associations: [] } }] },
     shareB: { _id: 'slateB', shareId: 'shareB', userId: 'ada', revision: 1, nodes: [] },
@@ -47,7 +47,6 @@ function makeWorld({ pro = ['ada', 'sam'] } = {}) {
   const slateSettings = memoryStore()
   const live = connectorSuggestions(slates.shareA)
   const audits = []
-  const proList = [...pro]
   const presenceCalls = []
   const removedSignIns = []
   // A vault that knows nothing (open servers need no sign-in): remove is recorded.
@@ -73,7 +72,6 @@ function makeWorld({ pro = ['ada', 'sam'] } = {}) {
       forUser: async (shareId, userId) => (slates[shareId] && roles[shareId][userId] ? { slate: slates[shareId], canRead: true, canEdit: roles[shareId][userId] === 'edit' } : null),
       reload: async (shareId) => slates[shareId],
     },
-    pro: async (userId) => proList.includes(userId),
     firstName: async (userId) => userId[0].toUpperCase() + userId.slice(1),
     sanitizeName: sanitizeClientName,
     presence: {
@@ -88,7 +86,7 @@ function makeWorld({ pro = ['ada', 'sam'] } = {}) {
   }
   const service = createConnectorService(options)
   const person = (userId) => ({ kind: 'person', userId, scopes: ['slates:read', 'slates:write'] })
-  const world = { service, options, connections, integrations, slateSettings, live, audits, proList, presenceCalls, removedSignIns, slates, ada: person('ada'), sam: person('sam'), vic: person('vic') }
+  const world = { service, options, connections, integrations, slateSettings, live, audits, presenceCalls, removedSignIns, slates, ada: person('ada'), sam: person('sam'), vic: person('vic') }
   // Connect from the Integrations page: discover (no slate), then consent to the hashes seen.
   world.connect = async (path = '/open/mcp', { name = 'Research', rule } = {}) => {
     const found = await service.discover(world.ada, { address: servers.url(path) })
@@ -240,21 +238,36 @@ test('the slate owner chooses who brings outside agents: editors, only the owner
   await refusedWith(world.service.slateSetting(world.ada, { shareId: 'shareB', outsideAgents: 'sometimes' }), 'invalid_request')
 })
 
-test('Pro: connecting, inviting and rules need Pro or Business; a lapse shows Pro ended and rules pause, renewal brings them back', async () => {
-  const world = makeWorld({ pro: [] })
-  await refusedWith(world.service.discover(world.ada, { address: servers.url('/open/mcp') }), 'pro_required')
+test('free (owner, 2026-11-26): a free account connects, invites and has its rules run, with no plan checked anywhere', async () => {
+  const world = makeWorld()
+  assert.equal('pro' in world.options, false, 'the service takes no plan check')
   const listed = await world.service.integrationsList(world.ada)
-  assert.equal(listed.canConnect, false)
-  world.proList.push('ada')
+  assert.deepEqual(Object.keys(listed).sort(), ['integrations', 'rules'], 'the page is told nothing about a plan')
   const integration = await world.connect('/open/mcp', { rule: 'my_slates' })
-  world.proList.length = 0
-  await refusedWith(world.service.integrationInvite(world.ada, { shareId: 'shareA', integrationId: integration.integrationId }), 'pro_required')
-  assert.deepEqual(await world.service.applyRules(world.ada, { shareId: 'shareA' }), { joined: [], skipped: [], pro: false })
-  assert.equal((await world.service.integrationsList(world.ada)).integrations[0].status, 'pro_ended')
-  assert.ok(world.integrations.rows[0].proEndedAt)
-  world.proList.push('ada')
+  assert.equal(integration.status, 'active')
   assert.equal((await world.service.applyRules(world.ada, { shareId: 'shareA' })).joined.length, 1)
   assert.equal(world.integrations.rows[0].status, 'active')
+  // Inviting by hand on another of Ada's slates, and changing the rule, need nothing more.
+  await world.service.integrationSetRule(world.ada, { integrationId: integration.integrationId, rule: 'ask' })
+  const invited = await world.service.integrationInvite(world.ada, { shareId: 'shareB', integrationId: integration.integrationId })
+  assert.equal(invited.status, 'active')
+  // A guest still connects nothing.
+  await refusedWith(world.service.discover({ kind: 'guest', userId: 'g1', scopes: [] }, { address: servers.url('/open/mcp') }), 'sign_in')
+})
+
+test('free: integrations and agents a lapsed plan once paused ("pro_ended") work again at the next start', async () => {
+  const { resumeLapsedIntegrations } = await import('../enterprise/server/integrations-migrate.mjs')
+  const world = makeWorld()
+  const integration = await world.connect('/open/mcp')
+  await world.service.integrationInvite(world.ada, { shareId: 'shareA', integrationId: integration.integrationId })
+  world.integrations.rows[0].status = 'pro_ended'
+  world.integrations.rows[0].proEndedAt = new Date()
+  world.connections.rows[0].status = 'pro_ended'
+  assert.deepEqual(await resumeLapsedIntegrations({ connections: world.connections, integrations: world.integrations }), { resumed: 2 })
+  assert.equal(world.integrations.rows[0].status, 'active')
+  assert.equal(world.integrations.rows[0].proEndedAt, null)
+  assert.equal(world.connections.rows[0].status, 'active')
+  assert.deepEqual(await resumeLapsedIntegrations({ connections: world.connections, integrations: world.integrations }), { resumed: 0 }, 'idempotent')
 })
 
 test('tools changed: the integration and every slate it is on pause at once; one review and consent resumes them all', async () => {
@@ -304,7 +317,7 @@ test('disconnect: removed from every slate (waiting suggestions withdrawn), sign
   await refusedWith(world.service.integrationInvite(world.ada, { shareId: 'shareA', integrationId: integration.integrationId }), 'not_found')
 })
 
-test('sweep: a sign-in lives as long as its integration; orphans after a day; 30 days after Pro ended it is forgotten and the integration needs sign-in', async () => {
+test('sweep: a sign-in lives as long as its integration, however old; orphans after a day', async () => {
   const world = makeWorld()
   const integration = await world.connect()
   const day = 86400000
@@ -313,22 +326,10 @@ test('sweep: a sign-in lives as long as its integration; orphans after a day; 30
   assert.deepEqual(await world.service.sweep(async () => rows), { removed: 1 })
   assert.deepEqual(world.removedSignIns, [['ada', 'https://orphan.example/mcp']])
   world.removedSignIns.length = 0
-  // Still Pro: the sweep keeps the sign-in (and a stale "Pro ended" mark comes back to active).
-  world.integrations.rows[0].status = 'pro_ended'
-  world.integrations.rows[0].proEndedAt = new Date(Date.now() - 31 * day)
+  // Free (owner, 2026-11-26): no plan ending ever forgets a sign-in; it stays as long as its integration.
   assert.deepEqual(await world.service.sweep(async () => rows.slice(0, 1)), { removed: 0 })
   assert.equal(world.integrations.rows[0].status, 'active')
-  // Pro lapses and Ada never opens a page: the sweep itself notices and starts the 30 days.
-  world.proList.length = 0
-  assert.deepEqual(await world.service.sweep(async () => rows.slice(0, 1)), { removed: 0 })
-  assert.equal(world.integrations.rows[0].status, 'pro_ended')
-  assert.ok(world.integrations.rows[0].proEndedAt instanceof Date)
-  world.integrations.rows[0].proEndedAt = new Date(Date.now() - 10 * day)
-  assert.deepEqual(await world.service.sweep(async () => rows.slice(0, 1)), { removed: 0 })
-  world.integrations.rows[0].proEndedAt = new Date(Date.now() - 31 * day)
-  assert.deepEqual(await world.service.sweep(async () => rows.slice(0, 1)), { removed: 1 })
-  assert.deepEqual(world.removedSignIns, [['ada', integration.address]])
-  assert.equal(world.integrations.rows[0].status, 'needs_sign_in')
+  assert.deepEqual(world.removedSignIns, [])
 })
 
 test('migration: live agents become integrations once (idempotent), keeping vault ids, agent ids and suggestions', async () => {
@@ -380,8 +381,8 @@ test('the integration actions join the one registry, with typed MCP tools for th
 })
 
 test('nothing an integration answer carries holds a token or another person\'s address', () => {
-  const shown = publicIntegration({ _id: 'i1', ownerId: 'ada', kind: 'mcp', address: 'https://mcp.example/mcp', host: 'mcp.example', name: 'X', tools: [{ name: 's', hash: 'h', policy: 'allow', description: 'secret words' }], auth: { kind: 'oauth', issuer: 'https://as' }, status: 'active', rule: 'my_slates' }, { pro: false })
-  assert.equal(shown.status, 'pro_ended')
+  const shown = publicIntegration({ _id: 'i1', ownerId: 'ada', kind: 'mcp', address: 'https://mcp.example/mcp', host: 'mcp.example', name: 'X', tools: [{ name: 's', hash: 'h', policy: 'allow', description: 'secret words' }], auth: { kind: 'oauth', issuer: 'https://as' }, status: 'active', rule: 'my_slates' })
+  assert.equal(shown.status, 'active')
   assert.deepEqual(Object.keys(shown.tools[0]).sort(), ['group', 'name', 'policy', 'title'])
   assert.ok(!JSON.stringify(shown).includes('issuer'))
 })

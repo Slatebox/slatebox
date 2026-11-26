@@ -119,7 +119,7 @@ function copyBuildContext() {
     },
   })
   // Every image carries enterprise/: Slatebox Cloud runs it (settings.public.edition 'cloud'), and
-  // a self-hosted install runs it only with a license key (web/app/server/enterprise-license.mjs).
+  // every self-hosted install runs it with no key (web/app/server/enterprise-license.mjs).
   const appContext = resolve(buildContext, 'app')
   copyEnterprise(appContext)
   checkEnterprisePresent(buildContext)

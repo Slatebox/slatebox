@@ -1,6 +1,6 @@
 /* eslint-disable no-new */
 // A slate's picture in the app's image store (a cloud link): utils.getCloudLink. Google Drive and
-// Docs are the Google integration's (enterprise/server/google, Pro or Business), not here.
+// Docs are the Google integration's (enterprise/server/google), not here.
 import { Meteor } from 'meteor/meteor'
 import { check } from 'meteor/check'
 import { requireEditableSlate } from '../common/slate-access'

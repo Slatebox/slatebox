@@ -31,9 +31,9 @@ git -C "$app" archive "$app_sha:packages/slatebox" bin src package.json LICENSE.
 # enter an image: each installation generates its own on first start.
 find "$stage/app" -name 'settings*.json' -delete
 # The committed enterprise/ code (enterprise/LICENSE, not MIT) goes in at the app's '/enterprise'
-# path. It stays locked on a self-hosted install until an on-prem license key from Slatebox LLC
-# unlocks it (web/app/server/enterprise-license.mjs); single sign-on with the bundled Keycloak is
-# never locked, and payments and metering are never part of a self-hosted Slatebox.
+# path. It runs on every self-hosted install free, with no key (integrations are free
+# everywhere: web/app/server/enterprise-license.mjs); payments and metering are never part of a
+# self-hosted Slatebox.
 mkdir -p "$stage/app/enterprise"
 git -C "$app" archive "$app_sha:enterprise" | tar -x -C "$stage/app/enterprise"
 node "$app/scripts/enterprise-stage.mjs" check-present "$stage/app"

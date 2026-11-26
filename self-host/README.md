@@ -75,8 +75,7 @@ Every setting is optional and is given with `-e NAME=value`.
 | `SLATEBOX_AI_OWN_PROVIDERS` | `off` keeps everyone on the AI set here. Default `on`: people and teams may connect their own models and keys in Profile, AI. |
 | `SLATEBOX_AI_PRIVATE_ENDPOINTS` | `off` lets people and teams connect only models at public addresses, so they cannot use the server to reach other machines on your network. Default `on`: they may use your LAN or `host.docker.internal`. Your own connections are not affected. |
 | `SLATEBOX_KEY_ENCRYPTION_KEY` | 32 random bytes in base64, made once with `openssl rand -base64 32`. Every AI and call key saved on this server (an administrator's in Admin, AI control, and people's and teams' own) is encrypted with it. Unset, the first start makes one and keeps it in the data volume (`/data/secrets/key-encryption.key`), and every later start reads it back; it is never replaced. Either way, keep the same key for the life of the server and store it with your backups, which do not contain it: with a different key, saved keys cannot be read and are added again. It is never written to the log. |
-| `SLATEBOX_SETTINGS` | A JSON object of further app settings, for example `{"daily":{"apiKey":"…"}}` to turn on calls, or `{"enterprise":{"license":"sblic1.…"}}` for an on-prem license (below). |
-| `SLATEBOX_LICENSE`, `SLATEBOX_LICENSE_FILE` | An on-prem license key for the enterprise features (below): the key itself, or the path inside the container of a file that holds it. Give one of them, or the license in `SLATEBOX_SETTINGS`, not both. The key is never written to the log. |
+| `SLATEBOX_SETTINGS` | A JSON object of further app settings, for example `{"daily":{"apiKey":"…"}}` to turn on calls, or `{"connectors":{"off":true}}` to turn integrations off (below). |
 | `SLATEBOX_UPDATES` | `auto` (default): Admin › Updates decides whether releases are applied by themselves. `notify`: admins are told about releases, nothing is applied by itself. `off`: no update request ever leaves this server. See [Updates](#updates). |
 | `SLATEBOX_UPDATE_FEED` | Another update feed (a mirror): the address of its `update-feed/channels.json`. What it serves must still be signed by Slatebox. |
 | `MONGO_URL`, `MONGO_OPLOG_URL` | Use a MongoDB you run elsewhere. The bundled database is then not started. |
@@ -152,57 +151,33 @@ Profile, AI. An agent can set and test all of this through the API (`ai`,
 `ai-set`, `ai-check`) with a token that has the `ai:settings` permission.
 
 Your provider bills the account that issued its key; Slatebox charges nothing on
-your own server. Slatebox Pro exists only on Slatebox Cloud.
+your own server.
 
-## Enterprise features (Upgrade on prem)
+## Integrations
 
-The image includes Slatebox's enterprise features (inviting outside agents such
-as GitHub, Linear or Hugging Face onto a slate, and the connectors behind them),
-locked. An on-prem license from Slatebox unlocks them on one install, without
-moving to Slatebox Cloud. Single sign-on with the bundled Keycloak needs no
-license and is never locked.
+Integrations are on in every install, free, with no key: people connect an
+outside agent (any MCP server, such as GitHub, Linear or Hugging Face) or their
+Google account once on the **Integrations** page, then invite it onto any slate.
+The agent work they do runs on the AI connections set here (see [AI](#ai)).
+Single sign-on with the bundled Keycloak is free too. Set
+`SLATEBOX_SETTINGS='{"connectors":{"off":true}}'` to turn integrations off for
+everyone on this server. **Admin tools** shows whether they are on.
 
-The quickest way is the **Upgrade** button in the app's header, which this
-server's administrator sees (other people see a quiet **Enterprise** link with
-the same reasons, and are asked to talk to their admin). It offers two choices,
-each one click:
+This server also fetches the Community integrations Slatebox reviewed from
+`app.slatebox.com` every six hours, so people here can pick them in the
+gallery. To stop it, set
+`SLATEBOX_SETTINGS='{"enterprise":{"cloudLibrary":false}}'`.
 
-- **Unlock enterprise, stay on your servers.** *Start free trial* signs this
-  server in to Slatebox Cloud once (approve a code in any browser, your phone
-  included) and gets a trial key bound to this server's address. The features
-  turn on at once, with no restart, and the page opens **Integrations**. After
-  that the key is checked offline. *I have a license key* takes a key you got
-  from Slatebox and turns the features on the same way.
+## Move to Slatebox Cloud
 
-  The trial is offered only when Slatebox Cloud says it issues them, for as many
-  days as Cloud says. It needs this server's public address (a name like
-  `slatebox.example.com`, not `localhost` or a bare intranet name), reachable
-  from the internet over https: Cloud checks the address really is this server
-  by fetching a one-time proof from
-  `https://<your address>/.well-known/slatebox-license-proof/…`. Each address
-  gets one trial, which ends on its last day (a bought license keeps 14 days of
-  grace). This server also needs outbound https to `app.slatebox.com`. If either
-  is not possible, a license key works on any install, offline. When a trial or
-  license ends, the button reads **Renew** and the panel says when it ended.
-- **Move your team to Slatebox Cloud.** Signs in to Slatebox Cloud for an hour,
-  sends your team's slates, people, team settings, brand kit and files there
-  server to server, compares what arrived with what was sent, and makes it live
-  when you say so. This server keeps its copy; you can show everyone here a
-  banner pointing to Slatebox Cloud.
-
-Keys entered this way are kept in this server's database. A key given in the
-container's settings or environment (below) always wins. To ask Slatebox about a
-license, use **Admin tools → Upgrade on prem** or
-[contact Slatebox](https://slatebox.com/contact/).
-
-Give the key you receive with `-e SLATEBOX_LICENSE=sblic1.…`, or keep it in a file
-and mount it (`-v /path/slatebox.license:/run/secrets/slatebox.license:ro -e
-SLATEBOX_LICENSE_FILE=/run/secrets/slatebox.license`), and start the container
-again. `SLATEBOX_SETTINGS='{"enterprise":{"license":"sblic1.…"}}'` works too. The log says `[enterprise] licensed to …` and
-**Admin tools** shows the license and its end date. The key is checked inside
-the app, offline: nothing is sent to Slatebox. A key names its install's host
-name and works only at that address (`SLATEBOX_URL`). Without a valid key the
-features stay locked and the rest of Slatebox works as before.
+This server's administrator sees **Move to Cloud** in the app's header. It
+moves your team to Slatebox Cloud in one click: it signs this server in to
+Slatebox Cloud for an hour (approve a code in any browser, your phone
+included), sends your team's slates, people, team settings, brand kit and files
+there server to server, compares what arrived with what was sent, and makes it
+live when you say so. This server needs outbound https to `app.slatebox.com`
+for it. This server keeps its copy; you can show everyone here a banner
+pointing to Slatebox Cloud.
 
 ## Everyday commands
 

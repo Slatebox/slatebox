@@ -121,27 +121,11 @@ function keyEncryptionKey() {
   return value
 }
 
-// An on-prem license key (enterprise/README.md): SLATEBOX_LICENSE holds the key, SLATEBOX_LICENSE_FILE
-// the path of a file inside the container that holds it. Either goes into the app's private settings
-// (enterprise.license / enterprise.licenseFile), where the app checks it offline. One license, said
-// once: the same thing in SLATEBOX_SETTINGS as well stops the start. The key is never printed.
-function licenseSettings(extra) {
-  const key = setting('SLATEBOX_LICENSE')
-  const file = setting('SLATEBOX_LICENSE_FILE')
-  if (!key && !file) return null
-  if (key && file) throw new Plain('Set SLATEBOX_LICENSE or SLATEBOX_LICENSE_FILE, not both')
-  if (extra.enterprise?.license || extra.enterprise?.licenseFile) {
-    throw new Plain(`${key ? 'SLATEBOX_LICENSE' : 'SLATEBOX_LICENSE_FILE'} and SLATEBOX_SETTINGS enterprise.license or enterprise.licenseFile both give a license: keep one`)
-  }
-  if (key) {
-    if (!/^sblic1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(key)) {
-      throw new Plain(`SLATEBOX_LICENSE is not a Slatebox license key, which is one line starting with sblic1. (received ${key.length} characters, not shown)`)
-    }
-    return { license: key }
-  }
-  if (!file.startsWith('/')) throw new Plain(`SLATEBOX_LICENSE_FILE must be a path inside the container, starting with / (received ${file})`)
-  if (!existsSync(file)) throw new Plain(`SLATEBOX_LICENSE_FILE: ${file} is not in the container. Mount the file there, for example -v /path/on/host/slatebox.license:${file}:ro`)
-  return { licenseFile: file }
+// SLATEBOX_LICENSE / SLATEBOX_LICENSE_FILE: no longer needed, since integrations run on every install
+// with no key. Still accepted by name so an install started with one starts, but never checked,
+// never forwarded to the app and never printed: one start line says it is ignored.
+function ignoredLicense() {
+  return ['SLATEBOX_LICENSE', 'SLATEBOX_LICENSE_FILE'].filter(name => setting(name))
 }
 
 // Updates (lib/updates.mjs): SLATEBOX_UPDATES=auto|notify|off, SLATEBOX_UPDATE_FEED=<the feed's address>.
@@ -291,7 +275,7 @@ function main() {
   if (externalMongo) parseUrl('MONGO_URL', externalMongo, ['mongodb:', 'mongodb+srv:'])
   if (externalOplog && !externalMongo) throw new Plain('MONGO_OPLOG_URL only applies together with MONGO_URL')
   const extra = extraSettings()
-  const license = licenseSettings(extra)
+  const ignoredLicenseSettings = ignoredLicense()
   const sso = ssoMode(setting)
   const ownKeysKey = keyEncryptionKey()
   const updates = updateSettings()
@@ -307,14 +291,13 @@ function main() {
   // between the browser, the app and the relay.
   const settings = mergeSettings(extra, {
     public: {
-      // A self-hosted install: enterprise code stays locked until an on-prem license unlocks it.
+      // A self-hosted install: integrations (the enterprise code) run here with no key.
       env: 'selfhost', edition: 'self-host', baseUrl: url.origin, wsUrl, chatWoot: { enabled: false },
       // Cloud links store images in S3, offered only when SLATEBOX_SETTINGS configures a bucket.
       cloudLinks: Boolean(extra.aws?.imageBucket),
     },
     slateboxAPI: { publicKey: secrets.apiPublicKey, secretKey: secrets.apiSecretKey },
   })
-  if (license) settings.enterprise = { ...settings.enterprise, ...license }
   // Single sign-on is either wired to the bundled Keycloak or off; SLATEBOX_SETTINGS cannot half-configure it.
   delete settings.sso
   if (settings.public) delete settings.public.sso
@@ -395,6 +378,7 @@ function main() {
   say(`Mail:      ${mailUrl ? `on, from ${mailFrom}` : 'off (set SLATEBOX_MAIL_URL to send invitations and sign-in mail)'}`)
   say(`SSO:       ${sso.enabled ? `on, Keycloak ${identity.keycloak || ''} at ${url.origin}${SSO_PATH}/, issuer ${issuerFor(url)}${sso.only ? ', single sign-on only' : ''}${sso.defaultRole === 'none' ? ', new people join a team only by invitation' : ', new people join the first team as members'}${sso.domains.length ? `, email domains ${sso.domains.join(', ')}` : ''}${sso.adminOpen ? '' : ', admin console closed on this address'}`.replace('  ', ' ') : 'off (set SLATEBOX_SSO=keycloak to turn on single sign-on)'}`)
   say(`Updates:   ${{ auto: 'checked on GitHub every 6 hours; applied as Admin › Updates says', notify: 'checked on GitHub every 6 hours; never applied by themselves (SLATEBOX_UPDATES=notify)', off: 'off: no update check leaves this server (SLATEBOX_UPDATES=off)' }[updates.mode]}`)
+  if (ignoredLicenseSettings.length) say(`License:   ${ignoredLicenseSettings.join(' and ')} ignored: no longer needed, integrations are free on every install`)
   for (const line of ai.summary) say(line)
   const kekSource = {
     setting: 'the key from SLATEBOX_KEY_ENCRYPTION_KEY',

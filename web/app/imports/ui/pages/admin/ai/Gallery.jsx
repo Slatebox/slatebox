@@ -10,7 +10,7 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 
 // Admin › AI control › Gallery: the outside agents people can invite onto a slate (Slatebox Cloud and
-// licensed installs). Turn a card on or off, move it, change what it says, and edit its recipe: the
+// every self-hosted install whose build carries the integrations code). Turn a card on or off, move it, change what it says, and edit its recipe: the
 // asks it runs with fixed steps (no planner reads the server's words), as JSON the server checks. A
 // card's address never changes here. The hint each card's planner gets is a prompt in the Prompts tab
 // (connectors.recipe.<id>), versioned and published there. Every change is in Changes; only a
@@ -72,7 +72,7 @@ export default function Gallery() {
       setError('')
     } catch (err) {
       setError(err?.error === 404 || /not found/i.test(err?.reason || err?.message || '')
-        ? 'Invited agents are part of Slatebox Cloud and licensed installs.'
+        ? 'This build of Slatebox carries no integrations code, so there is no gallery here.'
         : failure(err, 'The gallery could not be read.'))
     }
   }

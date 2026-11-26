@@ -7,7 +7,7 @@
 // summary, and the offer to let an integration make changes too.
 
 // What an integration's state says, where it can't be invited now.
-export const STATUS_WORDS = { paused: 'tools changed: review it on the Integrations page', needs_sign_in: 'needs sign-in', pro_ended: 'Pro ended' }
+export const STATUS_WORDS = { paused: 'tools changed: review it on the Integrations page', needs_sign_in: 'needs sign-in' }
 
 /**
  * The gallery card's state for this person: { here } when one of their agents on this slate came
@@ -65,14 +65,14 @@ export function changesOffer(integration) {
  * just connect here without 'asking' first"). Connecting it already gave its sign-in and its consent,
  * so adding it is instant: one click, no dialog, no new sign-in, no consent again. The only times it
  * is not are said plainly: its tools changed since it was connected (look at them once), it needs a
- * new sign-in, Pro ended, or this slate's owner does not let this person bring outside agents here.
+ * new sign-in, or this slate's owner does not let this person bring outside agents here.
  * Adding never changes how its outside changes are approved: Ask first stays its default.
  *
  * integration: a row of integrations.list. invited: the agents on this slate (each with integrationId,
  * mine, status). setting: integrations.slateSetting's answer, or null while it is still asked (the
  * server checks it again either way). isOwner: this person owns the slate.
  * Returns { act, why }: act is 'here' (already on this slate), 'add' (instant), 'review' (its tools
- * changed), 'sign-in', 'pro' or 'blocked' (the slate owner's rule); why is empty only for 'add'/'here'.
+ * changed), 'sign-in' or 'blocked' (the slate owner's rule); why is empty only for 'add'/'here'.
  */
 export function addDecision(integration, { invited = [], setting = null, isOwner = false } = {}) {
   const name = integration?.name || 'This agent'
@@ -83,7 +83,6 @@ export function addDecision(integration, { invited = [], setting = null, isOwner
   if (rule === 'owner' && !isOwner) return { act: 'blocked', why: 'Only this slate\'s owner can bring outside agents here.' }
   if (integration?.status === 'paused') return { act: 'review', why: `${name}'s tools changed since you connected it. Look at them once on the Integrations page, then add it.` }
   if (integration?.status === 'needs_sign_in') return { act: 'sign-in', why: `${name} needs you to sign in again on the Integrations page.` }
-  if (integration?.status === 'pro_ended') return { act: 'pro', why: 'Adding agents to slates is part of Slatebox Pro and Slatebox Business.' }
   if (integration?.status && integration.status !== 'active') return { act: 'review', why: `${name} can't be added right now. Open the Integrations page to see why.` }
   return { act: 'add', why: '' }
 }

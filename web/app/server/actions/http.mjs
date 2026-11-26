@@ -97,20 +97,12 @@ export function publicHeaders(res, action) {
 // action and User-Agent); never fails the request.
 export function mountHttp(app, registry, { express, authenticate, forwardedCount = 0, onAgentCall = null }) {
   const router = express.Router()
-  // Built again when actions join after start (registry.extend: enterprise code unlocked while the server ran).
-  let openApi = { version: -1, doc: null }
-  const currentOpenApi = () => {
-    const version = typeof registry.version === 'function' ? registry.version() : 0
-    if (openApi.version !== version) openApi = { version, doc: buildOpenApi(registry) }
-    return openApi.doc
-  }
-  currentOpenApi() // a bad schema stops the server at start, as before
+  const openApi = buildOpenApi(registry) // a bad schema stops the server at start
   router.get('/openapi.json', (_req, res) => {
     res.setHeader('Cache-Control', 'no-store')
-    res.json(currentOpenApi())
+    res.json(openApi)
   })
-  // The actions' own routes sit in a router of their own, ahead of the 404 below, so actions that
-  // join later (addActions) are reached like the first ones.
+  // The actions' own routes sit in a router of their own, ahead of the 404 below.
   const actionRoutes = express.Router()
   router.use(actionRoutes)
   const mountAction = (action) => {
@@ -183,7 +175,5 @@ export function mountHttp(app, registry, { express, authenticate, forwardedCount
     return sendError(res, error)
   })
   app.use(API_BASE, router)
-  // Routes for actions added to the registry after start (registry.extend first).
-  router.addActions = (actions) => actions.forEach(mountAction)
   return router
 }

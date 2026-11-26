@@ -2,7 +2,7 @@
 // Not MIT: see enterprise/README.md.
 //
 // Google as registry actions (google.*): each a Meteor method, an /api/v1 route and an exec call,
-// with the same checks (Pro or Business on Cloud, the Google card on, the person's own Google). The
+// with the same checks (a signed-in person, the Google card on, the person's own Google). The
 // sign-in itself (google.connect) is the app's own: a token cannot start or finish a Google sign-in.
 // The Google Picker is browser-only: over exec or the API, importFile works on files Slatebox may
 // already open (ones it made, or ones picked before).
@@ -28,13 +28,13 @@ export function googleActions(service) {
       scope: 'slates:read',
       mounts: { ddp: true, http: { method: 'GET', path: '/google', operationId: 'googleStatus' } },
       input: { type: 'object', properties: {}, additionalProperties: false },
-      output: obj({ enabled: { type: 'boolean' }, configured: { type: 'boolean' }, connected: { type: 'boolean' }, status: { type: 'string' }, account: { type: ['string', 'null'], description: 'The Google account connected (your own).' }, scopes: { type: 'array', items: { type: 'string' } }, pickerReady: { type: 'boolean' }, pro: { type: 'boolean' } }),
+      output: obj({ enabled: { type: 'boolean' }, configured: { type: 'boolean' }, connected: { type: 'boolean' }, status: { type: 'string' }, account: { type: ['string', 'null'], description: 'The Google account connected (your own).' }, scopes: { type: 'array', items: { type: 'string' } }, pickerReady: { type: 'boolean' } }),
       handler: run('status'),
     }),
     defineAction({
       id: 'google.connect',
       title: 'Connect Google',
-      description: 'Finish connecting Google from the app\'s own page: the one-time code Google gave this browser is exchanged on the server, and what Google issues is kept encrypted for you alone. People only. Needs Slatebox Pro or Business.',
+      description: 'Finish connecting Google from the app\'s own page: the one-time code Google gave this browser is exchanged on the server, and what Google issues is kept encrypted for you alone. People only.',
       toolset: 'connectors',
       kind: 'write',
       idempotency: 'optional',
@@ -51,7 +51,7 @@ export function googleActions(service) {
       ...base,
       id: 'google.saveToDrive',
       title: 'Save a slate to Google Drive',
-      description: 'Save a slate to your Google Drive, in a Slatebox folder: its picture (PNG or SVG), a PDF, or the slate file. Needs Slatebox Pro or Business and Google connected.',
+      description: 'Save a slate to your Google Drive, in a Slatebox folder: its picture (PNG or SVG), a PDF, or the slate file. Needs Google connected.',
       kind: 'write',
       idempotency: 'optional',
       changesNoSlate: true,
@@ -66,7 +66,7 @@ export function googleActions(service) {
       ...base,
       id: 'google.exportDoc',
       title: 'Export a slate to Google Docs',
-      description: 'Export a slate you can edit to a Google Doc: its title, each branch as a heading with its notes as bullets (links kept), and its picture. update: true writes over the last Doc you made from this slate. Needs Slatebox Pro or Business and Google connected.',
+      description: 'Export a slate you can edit to a Google Doc: its title, each branch as a heading with its notes as bullets (links kept), and its picture. update: true writes over the last Doc you made from this slate. Needs Google connected.',
       kind: 'write',
       idempotency: 'optional',
       changesNoSlate: true,
@@ -93,7 +93,7 @@ export function googleActions(service) {
       ...base,
       id: 'google.exportSlides',
       title: 'Export presentation frames to Google Slides',
-      description: 'Make a Google Slides deck from a presentation on a slate you can edit: one slide per frame, with its title and picture. Needs Slatebox Pro or Business and Google connected.',
+      description: 'Make a Google Slides deck from a presentation on a slate you can edit: one slide per frame, with its title and picture. Needs Google connected.',
       kind: 'write',
       idempotency: 'optional',
       changesNoSlate: true,
@@ -108,7 +108,7 @@ export function googleActions(service) {
       ...base,
       id: 'google.importFile',
       title: 'Bring a Google file onto a slate',
-      description: 'Bring a Google Doc (headings become groups, paragraphs and bullets notes), a sheet (rows), a Slides deck or a text file onto a slate as one suggestion to keep or discard (one undo). Only files Slatebox may open: ones it made, or ones you picked in the Picker. Needs Slatebox Pro or Business and Google connected.',
+      description: 'Bring a Google Doc (headings become groups, paragraphs and bullets notes), a sheet (rows), a Slides deck or a text file onto a slate as one suggestion to keep or discard (one undo). Only files Slatebox may open: ones it made, or ones you picked in the Picker. Needs Google connected.',
       kind: 'write',
       idempotency: 'optional',
       changesNoSlate: true,

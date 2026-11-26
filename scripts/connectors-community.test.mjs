@@ -1,7 +1,7 @@
 // Community integrations in the agent gallery (owner, 2026-11-25): a suggested custom MCP server an
 // administrator approved becomes a card after the built-in ones, checked as a card (address policy,
-// plain words, a known group); a licensed self-hosted install receives Slatebox Cloud's from one fixed
-// origin, keeps the last good copy offline, and a locked install fetches nothing. The suggestion's own
+// plain words, a known group); every self-hosted install receives Slatebox Cloud's from one fixed
+// origin (no key needed) and keeps the last good copy offline. The suggestion's own
 // checks (the person's working connection; the reviewer's anonymous probe) refuse private addresses.
 // The invite dialog's Existing and Custom tabs are real tabs.
 // Run: node --import ./scripts/enterprise-resolve.mjs --test scripts/connectors-community.test.mjs
@@ -89,7 +89,7 @@ function serviceWorld({ cards = GALLERY } = {}) {
   const options = {
     connections: memoryStore(), integrations, slateSettings: memoryStore(), suggestions: { agentIdOf: async () => 'a1' }, fetch, session: { discover, callTool },
     model: async () => ({}), applyOperations: async () => ({}), access: { forUser: async () => null, reload: async () => null },
-    pro: async () => true, firstName: async () => 'Ada', sanitizeName: sanitizeClientName, presence: { plan: async () => {}, step: async () => {}, saved: async () => {}, end: async () => {} },
+    firstName: async () => 'Ada', sanitizeName: sanitizeClientName, presence: { plan: async () => {}, step: async () => {}, saved: async () => {}, end: async () => {} },
     vault: { available: () => true, describe: async () => null, tokenFor: async () => null, remove: async () => ({}) },
     slateList: async () => [], devOrigins: [servers.origin], sleep: async () => {}, later: () => {}, audit: () => {}, gallery: async () => cards,
   }
@@ -218,13 +218,13 @@ async function fakeCloud() {
   return { origin, state, close: () => new Promise((resolve) => server.close(resolve)) }
 }
 
-test('a licensed install pulls Slatebox Cloud\'s Community cards, checks each, keeps the last good copy offline; a locked one pulls nothing', async () => {
+test('every self-hosted install pulls Slatebox Cloud\'s Community cards (no key needed), checks each, keeps the last good copy offline', async () => {
   assert.equal(CLOUD_ORIGIN, 'https://app.slatebox.com')
   assert.ok(manifest.features.includes('library.cloud'))
-  assert.equal(cloudLibraryOn({ via: 'license', settings: {} }), true)
-  assert.equal(cloudLibraryOn({ via: 'license', settings: { enterprise: { cloudLibrary: false } } }), false)
+  assert.equal(cloudLibraryOn({ via: 'self-host', settings: {} }), true)
+  assert.equal(cloudLibraryOn({ via: 'self-host', settings: { enterprise: { cloudLibrary: false } } }), false, 'the operator\'s switch')
   assert.equal(cloudLibraryOn({ via: 'cloud', settings: {} }), false, 'Cloud is where they come from')
-  assert.equal(cloudLibraryOn({ via: null, settings: {} }), false, 'a locked install')
+  assert.equal(cloudLibraryOn({ via: null, settings: {} }), false, 'enterprise code not running')
   const cloud = await fakeCloud()
   try {
     let saved = null

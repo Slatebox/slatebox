@@ -13,10 +13,11 @@ whole is not under a single license, and it is not "MIT" as a whole.**
 | Slatebox collaboration relay, a fork of y-websocket | MIT | `slatebox-relay-LICENSE.txt` |
 | The start-up, health, backup and restore scripts under `/opt/slatebox/bin` and `/opt/slatebox/lib` | MIT, part of the Slatebox app repository | `slatebox-app-LICENSE.md` |
 
-The one exception is the app's `enterprise/` directory, which the image
-includes locked. It is under the Slatebox Enterprise License: source-available,
-not open source (`slatebox-app-LICENSING.md`; the full text is
-`enterprise/LICENSE` in https://github.com/Slatebox/slatebox).
+The one exception is the app's `enterprise/` directory (integrations), which
+the image includes and runs. It is under the Slatebox Enterprise License, which
+allows free use in any Slatebox install. It is source-available, not open
+source (`slatebox-app-LICENSING.md`; the full text is `enterprise/LICENSE` in
+https://github.com/Slatebox/slatebox).
 
 ## Third-party programs, each under its own license
 

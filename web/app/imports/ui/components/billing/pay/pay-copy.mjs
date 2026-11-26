@@ -172,7 +172,6 @@ export function businessChoice(price, members) {
 /** What Business brings, in the sheet and on the team page. */
 export const BUSINESS_BRINGS = Object.freeze([
   Object.freeze({ icon: 'ai', text: 'A shared AI and call pool for the team: each member adds what Slatebox Pro includes' }),
-  Object.freeze({ icon: 'video', text: 'Inviting outside agents onto slates, for every member' }),
 ])
 
 /** The fine print under the Business Pay button. */

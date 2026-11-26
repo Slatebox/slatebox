@@ -12,8 +12,8 @@ export const SETTINGS = Object.freeze([
   'SLATEBOX_KEY_ENCRYPTION_KEY',
   // A Cloudflare Tunnel connector token: a team address (https://<name>.slatebox.team) or your own tunnel.
   'SLATEBOX_TUNNEL_TOKEN',
-  // An on-prem license key from Slatebox LLC for the enterprise features (enterprise/README.md):
-  // the key itself, or the path of a file inside the container that holds it.
+  // No longer needed: integrations are free on every install. Accepted by name only, so an install
+  // started with one still starts; configure.mjs ignores the value and says so in one start line.
   'SLATEBOX_LICENSE', 'SLATEBOX_LICENSE_FILE',
   // Updates from GitHub releases: auto (Admin › Updates decides), notify (never applied by itself) or
   // off (no update request ever leaves this server). SLATEBOX_UPDATE_FEED is another signed feed

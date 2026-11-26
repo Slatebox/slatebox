@@ -1,41 +1,23 @@
-// The header button for self-hosted installs on a self-hosted install (owner, 2026-11-25), without Meteor:
-// - who sees what (upgradeOffer): Cloud never; admins an actionable Upgrade; members the reasons
-//   and "Ask your admin"; an "Enterprise" chip once unlocked ("Renew" in a license's grace);
-// - the panel lists only what enterprise/ really does;
-// - a key entered in the app: checked offline (valid, expired, changed, foreign, another host's,
-//   a Cloud key), kept, never handed back; settings and environment still win;
-// - unlocking while the server runs: the enterprise actions join the registry, their /api/v1
-//   routes answer and their Meteor methods exist, with the same per-call license checks, and a
-//   locked key registers nothing;
-// - the trial: a device sign-in to (a stand-in) Slatebox Cloud, a host-bound trial key, applied at
-//   once; declined, expired and not-offered sign-ins; re-runnable; refused when this server does not
-//   answer its host proof; offered only when Cloud says so (unreachable and no-trials in words);
-//   cancellable mid sign-in, and a move cancellable mid-upload;
-// - what the panel says about an ended, ending or foreign key; one install host everywhere;
+// The header's Move to Cloud on a self-hosted install (owner, 2026-11-25), without Meteor.
+// Integrations are free on every install since 2026-11-26, so the button's only job is the move:
+// there is no trial, no license key, no unlock and no "Upgrade" any more.
+// - who sees it (cloudMoveOffer): Cloud never; nobody signed out; this server's administrator only;
+// - what it says: the move and that staying is free; never a trial, a license, a plan, a price or Pro;
+// - the server: no trial, key or license calls are left, and nothing asks Slatebox Cloud for a key;
 // - the move: export here, upload to Cloud, counts compared section by section, live only on the
 //   administrator's yes, identical slates on Cloud; one at a time, re-runnable, resumable after a
-//   restart without uploading twice, a waiting move replaced only when asked, and Cloud's limits
-//   in its own words.
+//   restart without uploading twice, a waiting move replaced only when asked, cancellable
+//   mid-upload, and Cloud's limits and an unreachable Cloud in plain words.
 // Run: node --test scripts/selfhost-options.test.mjs
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { Buffer } from 'node:buffer'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import express from 'express'
-import { upgradeOffer, licenseNotice, trialLabel, ENTERPRISE_VALUE, PREVIEW_AGENTS, PLANS_URL, FLOW_WORDS } from '../web/app/imports/api/common/selfhost-options.mjs'
-import { enterpriseAccess, installHost, signLicense, verifyLicense } from '../web/app/server/enterprise-license.mjs'
-import { createLicenseKeyStore, LICENSE_ROW } from '../web/app/server/enterprise-key.mjs'
-import { createEnterpriseHost, loadEnterprise, loadEnterpriseLate } from '../web/app/server/enterprise-loader.mjs'
-import { licenseStatusFor } from '../web/app/server/enterprise-license-status.mjs'
-import { actions as baseActions, createAppRegistry } from '../web/app/server/actions/index.mjs'
-import { defineAction } from '../web/app/server/actions/registry.mjs'
-import { mountHttp } from '../web/app/server/actions/http.mjs'
-import { ddpMethodsFor } from '../web/app/server/actions/ddp.mjs'
-import { liveRedactor } from '../web/app/server/exec/system.mjs'
+import * as options from '../web/app/imports/api/common/selfhost-options.mjs'
 import { createCloudClient, CloudError } from '../web/app/server/selfhost-options/cloud-client.mjs'
-import { createUpgradeService, memoryFlows, UpgradeError } from '../web/app/server/selfhost-options/service.mjs'
-import { createProofStore, PROOF_PATH } from '../web/app/server/licenses/host-proof.mjs'
+import * as cloudClient from '../web/app/server/selfhost-options/cloud-client.mjs'
+import { createMoveService, memoryFlows, MoveError } from '../web/app/server/selfhost-options/service.mjs'
 import { createTeamExporter } from '../web/app/server/team-export/export-core.mjs'
 import { createTeamImporter } from '../web/app/server/team-export/import-core.mjs'
 import { createTeamTransfer, createTicketStore, MOVES_PER_DAY } from '../web/app/server/team-export/transfer.mjs'
@@ -43,6 +25,7 @@ import { classifyUpload } from '../web/app/server/common/upload-kinds.mjs'
 import { memoryDb } from './team-export-store.mjs'
 import { startFakeCloud, testSigner } from './fake-slatebox-cloud.mjs'
 
+const { cloudMoveOffer, FLOW_WORDS, FREE_HERE, MOVE_LABEL, MOVED_LABEL, moveLabel, MOVE_WHAT_CHANGES, MOVE_WHAT_MOVES } = options
 const appRequire = createRequire(new URL('../web/app/package.json', import.meta.url))
 appRequire('slateboxjs/workshops/behaviour')
 appRequire('slateboxjs/workshops/rules')
@@ -51,215 +34,71 @@ const { validateWorkshop } = appRequire('slateboxjs/workshops/model')
 const signer = testSigner()
 const HOST = 'boards.acme.test'
 const selfHost = (extra = {}) => ({ public: { env: 'selfhost', edition: 'self-host', baseUrl: `https://${HOST}`, ...extra } })
-const unlockedSettings = (via = 'license') => selfHost({ enterprise: { unlocked: true, via, features: ['agents.invite'] } })
-const sign = (payload) => signLicense({ id: 'lic_t', licensee: 'Acme', issuedAt: '2026-01-01', expiresAt: '2099-12-31', ...payload }, { kid: signer.kid, privateKey: signer.privateKey })
-const day = (iso) => Date.parse(iso + 'T12:00:00Z')
+const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
+// What self-host copy never says (owner rules): no trial, license, unlock, upgrade, plan, price or payment.
+const NOT_SAID = /trial|licen[cs]e|unlock|upgrade|enterprise features|\bPro\b|Business|\$\s?\d|price|pay(ment)?s?\b|stripe|plans\//i
 
-// A systemSettings stand-in with the Meteor collection API the key store uses.
-function settingsRows() {
-  const rows = new Map()
-  return {
-    rows,
-    findOneAsync: async ({ _id }) => (rows.has(_id) ? structuredClone(rows.get(_id)) : undefined),
-    upsertAsync: async ({ _id }, { $set }) => rows.set(_id, { ...(rows.get(_id) || { _id }), ...structuredClone($set) }),
-    removeAsync: async ({ _id }) => rows.delete(_id),
-  }
-}
+// ------------------------------------------------------------------ who sees it, and what it says
 
-// ------------------------------------------------------------------ who sees what
-
-test('who sees Upgrade: never on Cloud or signed out; admins act, members ask; a chip once unlocked', () => {
+test('who sees Move to Cloud: never on Cloud or signed out; this server\'s administrator only, whatever runs here', () => {
   const cloud = { public: { edition: 'cloud', enterprise: { unlocked: true, via: 'cloud', features: [] } } }
-  for (const serverAdmin of [true, false, null]) assert.deepEqual(upgradeOffer({ settings: cloud, signedIn: true, serverAdmin }), { show: 'none' }, 'Cloud never')
-  assert.deepEqual(upgradeOffer({ settings: selfHost(), signedIn: false, serverAdmin: false }), { show: 'none' }, 'nobody signed in (or a guest)')
-  assert.deepEqual(upgradeOffer({ settings: selfHost(), signedIn: true, serverAdmin: null }), { show: 'none' }, 'not until the server answers who is admin')
-  assert.deepEqual(upgradeOffer({ settings: selfHost(), signedIn: true, serverAdmin: true }), { show: 'offer', role: 'admin' })
-  assert.deepEqual(upgradeOffer({ settings: selfHost(), signedIn: true, serverAdmin: false }), { show: 'offer', role: 'member' })
-  assert.deepEqual(upgradeOffer({ settings: {}, signedIn: true, serverAdmin: true }), { show: 'offer', role: 'admin' }, 'a settings file without an edition is self-host')
-  assert.deepEqual(upgradeOffer({ settings: unlockedSettings(), signedIn: true, serverAdmin: true }), { show: 'chip', role: 'admin', chip: 'enterprise' })
-  assert.deepEqual(upgradeOffer({ settings: unlockedSettings(), signedIn: true, serverAdmin: false }), { show: 'chip', role: 'member', chip: 'enterprise' })
-  assert.deepEqual(upgradeOffer({ settings: unlockedSettings(), signedIn: true, serverAdmin: true, license: { reason: 'grace' } }), { show: 'chip', role: 'admin', chip: 'renew' })
-  // A kept key that ended: the admin's button says Renew (a member still sees the quiet entry).
-  const endedTrial = { reason: 'expired', license: { trial: true, expiresAt: '2026-12-24', hosts: [HOST] } }
-  assert.deepEqual(upgradeOffer({ settings: selfHost(), signedIn: true, serverAdmin: true, license: endedTrial }), { show: 'offer', role: 'admin', ended: true })
-  assert.deepEqual(upgradeOffer({ settings: selfHost(), signedIn: true, serverAdmin: false, license: endedTrial }), { show: 'offer', role: 'member' })
-  assert.deepEqual(upgradeOffer({ settings: selfHost(), signedIn: true, serverAdmin: true, license: { reason: 'no_license', license: null } }), { show: 'offer', role: 'admin' })
-  // A browser told "unlocked" by a settings file alone is not: the server writes public.enterprise itself.
-  assert.equal(PLANS_URL, 'https://slatebox.com/plans/')
-  assert.ok(FLOW_WORDS.signing_in && FLOW_WORDS.moved && FLOW_WORDS.unlocked)
+  for (const serverAdmin of [true, false, null]) assert.deepEqual(cloudMoveOffer({ settings: cloud, signedIn: true, serverAdmin }), { show: 'none' }, 'Cloud never')
+  assert.deepEqual(cloudMoveOffer({ settings: selfHost(), signedIn: false, serverAdmin: true }), { show: 'none' }, 'nobody signed in (or a guest)')
+  assert.deepEqual(cloudMoveOffer({ settings: selfHost(), signedIn: true, serverAdmin: null }), { show: 'none' }, 'not until the server answers who is admin')
+  assert.deepEqual(cloudMoveOffer({ settings: selfHost(), signedIn: true, serverAdmin: false }), { show: 'none' }, 'a member cannot move a team: no dead control')
+  assert.deepEqual(cloudMoveOffer({ settings: selfHost(), signedIn: true, serverAdmin: true }), { show: 'move' })
+  assert.deepEqual(cloudMoveOffer({ settings: {}, signedIn: true, serverAdmin: true }), { show: 'move' }, 'a settings file without an edition is self-host')
+  // Integrations running here or not changes nothing: the button only moves the team.
+  for (const enterprise of [{ unlocked: true, via: 'self-host', features: ['agents.invite'] }, { unlocked: false }])
+    assert.deepEqual(cloudMoveOffer({ settings: selfHost({ enterprise }), signedIn: true, serverAdmin: true }), { show: 'move' })
 })
 
-test('what the panel says about a kept key: ended, ending, for another address, not yet; the trial length only from Cloud', () => {
-  assert.equal(licenseNotice(null), null)
-  assert.equal(licenseNotice({ reason: 'no_license', license: null }), null)
-  assert.equal(licenseNotice({ reason: 'license', license: { expiresAt: '2027-12-31' } }), null, 'a healthy license needs no notice')
-  const trial = licenseNotice({ reason: 'expired', license: { trial: true, expiresAt: '2026-12-24' } })
-  assert.deepEqual([trial.kind, trial.trial, trial.title], ['expired', true, 'Your free trial ended on 2026-12-24.'])
-  assert.match(trial.text, /Get a license/)
-  assert.equal(licenseNotice({ reason: 'expired', license: { expiresAt: '2026-12-24' } }).title, 'Your license ended on 2026-12-24.')
-  // In its grace days: when it ended, when features turn off, what to do.
-  const grace = licenseNotice({ reason: 'grace', license: { expiresAt: '2026-12-24' }, endsAt: day('2027-01-08') - 12 * 3_600_000 })
-  assert.equal(grace.title, 'Your license ended on 2026-12-24.')
-  assert.match(grace.text, /stay on until 2027-01-07, then turn off\. Get a license/)
-  assert.match(licenseNotice({ reason: 'wrong_host', license: { hosts: ['old.acme.test'] } }).title, /old\.acme\.test/)
-  assert.match(licenseNotice({ reason: 'not_yet', license: { issuedAt: '2027-02-01' } }).title, /2027-02-01/)
-  assert.equal(trialLabel(21), 'Start 21-day free trial')
-  for (const unknown of [null, undefined, 0, 2.5]) assert.equal(trialLabel(unknown), 'Start free trial')
-})
-
-test('one host everywhere: the key kept, the license check and the trial ask all use installHost', async () => {
-  // baseUrl unset, ROOT_URL set (Meteor.absoluteUrl): the key Cloud issues for that host unlocks.
-  const settings = { public: { edition: 'self-host' } }
-  const env = { ROOT_URL: `https://${HOST}/` }
-  assert.equal(installHost({ settings, env }), HOST)
-  assert.equal(installHost({ settings: selfHost(), env: { ROOT_URL: 'https://other.example.com' } }), HOST, 'baseUrl wins')
-  assert.equal(installHost({ settings, env: {} }), '')
-  const rows = settingsRows()
-  const keys = createLicenseKeyStore({ collection: rows, keys: signer.keys, now: () => day('2027-01-01') })
-  await keys.save(await sign({ hosts: [HOST] }), { host: installHost({ settings, env }), source: 'trial' })
-  const access = enterpriseAccess({ settings, env, keys: signer.keys, now: day('2027-01-01'), stored: keys.cached() })
-  assert.deepEqual([access.unlocked, access.reason], [true, 'license'])
-})
-
-test('the panel lists only what enterprise/ really does', () => {
-  const gallery = readFileSync(new URL('../enterprise/common/gallery.mjs', import.meta.url), 'utf8')
-  for (const name of PREVIEW_AGENTS) assert.ok(gallery.includes(`name: '${name}'`), `${name} is a card in the enterprise gallery`)
-  const server = readFileSync(new URL('../enterprise/server/index.js', import.meta.url), 'utf8')
-  const has = { agents: /connectorActions/, integrations: /integrationActions/, catalog: /galleryActions|gallery/, google: /googleActions/, 'gallery-admin': /galleryActions/ }
-  assert.deepEqual(ENTERPRISE_VALUE.map((item) => item.id), Object.keys(has))
-  for (const item of ENTERPRISE_VALUE) assert.match(server, has[item.id], `${item.id} is registered by enterprise/server/index.js`)
-  const words = ENTERPRISE_VALUE.map((item) => item.title + ' ' + item.text).join(' ')
-  assert.doesNotMatch(words, /\$|€|£|per (month|year|seat)|pricing|\bAI\b/i, 'no prices in the app; "agent", not "AI"')
-})
-
-// ------------------------------------------------------------------ the key an administrator enters
-
-test('a key entered in the app is checked offline, kept, and never handed back', async () => {
-  const rows = settingsRows()
-  const keys = createLicenseKeyStore({ collection: rows, keys: signer.keys, now: () => day('2027-01-01') })
-  const good = await sign({ hosts: [HOST] })
-  const saved = await keys.save(good, { host: HOST, by: 'alice', source: 'pasted' })
-  assert.equal(saved.license.licensee, 'Acme')
-  assert.equal(JSON.stringify(saved).includes(good), false, 'the key never comes back')
-  assert.equal(keys.cached(), good)
-  assert.equal(rows.rows.get(LICENSE_ROW).key, good)
-
-  const refused = async (text, reason, host = HOST) => {
-    await assert.rejects(keys.save(text, { host, source: 'pasted' }), (error) => error.reason === reason && error.status === 400 && typeof error.message === 'string')
+test('the header button is called Move to Cloud, and nothing it opens offers a trial, a license, an upgrade or a price', () => {
+  assert.equal(MOVE_LABEL, 'Move to Cloud')
+  assert.deepEqual(Object.keys(options).sort(), ['CLOUD_ORIGIN', 'FLOW_WORDS', 'FREE_HERE', 'MOVED_LABEL', 'MOVE_LABEL', 'MOVE_WHAT_CHANGES', 'MOVE_WHAT_MOVES', 'cloudMoveOffer', 'moveLabel'])
+  // After a finished move the header says where the team is, and still opens the panel.
+  assert.equal(MOVED_LABEL, 'On Slatebox Cloud')
+  assert.equal(moveLabel(null), MOVE_LABEL)
+  assert.equal(moveLabel({ serverAdmin: true, move: { state: 'review' }, movedSaved: null }), MOVE_LABEL)
+  assert.equal(moveLabel({ serverAdmin: true, move: { state: 'moved' }, movedSaved: null }), MOVED_LABEL)
+  assert.equal(moveLabel({ serverAdmin: true, move: null, movedSaved: { url: 'https://app.slatebox.com/', banner: false } }), MOVED_LABEL)
+  assert.deepEqual(Object.keys(FLOW_WORDS).sort(), ['cancelled', 'confirming', 'exporting', 'failed', 'moved', 'review', 'signing_in', 'uploading'])
+  for (const words of [MOVE_LABEL, MOVED_LABEL, FREE_HERE, ...MOVE_WHAT_MOVES, ...MOVE_WHAT_CHANGES, ...Object.values(FLOW_WORDS)]) assert.doesNotMatch(words, NOT_SAID, words)
+  assert.match(FREE_HERE, /integrations[\s\S]*free on this server/)
+  const ui = ['web/app/imports/ui/components/selfhost/MoveToCloudButton.jsx', 'web/app/imports/ui/components/selfhost/MoveToCloudPanel.jsx']
+  for (const path of ui) {
+    // What a person reads: JSX text and string literals (comments are for developers).
+    const shown = read(path).replace(/^\s*\/\/.*$/gm, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    assert.doesNotMatch(shown, NOT_SAID, path)
+    assert.doesNotMatch(shown, /selfhost\.(startTrial|resumeTrial|enterKey|cloudOffer)|adoptEnterpriseState|license-key|start-trial/, path)
   }
-  await refused(await sign({ expiresAt: '2026-06-30', hosts: [HOST] }), 'expired')
-  await refused(good.slice(0, -6) + 'AAAAAA', 'bad_signature')
-  const otherSigner = testSigner('test-cloud-2026')
-  await refused(await signLicense({ id: 'x', licensee: 'X', issuedAt: '2026-01-01', expiresAt: '2099-01-01' }, { kid: otherSigner.kid, privateKey: otherSigner.privateKey }), 'bad_signature')
-  await refused(await signLicense({ id: 'x', licensee: 'X', issuedAt: '2026-01-01', expiresAt: '2099-01-01' }, { kid: 'someone-else', privateKey: otherSigner.privateKey }), 'unknown_key')
-  await refused(await sign({ hosts: ['other.example.com'] }), 'wrong_host')
-  await refused(await sign({ kind: 'cloud', hosts: [HOST] }), 'wrong_kind')
-  await refused('not a key', 'malformed')
-  await refused('', 'malformed')
-  assert.equal(keys.cached(), good, 'a refused key leaves the kept one')
-
-  // Read back after a restart; the loader's check uses it, after settings and environment.
-  const again = createLicenseKeyStore({ collection: rows, keys: signer.keys })
-  assert.equal(again.cached(), null)
-  assert.equal(await again.load(), true)
-  const access = (settings, env = {}) => enterpriseAccess({ settings, env, keys: signer.keys, now: day('2027-01-01'), stored: again.cached() })
-  assert.deepEqual([access(selfHost()).unlocked, access(selfHost()).via], [true, 'license'])
-  const broken = selfHost()
-  broken.enterprise = { license: 'garbled' }
-  assert.equal(access(broken).reason, 'malformed', "an operator's key in settings wins, even over a good entered one")
-  assert.equal(access(selfHost(), { SLATEBOX_LICENSE: 'garbled' }).reason, 'malformed')
-  // A Cloud install is never unlocked by an entered on-prem key.
-  assert.equal(enterpriseAccess({ settings: { public: { edition: 'cloud', baseUrl: `https://${HOST}` } }, keys: signer.keys, now: day('2027-01-01'), stored: again.cached() }).unlocked, false)
-  // The admin page's status: unlocked by the entered key, nothing to restart once applied.
-  const status = licenseStatusFor({ settings: selfHost(), running: { loaded: true, access: { via: 'license' } }, now: day('2027-01-01'), access: (o) => enterpriseAccess({ ...o, keys: signer.keys, stored: again.cached() }) })
-  assert.deepEqual([status.unlocked, status.restartNeeded, status.license.licensee], [true, false, 'Acme'])
-  await again.clear()
-  assert.equal(again.cached(), null)
+  assert.match(read(ui[0]), /cloudMoveOffer/)
+  assert.match(read('web/app/imports/ui/Main.jsx'), /<MoveToCloudButton \/>/)
 })
 
-// ------------------------------------------------------------------ unlocking while the server runs
-
-function fakeEnterprise() {
-  const calls = { loaded: 0, started: 0 }
-  const action = defineAction({
-    id: 'connectors.probe',
-    title: 'Probe a connector',
-    description: 'Test action from a fake enterprise module.',
-    toolset: 'connectors',
-    kind: 'read',
-    input: { type: 'object', properties: { probeSecret: { type: 'string', writeOnly: true } }, additionalProperties: false },
-    output: { type: 'object' },
-    principals: ['person', 'agent'],
-    scope: 'slates:read',
-    mounts: { ddp: true, http: { method: 'GET', path: '/connectors/probe', operationId: 'probeConnector' } },
-    handler: async () => ({ ok: true }),
-  })
-  const mod = {
-    manifest: { name: 'fake-enterprise' },
-    register(api) {
-      api.addActions([action])
-      api.addMethods({ 'connectors.ping': () => 'pong' })
-      api.addRoute({ method: 'GET', path: '/connectors/oauth/callback', handler: (_req, res) => res.end('callback') })
-      api.onStartup(() => {
-        calls.started += 1
-      })
-    },
+test('the server keeps no trial, key or unlock path: nothing asks Slatebox Cloud for a key', () => {
+  for (const name of ['licenseKey', 'licenseOffer']) assert.equal(createCloudClient({ origin: 'https://app.slatebox.com' })[name], undefined, name)
+  assert.equal(cloudClient.LICENSE_SCOPE, undefined)
+  const service = createMoveService({ cloud: createCloudClient({ origin: 'https://app.slatebox.com' }), flows: memoryFlows(), isServerAdmin: async () => true, preflight: async () => ({}), exportStream: async () => null, install: { label: HOST } })
+  for (const name of ['offer', 'startTrial', 'resumeTrial', 'enterKey']) assert.equal(service[name], undefined, name)
+  const meteor = read('web/app/server/selfhost-options/meteor.js')
+  for (const method of ['selfhost.cloudOffer', 'selfhost.startTrial', 'selfhost.resumeTrial', 'selfhost.enterKey']) assert.ok(!meteor.includes(`'${method}'`), method)
+  assert.doesNotMatch(meteor, /enterpriseRuntime|licenseKeys|installProofs|LICENSE_URL|PLANS_URL/)
+  // This server answers no license proofs, and keeps no entered key.
+  assert.doesNotMatch(read('web/app/server/apiHooks.js'), /installProofs|PROOF_PATH/)
+  for (const gone of ['web/app/server/enterprise-key.mjs', 'web/app/server/enterprise-runtime.mjs', 'web/app/server/selfhost-options/proofs.mjs']) {
+    assert.throws(() => read(gone), /ENOENT/, gone)
   }
-  return { calls, load: () => (calls.loaded++, mod) }
-}
+})
 
-test('a key that arrives while the server runs registers enterprise code then: actions, routes, methods, all license-checked', async (t) => {
-  const registry = createAppRegistry({})
-  const app = express()
-  const http = mountHttp(app, registry, { express, authenticate: async () => ({ kind: 'person', userId: 'u1', tokenId: null, tokenName: null, scopes: registry.scopes }) })
-  const listener = app.listen(0)
-  t.after(() => listener.close())
-  const base = `http://127.0.0.1:${listener.address().port}`
-  const methods = {}
-  const routes = []
-  const mounts = [(actions) => {
-    registry.extend(actions)
-    http.addActions(actions)
-    Object.assign(methods, ddpMethodsFor(registry, actions, { makeError: (code) => new Error(code), loadUser: async (id) => ({ _id: id }), scopes: registry.scopes }))
-  }]
-  const redact = liveRedactor(registry)
-  assert.equal(redact('slatebox.connectors.probe({ probeSecret: "sk-secret" })').includes('sk-secret'), true, 'nothing to hide before')
-
-  // Locked: nothing at all.
-  let stored = null
-  const fake = fakeEnterprise()
-  const access = (now) => enterpriseAccess({ settings: selfHost(), keys: signer.keys, now: now ?? day('2027-01-01'), stored })
-  const locked = loadEnterpriseLate({ settings: selfHost(), load: fake.load, access, mounts })
-  assert.deepEqual([locked.loaded, locked.reason, fake.calls.loaded], [false, 'locked', 0])
-  assert.equal(registry.get('connectors.probe'), undefined)
-  assert.equal((await fetch(base + '/api/v1/connectors/probe')).status, 404)
-
-  // The key arrives (entered, or a trial from Cloud): registered now, with no restart.
-  stored = await sign({ hosts: [HOST] })
-  const late = loadEnterpriseLate({ settings: selfHost(), load: fake.load, access, mounts, apply: (host) => {
-    routes.push(...host.routes)
-    host.startups.forEach((fn) => fn())
-  } })
-  assert.deepEqual([late.loaded, late.access.via], [true, 'license'])
-  assert.equal(registry.get('connectors.probe').id, 'connectors.probe')
-  assert.equal(registry.list().length, baseActions.length + 1)
-  assert.equal(registry.version(), 1)
-  const answered = await fetch(base + '/api/v1/connectors/probe')
-  assert.deepEqual([answered.status, await answered.json()], [200, { ok: true }])
-  const doc = await (await fetch(base + '/api/v1/openapi.json')).json()
-  assert.ok(JSON.stringify(doc).includes('probeConnector'), 'the OpenAPI document lists it')
-  assert.deepEqual(await methods['connectors.probe'].call({ userId: 'u1' }, {}), { ok: true })
-  assert.equal(late.host.methods['connectors.ping'](), 'pong')
-  assert.deepEqual(routes.map((route) => route.path), ['/connectors/oauth/callback'])
-  assert.equal(fake.calls.started, 1)
-  assert.equal(redact('slatebox.connectors.probe({ probeSecret: "sk-secret" })').includes('sk-secret'), false, "exec's records hide the late action's secret field")
-  // Registering twice is refused by the registry, never a silent replace.
-  assert.throws(() => registry.extend([registry.get('connectors.probe')]), /declared twice/)
-
-  // The key is still checked on every call: removed, the action refuses (the hourly re-read, forced here).
-  stored = null
-  const relocked = loadEnterprise({ settings: selfHost(), load: fakeEnterprise().load, host: createEnterpriseHost(), access: () => ({ unlocked: false, reason: 'expired' }) })
-  assert.equal(relocked.loaded, false)
+test('an unreachable Cloud is explained, not shown as an errno', async () => {
+  const client = createCloudClient({ origin: 'https://app.slatebox.com', fetch: async () => { throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ENOTFOUND' } }) } })
+  const error = await client.deviceAuthorize({ scope: 'team:export team:move' }).catch((e) => e)
+  assert.ok(error instanceof CloudError)
+  assert.deepEqual([error.code, error.detail], ['unreachable', 'ENOTFOUND'])
+  assert.doesNotMatch(error.message, /ENOTFOUND/)
+  assert.match(error.message, /outbound https connections to app\.slatebox\.com \(a proxy or firewall may block them\)\.$/)
+  assert.doesNotMatch(error.message, NOT_SAID)
 })
 
 // ------------------------------------------------------------------ a self-hosted server with a team
@@ -314,52 +153,25 @@ function sharedClock() {
   }
 }
 
-// This server's answer to Cloud's host check (GET /.well-known/slatebox-license-proof/<id>), on a
-// local port the stand-in Cloud is told stands for HOST.
-async function proofServer(t, proofs) {
-  const app = express()
-  app.get(`${PROOF_PATH}:id`, proofs.handler())
-  const server = await new Promise((resolve) => {
-    const s = app.listen(0, '127.0.0.1', () => resolve(s))
-  })
-  t.after(() => new Promise((resolve) => server.close(resolve)))
-  return `http://127.0.0.1:${server.address().port}`
-}
-
-async function world(t, { cloudFetch, flows = memoryFlows(), unlockAnswer = null, host = HOST, answersProof = true } = {}) {
+async function world(t, { cloudFetch, flows = memoryFlows() } = {}) {
   const clock = sharedClock()
-  const proofs = createProofStore()
   const cloud = await startFakeCloud({ signer, now: clock.now })
   t.after(() => cloud.close())
-  if (answersProof) cloud.hostOrigins[host] = await proofServer(t, proofs)
   const self = selfHostedServer()
-  const rows = settingsRows()
-  const keys = createLicenseKeyStore({ collection: rows, keys: signer.keys, now: clock.now })
-  let unlockedNow = false
-  const unlocks = []
-  const service = createUpgradeService({
+  const service = createMoveService({
     cloud: createCloudClient({ origin: cloud.origin, ...(cloudFetch && { fetch: cloudFetch(cloud.origin) }) }),
     flows,
-    keys,
-    unlock: async () => {
-      unlocks.push(keys.cached())
-      if (unlockAnswer) return unlockAnswer
-      unlockedNow = enterpriseAccess({ settings: selfHost(), keys: signer.keys, now: clock.now(), stored: keys.cached() }).unlocked
-      return { unlocked: unlockedNow }
-    },
-    unlocked: () => unlockedNow,
     isServerAdmin: async (userId) => userId === 'alice',
     preflight: (userId) => self.transfer.preflight(userId),
     async exportStream(userId, passphrase, onEnd) {
       const issued = await self.transfer.startExport(userId)
       return (await self.transfer.openExport(new URL(issued.downloadUrl).pathname.split('/').pop(), passphrase, { onEnd })).stream
     },
-    install: { host, origin: self.origin, installId: 'install-1', label: host },
-    proofs,
+    install: { label: HOST },
     sleep: clock.sleep,
     now: clock.now,
   })
-  // Polls the flow as the panel does, until it reaches one of the states.
+  // Polls the move as the panel does, until it reaches one of the states.
   const until = async (id, states) => {
     for (let i = 0; i < 400; i += 1) {
       const flow = await service.follow('alice', id)
@@ -368,136 +180,17 @@ async function world(t, { cloudFetch, flows = memoryFlows(), unlockAnswer = null
     }
     return assert.fail(`flow ${id} never reached ${states.join(' or ')}: ${JSON.stringify(await service.follow('alice', id))}`)
   }
-  return { cloud, self, keys, rows, service, flows, until, unlocks, clock, proofs, isUnlocked: () => unlockedNow }
+  return { cloud, self, service, flows, until, clock }
 }
-
-// ------------------------------------------------------------------ the trial
-
-test('one click: a trial key from Cloud for this host, applied at once and checked offline after', async (t) => {
-  const w = await world(t)
-  await assert.rejects(w.service.startTrial('bob'), (error) => error instanceof UpgradeError && error.code === 'admin_required')
-  const started = await w.service.startTrial('alice')
-  assert.equal(started.state, 'signing_in')
-  assert.match(started.signIn.userCode, /^[A-Z]{4}-[A-Z]{4}$/)
-  assert.equal(started.signIn.verificationUri, `${w.cloud.origin}/device`)
-  assert.equal(started.signIn.verificationUriComplete, `${w.cloud.origin}/device?code=${started.signIn.userCode}`)
-  assert.equal(started.userId, undefined, 'the panel sees no account ids')
-  // Clicking again while it waits answers the same flow.
-  assert.equal((await w.service.startTrial('alice'))._id, started._id)
-
-  await w.cloud.approve(started.signIn.userCode)
-  const done = await w.until(started._id, ['unlocked', 'failed'])
-  assert.equal(done.state, 'unlocked', JSON.stringify(done.failure))
-  assert.equal(done.trial, true)
-  assert.deepEqual(done.license.hosts, [HOST])
-  assert.equal(w.unlocks.length, 1, 'applied once')
-  assert.equal(w.isUnlocked(), true)
-  // Bound to this host, 30 days, and good offline: checked with the public key only.
-  const checked = verifyLicense(w.keys.cached(), { keys: signer.keys, host: HOST, now: w.clock.now() })
-  assert.deepEqual([checked.valid, checked.license.trial, checked.license.kind], [true, true, 'on-prem'])
-  assert.equal(verifyLicense(w.keys.cached(), { keys: signer.keys, host: 'elsewhere.example.com', now: w.clock.now() }).reason, 'wrong_host')
-  const lastDay = Date.parse(checked.license.expiresAt + 'T00:00:00Z')
-  const firstDay = Date.parse(checked.license.issuedAt + 'T00:00:00Z')
-  assert.equal((lastDay - firstDay) / 86_400_000 + 1, 30)
-  // Cloud's /device page is told what came of it.
-  assert.match(w.cloud.outcomes.at(-1).message, /free trial key/)
-  // Once unlocked, Upgrade › Unlock says so and asks nothing of Cloud.
-  assert.deepEqual(await w.service.startTrial('alice'), { state: 'unlocked', already: true })
-})
-
-test('the trial: declined, expired, not offered by Cloud yet, and the same key again on a re-run', async (t) => {
-  const w = await world(t)
-  const declined = await w.service.startTrial('alice')
-  await w.cloud.approve(declined.signIn.userCode, false)
-  const no = await w.until(declined._id, ['failed', 'unlocked'])
-  assert.deepEqual([no.state, no.failure.code], ['failed', 'access_denied'])
-  assert.match(no.failure.message, /declined/)
-  assert.equal(w.keys.cached(), null)
-
-  // Resume after a refusal: a new sign-in, then the key.
-  const again = await w.service.resumeTrial('alice', declined._id)
-  assert.equal(again.state, 'signing_in')
-  await w.cloud.approve(again.signIn.userCode)
-  assert.equal((await w.until(declined._id, ['unlocked', 'failed'])).state, 'unlocked')
-  const first = w.keys.cached()
-
-  // Asking Cloud again for the same host answers the same trial (re-runnable), never a second one.
-  const w2key = createLicenseKeyStore({ collection: settingsRows(), keys: signer.keys, now: w.clock.now })
-  const s2 = createUpgradeService({ cloud: createCloudClient({ origin: w.cloud.origin }), flows: memoryFlows(), keys: w2key, unlock: async () => ({ unlocked: true }), unlocked: () => false, isServerAdmin: async () => true, preflight: async () => ({}), exportStream: async () => null, install: { host: HOST, installId: 'i2', label: HOST }, proofs: w.proofs, sleep: w.clock.sleep, now: w.clock.now })
-  const rerun = await s2.startTrial('alice')
-  await w.cloud.approve(rerun.signIn.userCode)
-  for (let i = 0; i < 200 && (await s2.follow('alice', rerun._id)).state !== 'unlocked'; i += 1) await new Promise((resolve) => setTimeout(resolve, 5))
-  assert.equal(w2key.cached(), first, 'the same key for the same host')
-  assert.equal(w.cloud.licenses.docs().length, 1)
-
-  // A Cloud that does not offer server sign-ins yet: a plain way forward, nothing kept.
-  const t2 = await world(t, { cloudFetch: (origin) => async (url, init) => (String(url).endsWith('/oauth/device_authorization') ? new Response(JSON.stringify({ error: 'invalid_client', error_description: 'Unknown client.' }), { status: 401 }) : fetch(url, init)) })
-  await assert.rejects(t2.service.startTrial('alice'), (error) => error.code === 'trial_unavailable' && /slatebox\.com/.test(error.message))
-  void CloudError
-})
-
-test('the trial: a code nobody approves in time expires with words to start again', async (t) => {
-  const w = await world(t)
-  const started = await w.service.startTrial('alice')
-  // Ten minutes pass while it polls (the shared clock moves with each wait).
-  const ended = await w.until(started._id, ['failed'])
-  assert.equal(ended.failure.code, 'expired_token')
-  assert.match(ended.failure.message, /expired/)
-})
-
-test("the trial: a host that does not answer this server's proof gets nothing; Cloud's offer decides the button", async (t) => {
-  // Cloud cannot fetch the proof back (this server is not reachable at its address).
-  const w = await world(t, { answersProof: false })
-  const started = await w.service.startTrial('alice')
-  await w.cloud.approve(started.signIn.userCode)
-  const refused = await w.until(started._id, ['failed', 'unlocked'])
-  assert.deepEqual([refused.state, refused.failure.code], ['failed', 'host_unproven'])
-  assert.match(refused.failure.message, /could not reach https:\/\/boards\.acme\.test/)
-  assert.equal(w.keys.cached(), null)
-  assert.equal(w.cloud.licenses.docs().length, 0, "the host's trial is not used up")
-
-  // offer(): what Cloud says now, in words an on-prem admin can act on.
-  await assert.rejects(w.service.offer('bob'), { code: 'admin_required' })
-  assert.deepEqual(await w.service.offer('alice'), { trial: true, trialDays: 30 })
-  w.cloud.setMode('no-trials')
-  const none = await w.service.offer('alice')
-  assert.deepEqual([none.trial, none.reason], [false, 'not_offered'])
-  assert.match(none.message, /paste it here/)
-  w.cloud.setMode('down')
-  const down = await w.service.offer('alice')
-  assert.deepEqual([down.trial, down.reason], [false, 'unreachable'])
-  assert.match(down.message, /outbound https/)
-  assert.match(down.message, /I have a license key/)
-  w.cloud.setMode('up')
-  // A bare intranet name or localhost: no trial at all, said before anyone signs in.
-  const local = await world(t, { host: 'slatebox' })
-  const bare = await local.service.offer('alice')
-  assert.deepEqual([bare.trial, bare.reason], [false, 'no_host'])
-  assert.match(bare.message, /slatebox is a local name/)
-})
-
-test('an unreachable Cloud is explained, not shown as an errno', async () => {
-  const client = createCloudClient({ origin: 'https://app.slatebox.com', fetch: async () => { throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ENOTFOUND' } }) } })
-  const error = await client.licenseOffer().catch((e) => e)
-  assert.ok(error instanceof CloudError)
-  assert.deepEqual([error.code, error.detail], ['unreachable', 'ENOTFOUND'])
-  assert.doesNotMatch(error.message, /ENOTFOUND/)
-  assert.match(error.message, /outbound https connections to app\.slatebox\.com \(a proxy or firewall may block them\)/)
-  assert.match(error.message, /A license key works offline/)
-})
 
 test('cancel: a sign-in nobody will finish, and a move mid-upload (discarded, nothing goes live)', async (t) => {
   const w = await world(t)
-  const started = await w.service.startTrial('alice')
-  const stopped = await w.service.cancel('alice', started._id, 'trial')
+  await assert.rejects(w.service.startMove('bob'), (error) => error instanceof MoveError && error.code === 'admin_required')
+  const started = await w.service.startMove('alice')
+  const stopped = await w.service.cancel('alice', started._id)
   assert.deepEqual([stopped.state, stopped.signIn], ['cancelled', null])
   await w.service.idle()
   assert.equal((await w.service.follow('alice', started._id)).state, 'cancelled', 'the poll stops without writing over it')
-  // Start again (the right account this time): a new sign-in, and it unlocks.
-  const again = await w.service.startTrial('alice')
-  assert.notEqual(again._id, started._id)
-  await w.cloud.approve(again.signIn.userCode)
-  assert.equal((await w.until(again._id, ['unlocked', 'failed'])).state, 'unlocked')
 
   // The move: the upload is held until cancelled, then aborted.
   let held = 0
@@ -513,7 +206,7 @@ test('cancel: a sign-in nobody will finish, and a move mid-upload (discarded, no
   const move = await m.service.startMove('alice')
   await m.cloud.approve(move.signIn.userCode)
   await m.until(move._id, ['uploading'])
-  const cancelled = await m.service.cancel('alice', move._id, 'move')
+  const cancelled = await m.service.cancel('alice', move._id)
   assert.equal(cancelled.state, 'cancelled')
   await m.service.idle()
   const after = await m.service.follow('alice', move._id)
@@ -577,16 +270,13 @@ test('the move resumes after a restart from where it stopped, without uploading 
   assert.equal(imports, 1)
 
   // The server restarts: the same flows, a new service (Cloud's token was in memory only).
-  const restarted = createUpgradeService({
+  const restarted = createMoveService({
     cloud: createCloudClient({ origin: w.cloud.origin }),
     flows,
-    keys: w.keys,
-    unlock: async () => ({ unlocked: true }),
-    unlocked: () => false,
     isServerAdmin: async (userId) => userId === 'alice',
     preflight: (userId) => w.self.transfer.preflight(userId),
     exportStream: async () => assert.fail('nothing is exported again'),
-    install: { host: HOST, installId: 'install-1', label: HOST },
+    install: { label: HOST },
     sleep: w.clock.sleep,
     now: w.clock.now,
   })
@@ -650,16 +340,4 @@ test('only a team admin who administers this server can move the team', async (t
   const w = await world(t)
   await w.self.db.permissions.deleteMany({ _id: 'p1' })
   await assert.rejects(w.service.startMove('alice'), { code: 'team_admin_required' })
-})
-
-test('a page loaded after a late unlock is told: the runtime config carries the state as it is now', async () => {
-  const { runtimeConfigWithEnterprise } = await import('../web/app/server/enterprise-runtime.mjs')
-  const encode = (config) => JSON.stringify(encodeURIComponent(JSON.stringify(config)))
-  const decode = (encoded) => JSON.parse(decodeURIComponent(JSON.parse(encoded)))
-  const before = encode({ meteorRelease: 'METEOR@3.5', PUBLIC_SETTINGS: { edition: 'self-host', enterprise: { unlocked: false } } })
-  const on = { unlocked: true, via: 'license', features: ['agents.invite'] }
-  const after = runtimeConfigWithEnterprise(before, on)
-  assert.deepEqual(decode(after), { meteorRelease: 'METEOR@3.5', PUBLIC_SETTINGS: { edition: 'self-host', enterprise: on } })
-  assert.equal(runtimeConfigWithEnterprise(after, on), undefined, 'nothing to change')
-  assert.equal(runtimeConfigWithEnterprise('not json', on), undefined, 'an unknown form is left alone')
 })

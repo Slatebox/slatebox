@@ -1,6 +1,7 @@
-// The enterprise/ carve-out: outside agent connections live in enterprise/ under enterprise/LICENSE
-// (not MIT). They run on Slatebox Cloud, and ship in the self-host image locked: only a license key
-// signed by Slatebox LLC unlocks them there (owner decision 2026-11-24, "Upgrade on prem").
+// The enterprise/ carve-out: outside agent connections (integrations) live in enterprise/ under
+// enterprise/LICENSE (source-available, not MIT). Integrations are free everywhere (owner decision
+// 2026-11-26): they run on Slatebox Cloud by Cloud's own key, and on every self-hosted install with
+// no key at all; a build without the code still runs, without them.
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
@@ -21,14 +22,14 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const read = (path) => readFileSync(join(root, path), 'utf8')
 const selfHost = { public: { env: 'selfhost', edition: 'self-host' } }
 
-// A test signing key (never Slatebox LLC's) and a license it signed, for a self-hosted install.
+// A test signing key (never Slatebox LLC's), and an on-prem key it signed (what Cloud's issuer still
+// makes; no self-hosted install reads one any more).
 const testKeyPair = generateKeyPairSync('ed25519')
 const testKeys = { 'test-key': testKeyPair.publicKey.export({ type: 'spki', format: 'der' }).toString('base64') }
 const testLicense = await signLicense({ id: 'lic_test', licensee: 'Test Co', issuedAt: '2026-01-01', expiresAt: '2099-12-31' }, { kid: 'test-key', privateKey: testKeyPair.privateKey })
 // Cloud proves itself with its own key (kind 'cloud', bound to Cloud's host), signed by the same test key.
 const testCloudKey = await signLicense({ id: 'cloud_test', licensee: 'Slatebox Cloud', kind: 'cloud', hosts: ['app.slatebox.com'], issuedAt: '2026-01-01', expiresAt: '2099-12-31' }, { kid: 'test-key', privateKey: testKeyPair.privateKey })
 const cloud = (extra = {}) => ({ public: { edition: 'cloud', baseUrl: 'https://app.slatebox.com', ...extra }, enterprise: { license: testCloudKey } })
-const licensed = (extra = {}) => ({ public: { env: 'selfhost', edition: 'self-host' }, enterprise: { license: testLicense }, ...extra })
 // The loader's access check with the test key in place of Slatebox LLC's (the app's own uses only Slatebox LLC's).
 const accessWith = (settings, keys = testKeys) => (now) => enterpriseAccess({ settings, env: {}, keys, now })
 const cloudAccess = accessWith(cloud())
@@ -71,10 +72,11 @@ test('the edition is self-host unless settings say cloud', () => {
   assert.equal(isCloudEdition(selfHost), false)
 })
 
-test('invited agents are on wherever enterprise code is unlocked; no public switch hides them', () => {
+test('invited agents are on wherever enterprise code runs; no public switch hides them', () => {
   // What the server tells browsers (server/enterprise.js): the only source the browser reads.
   assert.deepEqual(enterpriseState({ public: { enterprise: { unlocked: true, via: 'cloud', features: ['agents.invite'] } } }), { unlocked: true, via: 'cloud', features: ['agents.invite'] })
-  assert.equal(agentInviteOn({ public: { enterprise: { unlocked: true, via: 'license', features: ['agents.invite'] } } }), true)
+  assert.equal(agentInviteOn({ public: { enterprise: { unlocked: true, via: 'self-host', features: ['agents.invite'] } } }), true)
+  assert.equal(enterpriseState({ public: { enterprise: { unlocked: true, via: 'license', features: [] } } }).via, null, 'no such edition any more')
   assert.equal(agentInviteOn({ public: { enterprise: { unlocked: false, features: ['agents.invite'] } } }), false)
   assert.equal(agentInviteOn(cloud()), false, 'nothing is on until the server says so')
   // The old public feature switch does nothing now, either way.
@@ -92,78 +94,46 @@ test('invited agents are on wherever enterprise code is unlocked; no public swit
   assert.equal(killed.calls.context.agentInvite, false)
 })
 
-test('a self-hosted install without a valid license never loads the enterprise module and registers nothing', () => {
+test('every self-hosted install loads the enterprise module with no key (free, owner 2026-11-26), and nothing ends it', async () => {
   const otherKey = generateKeyPairSync('ed25519')
-  const cases = [
-    [selfHost, 'no_license'],
-    [{}, 'no_license'],
-    [{ public: { agents: { invite: true } } }, 'no_license'],
-    [licensed({ enterprise: { license: testLicense.slice(0, -4) + 'AAAA' } }), 'bad_signature'],
-    [licensed({ enterprise: { license: 'not a license' } }), 'malformed'],
-  ]
-  for (const [settings, reason] of cases) {
-    const fake = fakeEnterprise()
-    const host = createEnterpriseHost()
-    const result = loadEnterprise({ settings, load: fake.load, host, access: accessWith(settings) })
-    assert.equal(result.loaded, false)
-    assert.equal(result.reason, 'locked')
-    assert.equal(result.access.reason, reason)
-    assert.deepEqual(result.features, [])
-    assert.equal(fake.calls.loaded, 0, 'the enterprise module is not even required')
-    assert.ok(host.isEmpty())
-    assert.deepEqual(host.actions, [])
-    assert.deepEqual(host.methods, {})
-    assert.deepEqual(host.routes, [])
-    const registry = createAppRegistry({ extraActions: host.actions })
-    assert.equal(registry.list().length, baseActions.length)
-    assert.equal(registry.get('connectors.probe'), undefined)
-  }
-  // A license signed by any key but Slatebox LLC's (here: not the key the check trusts) unlocks nothing.
   const foreign = { 'test-key': otherKey.publicKey.export({ type: 'spki', format: 'der' }).toString('base64') }
-  const fake = fakeEnterprise()
-  assert.equal(loadEnterprise({ settings: licensed(), load: fake.load, host: createEnterpriseHost(), access: accessWith(licensed(), foreign) }).loaded, false)
-  assert.equal(fake.calls.loaded, 0)
-  // The app's own check trusts only Slatebox LLC's keys: the test license does not unlock it.
-  assert.equal(loadEnterprise({ settings: licensed(), load: fake.load, host: createEnterpriseHost() }).access.reason, 'unknown_key')
-})
-
-test('a licensed self-hosted install loads the enterprise module, and every entry point checks the license again', async () => {
-  const fake = fakeEnterprise()
-  const host = createEnterpriseHost()
-  let now = Date.parse('2027-06-01T00:00:00Z')
-  const settings = licensed()
-  const access = () => enterpriseAccess({ settings, env: {}, keys: testKeys, now })
-  const result = loadEnterprise({ settings, load: fake.load, host, access })
-  assert.equal(result.loaded, true)
-  assert.equal(result.access.via, 'license')
-  assert.equal(result.access.license.licensee, 'Test Co')
-  assert.equal(fake.calls.context.edition, 'self-host')
-  assert.equal(fake.calls.context.via, 'license')
-  const registry = createAppRegistry({ extraActions: host.actions })
-  assert.equal(registry.list().length, baseActions.length + 1)
-  assert.deepEqual(await registry.get('connectors.probe').handler({}, {}, {}), {})
-  assert.equal(host.methods['connectors.ping'](), 'pong')
-})
-
-test('a licensed install whose license is no longer valid refuses each call', async () => {
+  // No key, an old on-prem key, a garbled or foreign key, or a Cloud key: a self-hosted install runs it all the same, as self-host.
+  const withKey = (license) => ({ ...selfHost, enterprise: { license } })
+  const cases = [selfHost, {}, { public: { agents: { invite: true } } }, withKey(testLicense), withKey('not a license'), withKey(testCloudKey), { ...selfHost, public: { ...selfHost.public, baseUrl: 'https://app.slatebox.com' }, enterprise: { license: testCloudKey } }]
+  for (const settings of cases) {
+    for (const access of [accessWith(settings), accessWith(settings, foreign), undefined]) {
+      const fake = fakeEnterprise()
+      const host = createEnterpriseHost()
+      const result = loadEnterprise({ settings, load: fake.load, host, ...(access && { access }) })
+      assert.equal(result.loaded, true)
+      assert.equal(result.edition, 'self-host')
+      assert.equal(result.access.via, 'self-host', 'never Cloud: a Cloud key on a self-hosted install does not make it Cloud')
+      assert.equal(result.access.reason, 'self_host')
+      assert.deepEqual(result.features, ['agents.invite'])
+      assert.equal(fake.calls.context.via, 'self-host')
+      assert.equal(fake.calls.context.edition, 'self-host')
+      const registry = createAppRegistry({ extraActions: host.actions })
+      assert.equal(registry.list().length, baseActions.length + 1)
+      assert.equal(host.methods['connectors.ping'](), 'pong')
+    }
+  }
+  // Years later, and with the loader's hourly re-check passed, every entry point still answers: there is no key to end.
   const fake = fakeEnterprise()
   const host = createEnterpriseHost()
-  let valid = true
-  const good = enterpriseAccess({ settings: licensed(), env: {}, keys: testKeys })
-  const access = () => (valid ? good : { ...good, unlocked: false, via: null, reason: 'expired' })
-  const result = loadEnterprise({ settings: licensed(), load: fake.load, host, access })
-  assert.equal(result.loaded, true)
-  valid = false
-  // The loader re-reads the license at most hourly: step its clock past that.
+  loadEnterprise({ settings: selfHost, load: fake.load, host })
   const realNow = Date.now
-  Date.now = () => realNow() + 2 * 3_600_000
+  Date.now = () => realNow() + 5 * 365 * 86_400_000
   try {
-    await assert.rejects(async () => host.actions[0].handler({}, {}, {}), (error) => error instanceof EnterpriseLocked && error.status === 403 && error.code === 'enterprise_locked')
-    assert.throws(() => host.methods['connectors.ping'](), EnterpriseLocked)
+    assert.equal(fake.calls.context.isUnlocked(), true)
+    assert.deepEqual(await host.actions[0].handler({}, {}, {}), {})
+    assert.equal(host.methods['connectors.ping'](), 'pong')
     const res = { statusCode: 0, headers: {}, body: '', setHeader(k, v) { this.headers[k] = v }, end(b) { this.body = b } }
-    host.routes[0].handler({}, res, () => {})
-    assert.equal(res.statusCode, 403)
-    assert.match(res.body, /enterprise_locked/)
+    let reached = false
+    const routes = createEnterpriseHost()
+    loadEnterprise({ settings: selfHost, load: () => ({ register: (api) => api.addRoute({ method: 'GET', path: '/x', handler: () => { reached = true } }) }), host: routes })
+    routes.routes[0].handler({}, res, () => {})
+    assert.equal(reached, true)
+    assert.equal(res.statusCode, 0, 'never refused')
   } finally {
     Date.now = realNow
   }
@@ -190,16 +160,14 @@ test('Cloud loads the enterprise module once and its actions join the one regist
   assert.notEqual(joined.handler, fake.action.handler)
 })
 
-test('saying Cloud in settings unlocks nothing: Cloud needs its own signed key, and each kind of key unlocks only its edition', async () => {
+test('saying Cloud in settings is not Cloud: Cloud needs its own signed key, and no other key will do', async () => {
   const onPremOnCloud = { public: { edition: 'cloud', baseUrl: 'https://app.slatebox.com' }, enterprise: { license: testLicense } }
-  const cloudKeyOnSelfHost = { public: { edition: 'self-host', baseUrl: 'https://app.slatebox.com' }, enterprise: { license: testCloudKey } }
   const cloudKeyElsewhere = cloud({ baseUrl: 'https://slatebox.example.com' })
   const unbound = await signLicense({ id: 'cloud_x', licensee: 'Me', kind: 'cloud', issuedAt: '2026-01-01', expiresAt: '2099-12-31' }, { kid: 'test-key', privateKey: testKeyPair.privateKey })
   const cases = [
     [{ public: { edition: 'cloud' } }, 'cloud_no_key'],
     [{ public: { edition: 'cloud', baseUrl: 'https://app.slatebox.com' }, pro: { status: 'active' } }, 'cloud_no_key'],
     [onPremOnCloud, 'wrong_kind'],
-    [cloudKeyOnSelfHost, 'wrong_kind'],
     [cloudKeyElsewhere, 'wrong_host'],
     // a Cloud key that names no host is refused, so no Cloud key works on any install
     [{ ...cloud(), enterprise: { license: unbound } }, 'wrong_kind'],
@@ -249,16 +217,16 @@ test('a browser told enterprise_locked empties every enterprise slot; other refu
   slots.api.fill('canvas.agents', component)
   let told = 0
   slots.subscribe(() => told++)
-  assert.equal(slots.lockIfRefused({ error: 'pro_required' }), false)
+  assert.equal(slots.lockIfRefused({ error: 'forbidden' }), false)
   assert.equal(slots.lockIfRefused(null), false)
   assert.equal(slots.get('canvas.agents'), component)
-  assert.equal(slots.lockIfRefused({ error: 'enterprise_locked', reason: 'This install\'s license has ended.' }), true)
+  assert.equal(slots.lockIfRefused({ error: 'enterprise_locked', reason: 'The Slatebox Cloud key has ended.' }), true)
   assert.equal(slots.get('canvas.agents'), null)
   assert.deepEqual(slots.names(), [])
   assert.equal(told, 1)
 })
 
-test('an unlocked install with no enterprise code (or a stub) registers nothing', () => {
+test('a build with no enterprise code (or a stub) registers nothing, and a self-hosted one still starts', () => {
   const missing = () => {
     const error = new Error("Cannot find module '/enterprise/server'")
     error.code = 'MODULE_NOT_FOUND'
@@ -270,6 +238,13 @@ test('an unlocked install with no enterprise code (or a stub) registers nothing'
   assert.equal(loadEnterprise({ settings: cloud(), access: cloudAccess, load: () => ({ selfHostStub: true }), host, log: (t) => logs.push(t) }).reason, 'stub')
   assert.ok(host.isEmpty())
   assert.equal(logs.length, 2)
+  // A self-hosted install whose image carries no enterprise code: it starts, without integrations.
+  const selfHostHost = createEnterpriseHost()
+  const bare = loadEnterprise({ settings: selfHost, load: missing, host: selfHostHost, log: (t) => logs.push(t) })
+  assert.deepEqual([bare.loaded, bare.reason, bare.edition], [false, 'missing', 'self-host'])
+  assert.equal(loadEnterprise({ settings: selfHost, load: () => ({ selfHostStub: true }), host: selfHostHost, log: (t) => logs.push(t) }).reason, 'stub')
+  assert.ok(selfHostHost.isEmpty())
+  assert.ok(logs.every((line) => /integrations are off/.test(line)), 'the log says what it means')
   // any other failure inside the enterprise module fails the boot
   assert.throws(() => loadEnterprise({ settings: cloud(), access: cloudAccess, load: () => { throw new TypeError('boom') }, host }), /boom/)
 })
@@ -291,7 +266,7 @@ test('the real enterprise module registers on Cloud through the host api only', 
   assert.equal(result.name, 'slatebox-enterprise')
 })
 
-test('the browser loads the enterprise chunk only where the server says enterprise code is unlocked', async () => {
+test('the browser loads the enterprise chunk only where the server says enterprise code runs', async () => {
   const told = (state) => ({ public: { edition: 'self-host', enterprise: state } })
   let requested = 0
   const component = () => null
@@ -306,10 +281,10 @@ test('the browser loads the enterprise chunk only where the server says enterpri
   assert.equal((await loadEnterpriseClient({ settings: { public: { edition: 'cloud', enterprise: { unlocked: true, via: 'cloud', features: ['agents.invite'] } } }, load, slots: cloudSlots })).loaded, true)
   assert.equal(requested, 1)
   assert.equal(cloudSlots.get('agents.invite'), component)
-  const licensedSlots = createSlots()
-  assert.equal((await loadEnterpriseClient({ settings: told({ unlocked: true, via: 'license', features: ['agents.invite'] }), load, slots: licensedSlots })).loaded, true)
-  assert.equal(licensedSlots.get('agents.invite'), component)
-  const failing = await loadEnterpriseClient({ settings: told({ unlocked: true, via: 'license', features: [] }), load: async () => { throw new Error('chunk missing') }, slots: createSlots() })
+  const selfHostedSlots = createSlots()
+  assert.equal((await loadEnterpriseClient({ settings: told({ unlocked: true, via: 'self-host', features: ['agents.invite'] }), load, slots: selfHostedSlots })).loaded, true)
+  assert.equal(selfHostedSlots.get('agents.invite'), component)
+  const failing = await loadEnterpriseClient({ settings: told({ unlocked: true, via: 'self-host', features: [] }), load: async () => { throw new Error('chunk missing') }, slots: createSlots() })
   assert.equal(failing.reason, 'missing')
 })
 
@@ -342,7 +317,7 @@ test('every enterprise file carries the enterprise license marker', () => {
   }
 })
 
-test('a self-host build context carries the enterprise code (locked until licensed); the checks catch a missing or stubbed copy', () => {
+test('a self-host build context carries the enterprise code (it runs there, free); the checks catch a missing or stubbed copy', () => {
   const work = mkdtempSync(join(tmpdir(), 'slatebox-enterprise-'))
   try {
     // what self-host/build-images.sh stages: the committed web/ tree (git archive HEAD:web) and enterprise/
@@ -429,8 +404,16 @@ test('licenses: MIT except enterprise/', () => {
   assert.match(enterprise, /Slatebox LLC/)
   // it points at the root LICENSE that exists (LICENSE.md was renamed to LICENSE)
   assert.match(enterprise, /MIT License in LICENSE at the repository root/)
-  assert.match(enterprise, /self-hosted Slatebox images[\s\S]*include the\s+Enterprise Software, locked/)
-  assert.match(enterprise, /on-prem license\s+key/)
+  // Free use in any Slatebox install, Cloud or self-hosted, at no charge (owner, 2026-11-26): still
+  // source-available, never relicensed to MIT.
+  assert.match(enterprise, /You may also copy, install and run the Enterprise Software[\s\S]*in\s+production[\s\S]*as part of any\s+install of Slatebox: Slatebox Cloud, or Slatebox installed on your own or\s+anyone else's servers\. This use is free of charge and needs no license\s+key\./)
+  // passing on a copy of Slatebox (a mirror, a fork, an install for a client) is not distribution that needs an agreement
+  assert.match(enterprise, /This does\s+not limit passing on a copy of Slatebox, with this license kept in\s+it, for someone to run under section 1;/)
+  // No paid clones: selling Slatebox as a hosted service needs an agreement; free hosting does not.
+  assert.match(enterprise, /d\. offering Slatebox with the Enterprise Software in it to others as a\s+paid hosted service\. Running Slatebox for your own organization, or\s+hosting it for others at no charge, needs no agreement\./)
+  assert.doesNotMatch(enterprise, /locked|on-prem license|license check/)
+  assert.match(licensing, /free use of `enterprise\/` in any Slatebox install, on\s+Slatebox Cloud or self-hosted, at no charge/)
+  assert.match(licensing, /source-available, not open\s+source/)
   assert.equal(JSON.parse(read('package.json')).license, 'SEE LICENSE IN LICENSING.md')
   assert.equal(JSON.parse(read('web/app/package.json')).license, 'MIT')
   assert.equal(JSON.parse(read('packages/slatebox-mcp/package.json')).license, 'MIT')

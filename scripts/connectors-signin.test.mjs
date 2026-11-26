@@ -493,7 +493,7 @@ function memoryStore() {
   }
 }
 
-function makeWorld({ pro = ['ada'] } = {}) {
+function makeWorld() {
   const made = makeSignIn()
   const slate = { _id: 'slate1', shareId: 'share1', userId: 'ada', revision: 1, nodes: [{ options: { id: 'n0', text: 'Checkout', xPos: 0, yPos: 0, width: 200, height: 80 }, relationships: { associations: [] } }] }
   // Another of Ada's slates (an agent on the same server there keeps the sign-in).
@@ -503,7 +503,6 @@ function makeWorld({ pro = ['ada'] } = {}) {
   // The app's real suggestion path: the agent's saves become live suggestions.
   const live = connectorSuggestions(slate)
   const audits = []
-  const proList = [...pro]
   let planned = 0
   const service = createConnectorService({
     connections,
@@ -519,7 +518,6 @@ function makeWorld({ pro = ['ada'] } = {}) {
       forUser: async (shareId, userId) => (shareId === 'share1' && roles[userId] ? { slate, canRead: true, canEdit: roles[userId] === 'edit' } : shareId === 'share2' && userId === 'ada' ? { slate: other, canRead: true, canEdit: true } : null),
       reload: async () => slate,
     },
-    pro: async (userId) => proList.includes(userId),
     firstName: async (userId) => userId[0].toUpperCase() + userId.slice(1),
     sanitizeName: sanitizeClientName,
     presence: { plan: async () => {}, step: async () => {}, saved: async () => {}, end: async () => {} },
@@ -531,7 +529,7 @@ function makeWorld({ pro = ['ada'] } = {}) {
     audit: (entry) => audits.push(entry),
   })
   const person = (userId) => ({ kind: 'person', userId, scopes: ['slates:read', 'slates:write'] })
-  return { ...made, service, connections, live, audits, proList, slate, ada: person('ada'), sam: person('sam') }
+  return { ...made, service, connections, live, audits, slate, ada: person('ada'), sam: person('sam'), vic: person('vic') }
 }
 
 async function signInThroughService(world, path = '/oauth/mcp') {
@@ -573,9 +571,11 @@ test('the walkthrough: "sign-in needed" with how, then the popup, then the tools
   assert.ok(servers.calls.filter((c) => c.kind === 'open').every((c) => c.auth === null))
 })
 
-test('only the inviter can start a sign-in for their own vault; sign-in needs Pro too', async () => {
-  const world = makeWorld({ pro: ['ada'] })
-  await refusedWith(world.service.startSignIn(world.sam, { shareId: 'share1', address: servers.url('/oauth/mcp') }), 'pro_required')
+test('only the inviter can follow a sign-in for their own vault; any signed-in editor may start one, with no plan', async () => {
+  const world = makeWorld()
+  const sams = await world.service.startSignIn(world.sam, { shareId: 'share1', address: servers.url('/oauth/mcp') })
+  assert.equal((await world.service.signInStatus(world.sam, { flowId: sams.flowId })).status, 'pending')
+  await refusedWith(world.service.startSignIn(world.vic, { shareId: 'share1', address: servers.url('/oauth/mcp') }), 'forbidden')
   const started = await world.service.startSignIn(world.ada, { shareId: 'share1', address: servers.url('/oauth/mcp') })
   assert.equal((await world.service.signInStatus(world.sam, { flowId: started.flowId })).status, 'unknown')
   assert.equal((await world.service.signInStatus(world.ada, { flowId: started.flowId })).status, 'pending')
@@ -607,15 +607,14 @@ test('an expired access token is renewed once during an ask; a refused renewal s
   assert.equal(world.connections.rows[0].status, 'active')
 })
 
-test('Pro ended: the agent shows it, asking is refused with pro_required, and renewing brings it back', async () => {
+test('free: a signed-in agent stays active and answers with no plan; nothing marks it ended', async () => {
   const world = makeWorld()
   await signInThroughService(world)
   const conn = await inviteSignedIn(world)
-  world.proList.length = 0
   const listed = await world.service.list(world.ada, { shareId: 'share1' })
-  assert.equal(listed.connections[0].status, 'pro_ended')
-  await refusedWith(world.service.call(world.ada, { connectionId: conn.connectionId, request: 'x' }), 'pro_required')
-  world.proList.push('ada')
+  assert.equal(listed.connections[0].status, 'active')
+  assert.equal(listed.pro, undefined, 'the list says nothing about a plan')
+  await world.service.call(world.ada, { connectionId: conn.connectionId, request: 'open issues' })
   assert.equal((await world.service.list(world.ada, { shareId: 'share1' })).connections[0].status, 'active')
 })
 

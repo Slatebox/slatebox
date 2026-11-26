@@ -384,7 +384,7 @@ function memoryStore() {
   }
 }
 
-function makeWorld({ layout = null, plan = null, pro = ['ada'] } = {}) {
+function makeWorld({ layout = null, plan = null } = {}) {
   const slate = { _id: 'slate1', shareId: 'share1', userId: 'ada', revision: 1, nodes: [{ options: { id: 'n0', text: 'Checkout', xPos: 0, yPos: 0, width: 200, height: 80 }, relationships: { associations: [] } }] }
   const roles = { ada: 'edit', sam: 'edit', vic: 'read' }
   const connections = memoryStore()
@@ -413,7 +413,6 @@ function makeWorld({ layout = null, plan = null, pro = ['ada'] } = {}) {
       forUser: async (shareId, userId) => (shareId === 'share1' && roles[userId] ? { slate, canRead: true, canEdit: roles[userId] === 'edit' } : null),
       reload: async () => slate,
     },
-    pro: async (userId) => pro.includes(userId),
     firstName: async (userId) => userId[0].toUpperCase() + userId.slice(1),
     sanitizeName: sanitizeClientName,
     presence: {
@@ -436,15 +435,19 @@ function makeWorld({ layout = null, plan = null, pro = ['ada'] } = {}) {
   return world
 }
 
-test('Pro: discovering, inviting and asking all need Pro for the inviter, on the server', async () => {
-  const world = makeWorld({ pro: [] })
-  await refusedWith(world.service.discover(world.ada, { shareId: 'share1', address: servers.url('/open/mcp') }), 'pro_required')
-  const paid = makeWorld()
-  const conn = await paid.inviteTo('/open/mcp')
-  // Pro lapses: the next ask is refused (suggestions already there stay keepable)
-  const lapsed = makeWorld({ pro: [] })
-  lapsed.connections.rows.push(...paid.connections.rows)
-  await refusedWith(lapsed.service.call(lapsed.ada, { connectionId: conn.connectionId, request: 'x' }), 'pro_required')
+test('free (owner, 2026-11-26): any signed-in editor discovers, invites and asks with no plan; the service asks no plan at all', async () => {
+  const world = makeWorld()
+  // The service takes no plan check: there is nothing to ask about one.
+  assert.equal('pro' in world.serviceOptions, false)
+  const found = await world.service.discover(world.sam, { shareId: 'share1', address: servers.url('/open/mcp') })
+  const conn = await world.service.connect(world.sam, { shareId: 'share1', address: found.address, name: 'Research', tools: found.tools.map(({ name, hash, policy }) => ({ name, hash, policy })) })
+  assert.equal(conn.status, 'active')
+  const asked = await world.service.call(world.sam, { connectionId: conn.connectionId, request: 'Find card retries' })
+  assert.ok(asked.items >= 1, 'its answer lands on the slate')
+  assert.equal(world.connections.rows.find((row) => row._id === conn.connectionId).status, 'active', 'nothing pauses an agent for a plan')
+  // Still: a viewer cannot invite, and nobody but the inviter asks.
+  await refusedWith(world.service.discover(world.vic, { shareId: 'share1', address: servers.url('/open/mcp') }), 'forbidden')
+  await refusedWith(world.service.call(world.ada, { connectionId: conn.connectionId, request: 'x' }), 'inviter_only')
 })
 
 test('the walkthrough: plain summary, sanitized name, consent to hashes, a hello from the cursor', async () => {
@@ -468,7 +471,7 @@ test('the walkthrough: plain summary, sanitized name, consent to hashes, a hello
 })
 
 test('one agent per name on a slate (case and spaces ignored), so @name always means one agent', async () => {
-  const world = makeWorld({ pro: ['ada', 'sam'] })
+  const world = makeWorld()
   const found = await world.service.discover(world.sam, { shareId: 'share1', address: servers.url('/open/mcp') })
   const tools = found.tools.map(({ name, hash, policy }) => ({ name, hash, policy }))
   await world.service.connect(world.sam, { shareId: 'share1', address: found.address, name: 'GitHub', tools })
@@ -479,7 +482,7 @@ test('one agent per name on a slate (case and spaces ignored), so @name always m
 })
 
 test('only the inviter can ask the agent; everyone who reads the slate sees it', async () => {
-  const world = makeWorld({ pro: ['ada', 'sam'] })
+  const world = makeWorld()
   const conn = await world.inviteTo('/open/mcp')
   await refusedWith(world.service.call(world.sam, { connectionId: conn.connectionId, request: 'search' }), 'inviter_only')
   await refusedWith(world.service.disconnect(world.sam, { connectionId: conn.connectionId }), 'inviter_only')
@@ -726,7 +729,7 @@ test('one pointer per agent: the greeting lands where the inviter looks, fades a
 })
 
 test('the slate owner may remove an agent someone else invited (its waiting suggestions go with it); other editors may not', async () => {
-  const world = makeWorld({ pro: ['ada', 'sam'] })
+  const world = makeWorld()
   world.slate.userId = 'ada'
   const found = await world.service.discover(world.sam, { shareId: 'share1', address: servers.url('/open/mcp') })
   const conn = await world.service.connect(world.sam, { shareId: 'share1', address: found.address, name: 'Sams', tools: found.tools.map(({ name, hash, policy }) => ({ name, hash, policy })) })
@@ -849,7 +852,7 @@ test('a follow-up carries the agent\'s last turns as data, never instructions', 
 })
 
 test('already on this slate: discovery says so (with Manage), inviting a second copy is refused; another person may bring their own', async () => {
-  const world = makeWorld({ pro: ['ada', 'sam'] })
+  const world = makeWorld()
   const conn = await world.inviteTo('/open/mcp')
   const again = await world.service.discover(world.ada, { shareId: 'share1', address: servers.url('/open/mcp/') })
   assert.deepEqual({ ...again.alreadyHere }, { connectionId: conn.connectionId, agentId: conn.agentId, name: 'Research', text: 'Research is already on this slate.' })
@@ -858,21 +861,22 @@ test('already on this slate: discovery says so (with Manage), inviting a second 
   assert.equal(sams.alreadyHere, undefined)
 })
 
-test('the gallery: the enabled cards, whether this person may invite, and the gallery card each invited agent came from', async () => {
-  const world = makeWorld({ pro: ['ada'] })
+test('the gallery: the enabled cards, whether this person may invite (anyone signed in, never a guest), and the gallery card each invited agent came from', async () => {
+  const world = makeWorld()
   const ada = await world.service.gallery(world.ada)
   assert.equal(ada.canInvite, true)
   const ready = GALLERY.filter((c) => !c.needsApp)
   assert.deepEqual(ada.cards.map((c) => c.id), ready.map((c) => c.id), 'a card whose vendor app is not set up yet is not offered')
   assert.equal(ada.cards[0].recipe, undefined, 'recipes stay on the server')
   assert.deepEqual(ada.cards.map((c) => c.group), ready.map((c) => c.group), 'each card keeps its chip')
-  assert.equal((await world.service.gallery(world.sam)).canInvite, false)
+  assert.equal((await world.service.gallery(world.sam)).canInvite, true, 'free: every signed-in person may invite')
+  assert.equal((await world.service.gallery({ kind: 'guest', userId: 'g1', scopes: [] })).canInvite, false)
   const listed = await world.service.list(world.ada, { shareId: 'share1' })
   assert.equal(listed.canInvite, true)
 })
 
 test('the gallery: Slack, Asana and HubSpot appear once their vendor app is set up (they have no automatic registration)', async () => {
-  const world = makeWorld({ pro: ['ada'] })
+  const world = makeWorld()
   assert.deepEqual(GALLERY.filter((c) => c.needsApp).map((c) => c.id).sort(), ['asana', 'hubspot', 'slack'])
   const before = await world.service.gallery(world.ada)
   assert.ok(!before.cards.some((c) => ['slack', 'asana', 'hubspot'].includes(c.id)))

@@ -1,8 +1,7 @@
 // Copyright (c) 2026 Slatebox LLC. Licensed under the Slatebox Enterprise License (enterprise/LICENSE).
 // Not MIT: see enterprise/README.md.
 //
-// "Invite an agent": pick from the gallery or paste an address → (free account: the in-app Pro
-// sheet, then straight on) → discovery → (a server that needs sign-in: a popup on its own page,
+// "Invite an agent": pick from the gallery or paste an address → discovery → (a server that needs sign-in: a popup on its own page,
 // a pasted client id, or a pasted key or token) → what it can do, in plain words → which lookups
 // and changes it may use (changes start on, each waiting on a card you approve; destructive ones
 // start off, with a warning) → what it may see, and what leaves Slatebox → it arrives as a named cursor.
@@ -54,9 +53,7 @@ import InfoOutlined from '@mui/icons-material/InfoOutlined'
 import LightbulbOutlined from '@mui/icons-material/LightbulbOutlined'
 import LockOutlined from '@mui/icons-material/LockOutlined'
 import WarningAmberRounded from '@mui/icons-material/WarningAmberRounded'
-import { usePaySheet } from '/imports/ui/components/billing/pay/PaySheetHost.jsx'
 import Hexagon from '/imports/ui/components/AgentMark.jsx'
-import { enterpriseState } from '/imports/api/common/edition.mjs'
 import { enterpriseSlots } from '/imports/api/client/enterprise-slots.mjs'
 import { GALLERY, addressProblem, cardFor, filterCards, groupsIn, lookalikeHost } from '../common/gallery.mjs'
 import { cardState, connectedAction, STATUS_WORDS } from '../common/integration-words.mjs'
@@ -156,8 +153,7 @@ const SEES = [
   { value: 'slate', label: 'What I ask, and every note on this slate' },
 ]
 
-// What the outside service asks of you, in plain words: Slatebox Pro is said once, on its own line.
-// "Free" alone next to "Pro" read as a contradiction; the service's own price is not Slatebox's.
+// What the outside service asks of you, in plain words (cardCost): the service's own price, never Slatebox's.
 // The chips and search box show once the gallery has more cards than this.
 export const FILTER_FROM = 8
 
@@ -211,10 +207,9 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
   const [addressError, setAddressError] = useState('')
   // A pasted address (or a card) for an agent of yours already here: { agentId, name, text }.
   const [already, setAlready] = useState(null)
-  // The gallery as administrators set it (/admin/ai › Gallery), and whether this person may invite;
-  // null until it answers (cards an administrator turned off are never shown), the built-in cards
-  // only if it cannot be asked.
-  const [gallery, setGallery] = useState({ cards: null, canInvite: null })
+  // The gallery as administrators set it (/admin/ai › Gallery); null until it answers (cards an
+  // administrator turned off are never shown), the built-in cards only if it cannot be asked.
+  const [gallery, setGallery] = useState({ cards: null })
   // The gallery's chip (a GROUPS id, or 'all') and search words.
   const [filter, setFilter] = useState({ group: 'all', query: '' })
   // Existing or Custom (CONNECT_TABS), and Custom's optional name for the agent.
@@ -224,20 +219,16 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
   // A custom server just connected from the Integrations page (the success step), and its suggestion dialog.
   const [justConnected, setJustConnected] = useState(null)
   const [suggesting, setSuggesting] = useState(false)
-  const { open: openPay, prefetch } = usePaySheet()
   // On a phone the walkthrough is a full-height sheet; its footer stays in reach.
   const theme = useTheme()
   const phone = useMediaQuery(theme.breakpoints.down('sm'))
-  // Slatebox Pro is Slatebox Cloud's; a licensed self-hosted install has no Pro to mention. The
-  // server says which it is (unlocked as Cloud by Cloud's key, or by an on-prem license).
-  const cloud = enterpriseState(Meteor.settings).via === 'cloud'
   const shownCards = filterCards(gallery.cards || [], filter)
   const live = useRef(true)
   useEffect(() => () => { live.current = false }, [])
   useEffect(() => {
     if (open && !reconnect && !upgrade) Meteor.callAsync('connectors.gallery', {}).then((answer) => {
-      if (live.current) setGallery(Array.isArray(answer?.cards) ? { cards: answer.cards, canInvite: Boolean(answer.canInvite) } : { cards: GALLERY, canInvite: null })
-    }).catch(() => { if (live.current) setGallery({ cards: GALLERY, canInvite: null }) })
+      if (live.current) setGallery(Array.isArray(answer?.cards) ? { cards: answer.cards } : { cards: GALLERY })
+    }).catch(() => { if (live.current) setGallery({ cards: GALLERY }) })
     if (open && shareId && !reconnect) Meteor.callAsync('integrations.slateSetting', { shareId }).then((answer) => { if (live.current) setSetting(answer) }).catch(() => {})
     if (!open) {
       pending.current?.cancel()
@@ -255,9 +246,6 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
-  // The server checks Pro on every call; a refusal opens the in-app sheet, and paying carries on from here.
-  const payThen = (retry) => openPay({ action: 'pro', from: integrationMode ? 'integrations' : 'agents', reason: integrationMode ? 'Connect outside agents once and invite them onto any slate.' : 'Invite outside agents onto your slates.', retry })
-
   // One of this person's integrations onto this slate: no sign-in, no consent again.
   async function inviteIntegration(integration) {
     setError('')
@@ -270,7 +258,6 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
     } catch (e) {
       if (!live.current) return
       setStep('choose')
-      if (e?.error === 'pro_required') return payThen(() => inviteIntegration(integration))
       if (e?.error === 'already_here') return setAlready({ ...(e.details || {}), text: e.reason })
       setError(errorText(e))
     }
@@ -318,7 +305,6 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
     } catch (e) {
       if (!live.current) return
       setStep('choose')
-      if (e?.error === 'pro_required') return payThen(() => discover(target, { fromCustom }))
       if (fromCustom) {
         enterpriseSlots.lockIfRefused(e)
         setAddressError(addressProblem(e))
@@ -349,7 +335,6 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
       try { win?.close() } catch {}
       if (!live.current) return
       setStep('signin')
-      if (e?.error === 'pro_required') return payThen(() => signIn())
       setError(errorText(e))
     }
   }
@@ -367,7 +352,6 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
     } catch (e) {
       if (!live.current) return
       setStep('signin')
-      if (e?.error === 'pro_required') return payThen(() => useKey())
       setError(errorText(e))
     }
   }
@@ -397,7 +381,6 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
     } catch (e) {
       if (!live.current) return
       setStep('consent')
-      if (e?.error === 'pro_required') return payThen(() => invite())
       if (e?.error === 'tools_changed') {
         setError(errorText(e))
         return discover(found.address)
@@ -559,7 +542,7 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
                     return (
                       <Box key={item.id} component="button" type="button" data-gallery-card={item.id} data-gallery-here={state.here ? '' : undefined} data-gallery-connected={next ? '' : undefined}
                         aria-label={next ? `${item.name}: ${next.words.replace('✓ ', '').replace(' · ', '. ')}` : item.origin === 'community' ? `${item.name}, Community` : undefined}
-                        onClick={go} onPointerEnter={next ? undefined : prefetch}
+                        onClick={go}
                         sx={(t) => ({
                           // Every card has the same surface; only a connected one has a green edge and its ✓ line.
                           // Hover lifts any card; keyboard focus is an outline outside the edge, never green.
@@ -600,12 +583,11 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
                         )}
                         <Typography variant="body2" sx={{ lineHeight: 1.45 }}>{item.lands}</Typography>
                         {item.origin === 'community' && item.sharedBy && <Typography variant="caption" color="text.secondary" component="div">Suggested by {item.sharedBy}</Typography>}
-                        {cloud && gallery.canInvite === false && <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 'auto', pt: 0.25 }}>Needs Slatebox Pro or Business</Typography>}
                       </Box>
                     )
                   })}
                 </Box>
-                <Typography variant="caption" color="text.secondary" component="p" sx={{ m: 0, lineHeight: 1.5 }} data-invite-footer="">Not listed here? Any MCP server works under Custom. Community cards were suggested by people using Slatebox and reviewed by Slatebox. Each agent&apos;s answers become suggestions on your slate.{cloud && gallery.canInvite === false ? ' Inviting agents is part of Slatebox Pro and Slatebox Business.' : ''}</Typography>
+                <Typography variant="caption" color="text.secondary" component="p" sx={{ m: 0, lineHeight: 1.5 }} data-invite-footer="">Not listed here? Any MCP server works under Custom. Community cards were suggested by people using Slatebox and reviewed by Slatebox. Each agent&apos;s answers become suggestions on your slate.</Typography>
               </Box>
             )}
             {tab === 'custom' && (
@@ -620,7 +602,7 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
                   <TextField size="small" fullWidth label="Name on your slates (optional)" value={customName} onChange={(e) => setCustomName(e.target.value)}
                     helperText="Left empty, Slatebox suggests one. You can change it before you connect." inputProps={{ maxLength: 32, 'data-invite-custom-name': '' }} />
                   <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <Button type="submit" variant="contained" onPointerEnter={prefetch} disabled={!address.trim()} data-invite-check="" sx={{ px: 2.5, width: { xs: '100%', sm: 'auto' } }}>Check it</Button>
+                    <Button type="submit" variant="contained" disabled={!address.trim()} data-invite-check="" sx={{ px: 2.5, width: { xs: '100%', sm: 'auto' } }}>Check it</Button>
                     <Typography variant="caption" color="text.secondary" sx={{ flex: 1, minWidth: 200 }}>Nothing is saved until you choose its tools and connect.</Typography>
                   </Box>
                 </Box>

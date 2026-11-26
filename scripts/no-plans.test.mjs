@@ -43,17 +43,10 @@ test('no plan code remains in the app', () => {
   assert.deepEqual(hits, [])
 })
 
-// The exceptions, each the owner's decision, each one label in one file:
-// - 2026-11-24: a self-hosted install's administrator sees "Upgrade on prem" in Admin tools, the
-//   button that asks Slatebox for an on-prem license.
-// - 2026-11-25: a self-hosted install's header shows "Upgrade" (the button opening the two
-//   choices: unlock enterprise on this server, or move the team to Slatebox Cloud). Never on
-//   Slatebox Cloud, never to guests, and no price anywhere in the app.
-// Nothing else asks anyone to upgrade.
-const ownerAllowed = {
-  'imports/ui/pages/admin/EnterpriseLicense.jsx': ['Upgrade on prem'],
-  'imports/ui/components/selfhost/UpgradeButton.jsx': ['Upgrade'],
-}
+// No exceptions: since 2026-11-26 integrations are free everywhere, so a self-hosted install's
+// header says "Move to Cloud" (the move, nothing to unlock) and Admin tools has no "Upgrade on prem".
+// Nothing asks anyone to upgrade.
+const ownerAllowed = {}
 
 test('no user-facing string asks anyone to upgrade or unlock a feature', () => {
   const hits = []

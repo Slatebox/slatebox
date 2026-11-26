@@ -3,8 +3,8 @@
 //
 // Invited agents on this slate. Each is one chip on the app's roster, like every agent: this file
 // puts them there (rosterExtrasAtom) and fills the chip's popover (the agents.chip slot) with what
-// only an invited agent has: a summary (what it adds, what it sees), Ask in chat, Sign in again,
-// Renew Pro and Remove. People talk to an invited agent only in Ask Slatebox ("@its name"; owner,
+// only an invited agent has: a summary (what it adds, what it sees), Ask in chat, Sign in again
+// and Remove. People talk to an invited agent only in Ask Slatebox ("@its name"; owner,
 // 2026-11-24): the chip has no ask box of its own. Keep all / Discard all, the activity with Undo
 // and Edit directly are the roster's own, and each answer's ghosts (one framed group, Keep all /
 // Discard all on it) are the app's live suggestions (AgentPresenceListener).
@@ -35,7 +35,6 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { McpConnections } from './collections'
 import InviteWalkthrough from './InviteWalkthrough'
-import { usePaySheet } from '/imports/ui/components/billing/pay/PaySheetHost.jsx'
 import { agentColor, openAgentAtom, rosterExtrasAtom } from '/imports/ui/components/AgentPresenceListener.jsx'
 import { askableAgentsAtom, conversationOpen, openChatWithAtom } from '/imports/ui/jotai/atoms'
 import { enterpriseSlots } from '/imports/api/client/enterprise-slots.mjs'
@@ -46,7 +45,7 @@ import { DriveFiles } from './GoogleIntegration'
 
 // What a chip says about an agent that can't be asked right now (everyone sees it; its ghosts stay
 // keepable either way).
-export const STATE_WORDS = { paused: 'paused: its tools changed', needs_sign_in: 'needs sign-in', pro_ended: 'Pro ended' }
+export const STATE_WORDS = { paused: 'paused: its tools changed', needs_sign_in: 'needs sign-in' }
 
 // A refusal because the server's key ended (enterprise_locked) also empties the app's enterprise slots.
 const errorText = (error) => {
@@ -68,7 +67,6 @@ export function rosterEntries(connections) {
 export function cannotAskText(c) {
   if (!c.mine) return `Only ${c.inviterName || 'the person who invited it'} can ask ${c.name}.`
   if (c.status === 'needs_sign_in') return `${c.name} needs you to sign in again. Open its chip under the canvas and choose Sign in again.`
-  if (c.status === 'pro_ended') return `Asking ${c.name} is part of Slatebox Pro and Slatebox Business. Open its chip under the canvas to renew Pro.`
   if (c.status === 'paused') return `${c.name}'s tools changed. Invite it again from + Invite agent to look at them.`
   return ''
 }
@@ -210,7 +208,6 @@ export default function AgentsOnSlate({ slate, canEdit, readSelection, readView,
 export function InvitePanel({ open, anchorEl, onClose, shareId, readView, integrations, invited, setting, isOwner, onAdded, onMore, onChanged }) {
   const [busy, setBusy] = useState(null) // the integration being added
   const [note, setNote] = useState('')
-  const { open: openPay } = usePaySheet()
   useEffect(() => { if (open) setNote('') }, [open])
   const mine = invited.map((c) => ({ integrationId: c.integrationId || null, mine: Boolean(c.mine), status: c.status }))
   const add = async (integration, { everySlate = false } = {}) => {
@@ -229,7 +226,6 @@ export function InvitePanel({ open, anchorEl, onClose, shareId, readView, integr
       if (everySlate) onChanged?.()
       onAdded?.(connection)
     } catch (e) {
-      if (e?.error === 'pro_required') return openPay({ action: 'pro', from: 'agents', reason: 'Invite outside agents onto your slates.', retry: () => add(integration, { everySlate }) })
       setNote(errorText(e))
     } finally {
       setBusy(null)
@@ -255,7 +251,6 @@ export function InvitePanel({ open, anchorEl, onClose, shareId, readView, integr
                   {decision.act === 'here' && <Typography variant="caption" color="text.secondary" data-invite-quick-here="">✓ On this slate</Typography>}
                   {decision.act === 'add' && <Button size="small" variant="contained" disabled={Boolean(busy)} data-invite-quick-add="" aria-label={`Add ${integration.name} to this slate`} onClick={() => add(integration)}>{busy === integration.integrationId ? 'Adding…' : 'Add'}</Button>}
                   {(decision.act === 'review' || decision.act === 'sign-in') && <Button size="small" component={Link} to="/integrations" data-invite-quick-fix="">{decision.act === 'review' ? 'Review' : 'Sign in'}</Button>}
-                  {decision.act === 'pro' && <Button size="small" data-invite-quick-fix="" onClick={() => openPay({ action: 'pro', from: 'agents', reason: 'Invite outside agents onto your slates.', retry: onChanged })}>Renew Pro</Button>}
                 </Box>
                 {decision.why && <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.25 }} data-invite-quick-why="">{decision.why}</Typography>}
                 {decision.act === 'add' && !everySlate && (
@@ -303,7 +298,7 @@ AgentsOnSlate.propTypes = {
 
 /**
  * agents.chip: an invited agent's own part of its roster chip's popover: what it adds and sees, how to
- * ask it (Ask in chat opens Ask Slatebox replying to it), and Sign in again, Renew Pro, Remove.
+ * ask it (Ask in chat opens Ask Slatebox replying to it), and Sign in again, Remove.
  */
 const CARD_WORDS = { waiting: 'Waiting', running: 'Sending', done: 'Done', failed: 'Failed', unclear: 'Not sure it was made', declined: 'Declined' }
 
@@ -391,7 +386,6 @@ export function InvitedAgentControls({ agentId, shareId, canEdit = false, paused
   const setReconnect = useSetAtom(reconnectAtom)
   const setChatWith = useSetAtom(openChatWithAtom)
   const setChatOpen = useSetAtom(conversationOpen)
-  const { open: openPay } = usePaySheet()
   const [note, setNote] = useState('')
   const [confirming, setConfirming] = useState(false)
   const removeButton = useRef(null)
@@ -410,7 +404,6 @@ export function InvitedAgentControls({ agentId, shareId, canEdit = false, paused
       setNote(errorText(e))
     }
   }
-  const renewPro = () => openPay({ action: 'pro', from: 'agents', reason: 'Invite outside agents onto your slates.', retry: () => Meteor.callAsync('connectors.list', { shareId }).catch(() => {}) })
   const remove = () => Meteor.callAsync('connectors.disconnect', { connectionId: c._id }).catch((e) => setNote(errorText(e)))
   const askInChat = () => {
     setChatOpen(true)
@@ -445,7 +438,6 @@ export function InvitedAgentControls({ agentId, shareId, canEdit = false, paused
       {note && <Typography role="status" variant="body2" sx={{ mt: 1 }}>{note}</Typography>}
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
         {c.mine && c.status === 'needs_sign_in' && <Button size="small" variant="outlined" data-agent-sign-in-again="" onClick={signInAgain}>Sign in again</Button>}
-        {c.mine && c.status === 'pro_ended' && <Button size="small" variant="outlined" data-agent-renew-pro="" onClick={renewPro}>Renew Pro</Button>}
         {c.removable && canEdit && !confirming && <Button size="small" ref={removeButton} data-agent-remove="" onClick={() => setConfirming(true)}>Remove</Button>}
       </Box>
       {confirming && (

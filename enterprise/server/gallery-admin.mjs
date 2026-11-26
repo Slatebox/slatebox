@@ -7,7 +7,7 @@
 //   - The built-in cards (common/gallery.mjs) serve until a card is edited; a card's address never
 //     changes here (consent is to an address). New servers arrive only as Community cards: a custom
 //     MCP server someone suggested and an administrator approved in the library's review queue
-//     (library kind integration, communityCard), here or on Slatebox Cloud for a licensed install
+//     (library kind integration, communityCard), here or on Slatebox Cloud for a self-hosted install
 //     (cloud-library.mjs). They follow the built-in ones; administrators turn them off, order them and
 //     edit their words like any card.
 //   - A recipe is checked (checkRecipe) before it is saved; at run time a recipe only ever calls a
@@ -39,7 +39,7 @@ export const communityId = (itemId) => 'c' + String(itemId || '').toLowerCase().
 
 /**
  * The gallery card a published library integration is (this server's own, or one Slatebox Cloud
- * exported to a licensed install), or null when anything in it fails the checks every card passes:
+ * exported to a self-hosted install), or null when anything in it fails the checks every card passes:
  * a canonical https address the endpoint policy allows, plain words within the card limits with no
  * web addresses, a known group, and no secret in its path (secretInPath). Its words are its author's and
  * reviewer's, never the server's own. devOrigins: this install's own development origins, for its own

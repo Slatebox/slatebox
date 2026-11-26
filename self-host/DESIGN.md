@@ -176,7 +176,7 @@ Every setting is optional.
 | `SLATEBOX_AI_OWN_PROVIDERS` | `on` (default) or `off`: `settings.ai.ownProviders`, the one switch that stops people and teams from using their own AI. |
 | `SLATEBOX_AI_PRIVATE_ENDPOINTS` | `on` (default) or `off`: `settings.ai.privateEndpoints`. Off, people's and teams' own endpoints must be public addresses (the app's `endpoint-policy.mjs`); the operator's connections keep the operator rules. Separate from the switch, so a server can allow own cloud keys without letting every account probe the LAN through Test connection. Also accepted as `privateEndpoints` in `SLATEBOX_AI_CONFIG`; the variable wins. |
 | `SLATEBOX_KEY_ENCRYPTION_KEY` | 32 bytes in base64 (standard or URL-safe; anything else stops the start, without printing the value). Written to `app.env` only, never to the app's settings, where the app's key vault reads it as the master key for every saved AI and call key (AES-256-GCM): the administrator's in Admin → AI control and people's own. Unset: `lib/common.mjs` `ensureKeyEncryptionKey` makes one on first boot and keeps it in `/data/secrets/key-encryption.key` (0600), read back on every later start and never replaced (a file that does not hold a key stops the start). Since keys now live only in the backend, a server without one could not save any AI key. The secrets are not in the backup: a restore onto the same volume keeps the key; onto a new volume, set the variable to the old key or saved keys must be added again. |
-| `SLATEBOX_SETTINGS` | A JSON object merged into the app's settings, for integrations without a variable of their own (`daily.apiKey` for calls, `aws.*` to keep stored files in an S3 bucket instead of the database, `enterprise.license` for an on-prem license). It cannot change the generated address and key wiring or the edition, and it refuses settings that belong only to Slatebox Cloud's paid service. |
+| `SLATEBOX_SETTINGS` | A JSON object merged into the app's settings, for integrations without a variable of their own (`daily.apiKey` for calls, `aws.*` to keep stored files in an S3 bucket instead of the database, `connectors.off` to turn integrations off). It cannot change the generated address and key wiring or the edition, and it refuses settings that exist only on Slatebox Cloud. |
 | `MONGO_URL`, `MONGO_OPLOG_URL` | Use an external MongoDB. The bundled `mongod` is not started. |
 | `SLATEBOX_SSO` | `off` (default) or `keycloak`: single sign-on through the bundled Keycloak (below). |
 | `SLATEBOX_SSO_ONLY` | `true` with `SLATEBOX_SSO=keycloak`: no passwords and no guests. |
@@ -185,8 +185,8 @@ Every setting is optional.
 | `SLATEBOX_SSO_DOMAINS` | Comma-separated email domains with `SLATEBOX_SSO=keycloak`, for example `example.com,example.org`: single sign-on refuses any address outside them. Unset, every address the identity provider verified is allowed. |
 
 The app's settings are generated at every start: `public.env = selfhost`,
-`edition = self-host` (enterprise code stays locked until an on-prem license
-key unlocks it; `SLATEBOX_SETTINGS` cannot change it), `baseUrl`, `wsUrl`,
+`edition = self-host` (integrations, the enterprise code, run with no key;
+`SLATEBOX_SETTINGS` cannot change the edition), `baseUrl`, `wsUrl`,
 `chatWoot.enabled = false`, `cloudLinks` (true only
 when `SLATEBOX_SETTINGS` configures an S3 bucket), `mailFrom`, `slateboxAPI`
 and `selfHosted.workshopAI`. Files the app stores (uploads, AI images,

@@ -2,10 +2,10 @@
 // (enterprise/LICENSE). Runs without Meteor and is tested that way
 // (scripts/enterprise-carveout.test.mjs); server/enterprise.js is its Meteor side.
 //
-// Enterprise code runs where it is unlocked (server/enterprise-license.mjs): always on Slatebox
-// Cloud, and on a self-hosted install once a license key from Slatebox LLC unlocks it. Where it is
-// locked the enterprise module is never even required, so nothing from it runs and nothing is
-// registered. Where it is unlocked the module's register(api, context) is called once, at server
+// Enterprise code (integrations: free everywhere, owner 2026-11-26) runs on every self-hosted
+// install, with no key, and on Slatebox Cloud once Cloud's own key proves it is Cloud
+// (server/enterprise-license.mjs). A build that carries no enterprise code (or a stub) still runs,
+// without integrations. Where it runs the module's register(api, context) is called once, at server
 // start, and may only add to the app through the api below:
 //   api.addActions([definition, ...])  actions for the one registry (server/actions/registry.mjs),
 //                                      so each is a Meteor method, an /api/v1 route, an exec call
@@ -13,10 +13,10 @@
 //   api.addMethods({ name: fn })       plain Meteor methods (prefer actions)
 //   api.addRoute({ method, path, handler })  an Express route on the app (OAuth callbacks)
 //   api.onStartup(fn)                  run inside Meteor.startup
-// Every action, method and route is checked again when it is called (Cloud's key as much as an
-// on-prem license), so a key that ends while the server runs locks them then, not at the next
-// restart. context.isUnlocked() lets enterprise code check the same for what the api does not
-// carry (its publication and its background sweep).
+// On Slatebox Cloud every action, method and route is checked again when it is called, so a Cloud
+// key that ends while the server runs locks them then, not at the next restart (a self-hosted
+// install has no key to end). context.isUnlocked() lets enterprise code check the same for what the
+// api does not carry (its publication and its background sweep).
 import { agentInviteKilled, editionOf } from '../imports/api/common/edition.mjs'
 import { enterpriseAccess, LICENSE_WORDS } from './enterprise-license.mjs'
 
@@ -61,10 +61,10 @@ export const enterpriseHost = createEnterpriseHost()
 const isMissingModule = (error) =>
   error?.code === 'MODULE_NOT_FOUND' || /Cannot find module/.test(String(error?.message || ''))
 
-// What a call to locked enterprise code answers (a license ended while the server ran).
+// What a call to locked enterprise code answers (Cloud's key ended while the server ran).
 export class EnterpriseLocked extends Error {
   constructor(reason) {
-    super(LICENSE_WORDS[reason] || LICENSE_WORDS.no_license)
+    super(LICENSE_WORDS[reason] || LICENSE_WORDS.cloud_no_key)
     this.status = 403
     this.code = 'enterprise_locked'
     this.error = 'enterprise_locked'
@@ -73,7 +73,7 @@ export class EnterpriseLocked extends Error {
 }
 
 // The api enterprise code registers through, with every entry point checked against `current()`
-// (the license as it stands when the call comes) when the install is unlocked by a license.
+// (the key as it stands when the call comes).
 function guardedApi(api, current) {
   const check = () => {
     const now = current()
@@ -101,7 +101,7 @@ function guardedApi(api, current) {
           if (!now.unlocked) {
             res.statusCode = 403
             res.setHeader?.('Content-Type', 'application/json')
-            return res.end(JSON.stringify({ error: 'enterprise_locked', message: LICENSE_WORDS[now.reason] || LICENSE_WORDS.no_license }))
+            return res.end(JSON.stringify({ error: 'enterprise_locked', message: LICENSE_WORDS[now.reason] || LICENSE_WORDS.cloud_no_key }))
           }
           return route.handler(req, res, next)
         },
@@ -112,7 +112,7 @@ function guardedApi(api, current) {
 }
 
 /**
- * Loads and registers the enterprise module where it is unlocked.
+ * Loads and registers the enterprise module where it may run.
  * @param {object} options
  * @param {object} options.settings  Meteor.settings
  * @param {() => object} options.load  returns the enterprise server module (a synchronous require)
@@ -133,11 +133,11 @@ export function loadEnterprise({ settings, load, host = enterpriseHost, log = ()
     mod = load()
   } catch (error) {
     if (!isMissingModule(error)) throw error
-    log('enterprise code is unlocked here, but this build has none (scripts/enterprise-stage.mjs)')
+    log('this build carries no enterprise code (scripts/enterprise-stage.mjs): integrations are off')
     return { edition, loaded: false, reason: 'missing', access: first, features: [] }
   }
   if (typeof mod?.register !== 'function') {
-    log('enterprise code is unlocked here, but this build carries a stub in place of it')
+    log('this build carries a stub in place of the enterprise code: integrations are off')
     return { edition, loaded: false, reason: 'stub', access: first, features: [] }
   }
   // Invited agents are on wherever enterprise code runs; settings.connectors.off is the kill switch.
@@ -152,24 +152,4 @@ export function loadEnterprise({ settings, load, host = enterpriseHost, log = ()
   const isUnlocked = () => current().unlocked === true
   mod.register(api, { edition, settings, unlocked: true, via: first.via, features, agentInvite: features.includes('agents.invite'), isUnlocked })
   return { edition, loaded: true, name: mod.manifest?.name || 'enterprise', access: first, features }
-}
-
-// Where actions that join after start are mounted (server/actions/mount.js adds one: the registry,
-// its /api/v1 routes and its Meteor methods). Each is called with the new action definitions.
-export const lateMounts = []
-
-/**
- * Unlocks enterprise code while the server runs: a license key arrived after start (an
- * administrator entered one, or Slatebox Cloud issued a trial key: server/selfhost-options). The same load
- * and the same per-call license checks as at start, into a host of its own; its actions then go to
- * every late mount, and `apply(host)` adds the rest (Meteor methods, routes, startups).
- * Nothing happens when the key does not unlock, the build has no enterprise code, or it is a stub.
- * @param {Parameters<typeof loadEnterprise>[0] & { mounts?: Array<(actions: object[]) => void>, apply?: (host: ReturnType<typeof createEnterpriseHost>) => void }} options
- */
-export function loadEnterpriseLate({ mounts = lateMounts, apply = () => {}, host = createEnterpriseHost(), ...options }) {
-  const result = loadEnterprise({ ...options, host })
-  if (!result.loaded) return { ...result, host }
-  for (const mount of mounts) mount(host.actions)
-  apply(host)
-  return { ...result, host }
 }

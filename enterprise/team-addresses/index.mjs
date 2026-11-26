@@ -2,12 +2,12 @@
 // Not MIT: see enterprise/README.md.
 //
 // Team addresses (https://<name>.slatebox.team for a self-hosted Slatebox): Slatebox Cloud only.
-// Registered by enterprise/server/index.js wherever enterprise code is unlocked, but nothing here
+// Registered by enterprise/server/index.js wherever enterprise code runs, but nothing here
 // answers unless this server is Slatebox Cloud by its signed Cloud key (context.via 'cloud', and
 // cloudLicensed() checked again on every call) AND settings.cloudflare.teamClaims is present and
 // not paused. On Slatebox Cloud without those settings, or with paused: true, every route answers
-// 503 paused ("not open right now") and nothing calls Cloudflare. A licensed on-prem install
-// (via 'license') answers 404 on every route and refuses every method.
+// 503 paused ("not open right now") and nothing calls Cloudflare. A self-hosted install
+// (via 'self-host') answers 404 on every route and refuses every method.
 //   routes   /api/v1/team-addresses/* (routes.mjs): plain routes, never actions or MCP tools
 //   methods  teamAddresses.admin.* (admin.mjs): Admin tools › Team addresses, administrators only
 //   startup  meteor.js: the collections, the Cloudflare client, the reconciler (every 10 minutes)

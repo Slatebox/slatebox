@@ -5,8 +5,7 @@
 // what Slatebox may reach in plain words, when the Drive agent joins slates, disconnect), the slate
 // export's "Save to Google Drive" and "Export to Google Docs" (the slate.export.google slot), the +
 // menu's "Import from Google Drive" (addmenu.import), and the Drive agent's "Drive files" on its chip.
-// Free accounts on Slatebox Cloud see the controls and get the Pro sheet; where enterprise code is
-// locked none of this exists (empty slots).
+// Free for everyone; where enterprise code is not running none of this exists (empty slots).
 import React, { useEffect, useRef, useState } from 'react'
 import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
@@ -18,9 +17,7 @@ import Grid from '@mui/material/Grid2'
 import MenuItem from '@mui/material/MenuItem'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import { usePaySheet } from '/imports/ui/components/billing/pay/PaySheetHost.jsx'
 import { currentSlate, globalMessage } from '/imports/ui/jotai/atoms'
-import { enterpriseState } from '/imports/api/common/edition.mjs'
 import { enterpriseSlots } from '/imports/api/client/enterprise-slots.mjs'
 import { connectGoogle, pickFiles, preloadGoogle } from './google'
 
@@ -28,9 +25,7 @@ const errorText = (error) => {
   enterpriseSlots.lockIfRefused(error)
   return error?.reason || error?.message || 'That did not work. Try again.'
 }
-const cloud = () => enterpriseState(Meteor.settings).via === 'cloud'
 export const GOOGLE_NOT_SET_UP = 'Google is not set up on this server yet.'
-const PAY_REASON = 'Save slates to Google Drive, export them to Google Docs and bring your files in.'
 
 // One answer from google.status per page view, shared by every Google control on it.
 let statusPromise = null
@@ -54,7 +49,7 @@ function useGoogleStatus() {
 }
 
 /** The Integrations page's Google section. */
-export default function GoogleIntegration({ integrations = [], pro = true, onPay, onChanged }) {
+export default function GoogleIntegration({ integrations = [], onChanged }) {
   const [status, refresh] = useGoogleStatus()
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
@@ -63,7 +58,6 @@ export default function GoogleIntegration({ integrations = [], pro = true, onPay
   useEffect(() => { if (status?.enabled && status?.configured) preloadGoogle().catch(() => {}) }, [status?.enabled, status?.configured])
   if (!status?.enabled) return null
   const connect = () => {
-    if (!pro) return onPay(() => refresh())
     setNote('')
     setBusy(true)
     connectGoogle(status.clientId).then(() => { refresh(); onChanged?.() }).catch((e) => setNote(errorText(e))).finally(() => setBusy(false))
@@ -87,7 +81,7 @@ export default function GoogleIntegration({ integrations = [], pro = true, onPay
       {row && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', mt: 1.25 }}>
           <Typography variant="body2" sx={{ flex: 1, minWidth: 200 }}>
-            {row.status === 'needs_sign_in' ? 'Google needs you to connect again.' : row.status === 'pro_ended' ? 'Pro ended: Google is paused.' : row.status === 'paused' ? 'Google Drive\'s tools changed: connect again to resume it.' : status.account ? `Connected as ${status.account}.` : 'Connected.'}
+            {row.status === 'needs_sign_in' ? 'Google needs you to connect again.' : row.status === 'paused' ? 'Google Drive\'s tools changed: connect again to resume it.' : status.account ? `Connected as ${status.account}.` : 'Connected.'}
             {row.slateCount ? ` The Drive agent is on ${row.slateCount} ${row.slateCount === 1 ? 'slate' : 'slates'}.` : ''}
           </Typography>
           {['needs_sign_in', 'paused'].includes(row.status) && <Button size="small" variant="contained" data-google-reconnect="" onClick={connect}>Connect again</Button>}
@@ -111,11 +105,10 @@ export default function GoogleIntegration({ integrations = [], pro = true, onPay
     </Box>
   )
 }
-GoogleIntegration.propTypes = { integrations: PropTypes.arrayOf(PropTypes.shape({ kind: PropTypes.string })), pro: PropTypes.bool, onPay: PropTypes.func.isRequired, onChanged: PropTypes.func }
+GoogleIntegration.propTypes = { integrations: PropTypes.arrayOf(PropTypes.shape({ kind: PropTypes.string })), onChanged: PropTypes.func }
 
-// Runs fn once Google is connected: the Pro sheet first for a free account on Cloud, Connect Google first when not connected.
+// Runs fn once Google is connected: Connect Google first when not connected.
 function useGoogleAction() {
-  const { open: openPay } = usePaySheet()
   const setMessage = useSetAtom(globalMessage)
   const say = (text, line2, severity = 'info') => setMessage({ visible: true, text, line2, severity, autoHide: 6000 })
   const [status, refresh] = useGoogleStatus()
@@ -128,10 +121,6 @@ function useGoogleAction() {
       drop()
       return say(GOOGLE_NOT_SET_UP, undefined, 'warning')
     }
-    if (cloud() && status.pro === false) {
-      drop()
-      return openPay({ action: 'pro', from: 'google', reason: PAY_REASON, retry: () => refresh() })
-    }
     try {
       if (!status.connected) {
         await connectGoogle(status.clientId)
@@ -140,14 +129,13 @@ function useGoogleAction() {
       await fn()
     } catch (e) {
       drop()
-      if (e?.error === 'pro_required') return openPay({ action: 'pro', from: 'google', reason: PAY_REASON, retry: () => refresh() })
       say(errorText(e), undefined, 'error')
     }
   }
   // A tab for the result, opened inside the click (a tab opened after waiting is blocked as a pop-up);
   // only when Google is connected already (otherwise Google's own window comes first).
   const tabNow = () => {
-    if (!status?.connected || (cloud() && status.pro === false)) return null
+    if (!status?.connected) return null
     const tab = window.open('', '_blank')
     if (tab) tab.opener = null
     return tab

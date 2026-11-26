@@ -23,8 +23,8 @@ git -C "$relay" archive "$relay_sha" | tar -x -C "$stage/relay"
 # Only the installed operator's runtime settings enter the app container.
 find "$stage/app/app" -maxdepth 1 -type f -name 'settings*.json' -delete
 # The committed enterprise/ code (enterprise/LICENSE, not MIT) goes in at the app's '/enterprise'
-# path. It stays locked on a self-hosted install until a license key from Slatebox LLC unlocks it
-# (web/app/server/enterprise-license.mjs); single sign-on with the bundled Keycloak is never locked.
+# path. It runs on every self-hosted install free, with no key (integrations are free
+# everywhere: web/app/server/enterprise-license.mjs).
 mkdir -p "$stage/app/app/enterprise"
 git -C "$app" archive "$app_sha:enterprise" | tar -x -C "$stage/app/app/enterprise"
 node "$app/scripts/enterprise-stage.mjs" check-present "$stage/app"

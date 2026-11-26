@@ -6,7 +6,7 @@
 // server/enterprise-license.mjs accepts. Settings alone never switch payments on, so a self-hosted
 // install cannot run a paid clone of Slatebox with its own Stripe keys and metering.enabled: there
 // Slatebox Pro, Slatebox Business, top-ups, balances and the meter all stay off, whatever the
-// settings say. An on-prem license (kind 'on-prem') unlocks enterprise features, never payments.
+// settings say. Integrations need no key there: they are free on every install.
 import { enterpriseAccess } from './enterprise-license.mjs'
 
 export const CLOUD_ONLY = 'cloud_only'

@@ -1,6 +1,6 @@
 // Connect an integration's two tabs and a suggested integration's whole way, in a real browser, each
 // person in a fresh context (no cookies, no storage), against a running app where enterprise code is
-// unlocked (a licensed install, or Cloud with Pro):
+// runs (any self-hosted install, or Cloud, for any signed-in account):
 //   1. Existing is the first tab: the gallery's chips, search and cards; Custom is a real tab with the
 //      address field, an optional name and "Check it";
 //   2. a person pastes a custom MCP address, checks it, connects it, and suggests it for the library;
@@ -14,7 +14,7 @@
 //     npx playwright test integrations-community.spec.mjs
 // SLATEBOX_PROMOTE names a command, run as `<cmd> <userId> <first> <last> [reviewer]`, that turns a guest into a
 // signed-in account on that local app (a local database only). SLATEBOX_CLOUD_CARD names a Community card the app's
-// Slatebox Cloud lists (a licensed install), checked when given. SLATEBOX_MCP is the origin of
+// Slatebox Cloud lists (a self-hosted install), checked when given. SLATEBOX_MCP is the origin of
 // scripts/mcp-test-servers.mjs, listed in the app's connectors.devOrigins. SLATEBOX_SHOTS is a folder for screenshots.
 import { execFileSync } from 'node:child_process'
 import { expect, test } from '@playwright/test'
@@ -75,7 +75,7 @@ test('Existing and Custom are real tabs; a custom address is checked, connected 
   await expect(dialog.locator('[data-gallery-card]').first()).toBeVisible({ timeout: 30000 })
   await expect(dialog.locator('[data-invite-address]')).toHaveCount(0)
   await shot(dialog, '01-existing-tab')
-  // A licensed install's Community cards from Slatebox Cloud sit among them (when its Cloud lists any).
+  // A self-hosted install's Community cards from Slatebox Cloud sit among them (when its Cloud lists any).
   if (process.env.SLATEBOX_CLOUD_CARD) {
     await dialog.locator('[data-gallery-search]').fill(process.env.SLATEBOX_CLOUD_CARD)
     const cloudCard = dialog.locator('[data-gallery-card]').filter({ hasText: process.env.SLATEBOX_CLOUD_CARD })

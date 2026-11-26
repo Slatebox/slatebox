@@ -23,7 +23,7 @@ import { ADMIN_SECTIONS, SELF_HOST_SECTIONS, selfHostedServer } from '../../api/
 import AdminOverview from './admin/AdminOverview'
 import FreeBudget from './admin/FreeBudget'
 import TeamImports from './admin/TeamImports'
-import EnterpriseLicense from './admin/EnterpriseLicense'
+import IntegrationsStatus from './admin/IntegrationsStatus'
 import LibraryQueueCard from './admin/LibraryQueueCard'
 import AIControlCard from './admin/ai/AIControlCard'
 import UpdatesCard from './admin/updates/UpdatesCard'
@@ -129,7 +129,7 @@ export default function AdminTools() {
               </Grid>
             )}
             <Grid size={12}>
-              <EnterpriseLicense />
+              <IntegrationsStatus />
             </Grid>
             <Grid size={12}>
               <LibraryQueueCard />

@@ -1,10 +1,10 @@
 // Copyright (c) 2026 Slatebox LLC. Licensed under the Slatebox Enterprise License (enterprise/LICENSE).
 // Not MIT: see enterprise/README.md.
 //
-// The Community cards a licensed self-hosted install receives from Slatebox Cloud: the custom MCP
-// servers people suggested there and Slatebox's administrators approved (library kind integration).
-// Runs only where enterprise code is unlocked by an on-prem license (meteor.js starts it when
-// via === 'license'); a locked install never loads this file and keeps the cards it ships with.
+// The Community cards a self-hosted install receives from Slatebox Cloud: the custom MCP servers
+// people suggested there and Slatebox's administrators approved (library kind integration).
+// Runs on self-hosted installs only (meteor.js starts it when via === 'self-host'); Slatebox Cloud
+// is the source itself, and a build without enterprise code never loads this file.
 //   - One fixed origin (https://app.slatebox.com), reached through the same guarded fetch as every
 //     MCP server (https, public addresses only, capped in bytes and time, no redirects), GET only.
 //   - The public export (GET /api/v1/library/export?kind=integration), paged, at most CLOUD_LIBRARY_LIMITS.pages pages.
@@ -25,8 +25,8 @@ export const CLOUD_ORIGIN = 'https://app.slatebox.com'
 export const CLOUD_LIBRARY_LIMITS = Object.freeze({ pages: 20, cards: 400, maxBytes: 2 * 1024 * 1024, timeoutMs: 15000, everyMs: 6 * 3600 * 1000, maxAgeMs: 7 * 24 * 3600 * 1000 })
 export const CLOUD_EXPORT_PATH = '/api/v1/library/export'
 
-/** Whether this install pulls Community cards from Slatebox Cloud: a licensed install, unless its operator says no. */
-export const cloudLibraryOn = ({ via, settings }) => via === 'license' && settings?.enterprise?.cloudLibrary !== false
+/** Whether this install pulls Community cards from Slatebox Cloud: a self-hosted install, unless its operator says no. */
+export const cloudLibraryOn = ({ via, settings }) => via === 'self-host' && settings?.enterprise?.cloudLibrary !== false
 
 /**
  * fetch: the guarded fetch (createMcpFetch with methods ['GET'], no redirects, small answers);

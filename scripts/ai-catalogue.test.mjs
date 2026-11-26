@@ -82,10 +82,10 @@ test('the follows tree: one table, every chain ends at default', () => {
   for (const [id, root] of Object.entries(roots)) assert.equal(rootSurface(id), root, id)
 })
 
-test('library and connectors have landed: both are in this build; connectors is Slatebox Cloud only', () => {
+test('library and connectors have landed: both are in this build; connectors run on every install (integrations are free everywhere, owner 2026-11-26)', () => {
   assert.equal(surface('library').inBuild, true)
   assert.equal(surface('connectors').inBuild, true)
-  assert.equal(surface('connectors').edition, 'cloud')
+  assert.equal(surface('connectors').edition, null)
   const inBuild = SURFACES.filter((s) => s.inBuild && s.useKey).map((s) => s.id)
   assert.deepEqual(inBuild, ['default', 'chat', 'chat.route', 'generation', 'generation.notes', 'presentation', 'vision', 'images', 'shape',
     'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors'])

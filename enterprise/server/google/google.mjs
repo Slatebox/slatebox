@@ -34,7 +34,6 @@ export const GOOGLE_SCOPES = Object.freeze([DRIVE_FILE_SCOPE])
 // Granted alongside by Google itself when a person already allowed them to this client; harmless.
 const TOLERATED = new Set([DRIVE_FILE_SCOPE, 'openid', 'email', 'profile', 'https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile'])
 export const GOOGLE_LIMITS = Object.freeze({ uploadBytes: 20 * 1024 * 1024, downloadBytes: 2 * 1024 * 1024, files: 20, readChars: 6000, pictureBytesPerCall: 30 * 1024 * 1024, picturesPerHour: 60 })
-export const GOOGLE_PRO = 'Google integration is part of Slatebox Pro and Slatebox Business.'
 const FOLDER_MIME = 'application/vnd.google-apps.folder'
 
 export const DEFAULT_BASES = Object.freeze({
@@ -92,7 +91,6 @@ export function createGoogleService({
   slateFiles, // { findOne({ _id }), insert, update }: each person's picked Drive files per slate
   fetch, // a guarded fetch (mcp-fetch.mjs createMcpFetch) that may GET, POST, PATCH
   config, // () => googleSettings(...)
-  pro, // async (userId) -> boolean
   enabled = async () => true, // the Google card is on in /admin/ai › Gallery
   access, // { forUser(shareId, userId), forToken(principal, shareId) } -> { slate, canRead, canEdit } | null
   applyOperations, // the registry's slates.applyOperations as an agent (a save is a live suggestion)
@@ -116,7 +114,6 @@ export function createGoogleService({
     const cfg = config()
     if (!cfg.clientId || !cfg.clientSecret) refuse(422, 'not_configured', 'Google is not set up on this server.')
     if (!vault?.available?.()) refuse(422, 'vault_off', 'Google needs the server\'s key-encryption key, which is not set.')
-    if (!(await pro(principal.userId))) refuse(402, 'pro_required', GOOGLE_PRO)
   }
   // A token (API, exec, MCP) by the token rule: its account's own rights, never an unlisted link's
   // (a bearer token carries no invitation). A signed-in page by its session's rule.
@@ -186,7 +183,6 @@ export function createGoogleService({
     const cfg = config()
     const row = await integrationOf(principal.userId)
     const on = await enabled()
-    const isPro = await pro(principal.userId)
     return {
       enabled: on,
       configured: Boolean(cfg.clientId && cfg.clientSecret) && Boolean(vault?.available?.()),
@@ -195,8 +191,7 @@ export function createGoogleService({
       pickerReady: Boolean(on && cfg.pickerApiKey && cfg.appId),
       scopes: [...GOOGLE_SCOPES],
       connected: Boolean(row && row.status !== 'needs_sign_in'),
-      ...(row && { integrationId: row._id, status: !isPro && row.status === 'active' ? 'pro_ended' : row.status, grantedScopes: row.scopes || [], account: row.account || null }),
-      pro: isPro,
+      ...(row && { integrationId: row._id, status: row.status, grantedScopes: row.scopes || [], account: row.account || null }),
     }
   }
 

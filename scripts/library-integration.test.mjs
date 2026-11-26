@@ -139,7 +139,7 @@ test("open checks the server again; approve publishes it with the checked tools,
   const listed = await env.run(env.ben, "library.list", { kind: "integration" });
   assert.deepEqual(listed.items.map((entry) => entry.integration.address), ["https://flights.example.com/mcp"]);
   assert.ok(!(await env.run(env.ben, "library.list", {})).items.some((entry) => entry.kind === "integration"));
-  // The export a licensed install reads (cloud-library.mjs): integrations by name only.
+  // The export a self-hosted install reads (cloud-library.mjs): integrations by name only.
   const visitor = { kind: "visitor", userId: null, scopes: ["slates:read"] };
   const exported = await env.run(visitor, "library.export", { kind: "integration" });
   assert.equal(exported.items.length, 1);

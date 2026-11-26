@@ -11,11 +11,3 @@ export function businessActive(org, now = Date.now()) {
   const until = business.until instanceof Date ? business.until.getTime() : business.until
   return Number.isFinite(until) && until > now
 }
-
-/**
- * Owner decision (2026-11-24): Slatebox Business members count as Pro for inviting outside agents. On Slatebox
- * Cloud a person may invite, keep and ask outside agents with Slatebox Pro, or with a seat on a Business team.
- */
-export function invitesAgents({ pro, org }, now = Date.now()) {
-  return Boolean(pro) || businessActive(org, now)
-}

@@ -144,7 +144,6 @@ function makeWorld() {
     model: async () => ({ calls: [], done: true }),
     applyOperations: live.applyOperations,
     access: { forUser: async (shareId, userId) => (slates[shareId] && userId === 'ada' ? { slate: slates[shareId], canRead: true, canEdit: true } : null), reload: async (shareId) => slates[shareId] },
-    pro: async () => true,
     firstName: async (userId) => userId[0].toUpperCase() + userId.slice(1),
     sanitizeName: sanitizeClientName,
     presence: { plan: async () => {}, step: async () => {}, saved: async () => {}, end: async () => {} },

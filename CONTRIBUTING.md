@@ -187,7 +187,7 @@ is under the [Slatebox Enterprise License](enterprise/LICENSE).
   [enterprise/LICENSE](enterprise/LICENSE).
 - MIT code must work without `enterprise/` and never imports from it. Enterprise code reaches the
   app only through the loader (`web/app/server/enterprise-loader.mjs`,
-  `web/app/imports/api/client/enterprise-slots.mjs`), and only where it is unlocked.
+  `web/app/imports/api/client/enterprise-slots.mjs`), and only where the build carries it.
 
 **No CLA, and no DCO sign-off.** A CLA would ask contributors to sign a separate agreement, and the
 MIT core does not need one. We considered the Developer Certificate of Origin (`git commit -s`) and

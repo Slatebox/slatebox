@@ -67,7 +67,7 @@ const slateFixture = () => ({
   ],
 })
 
-function makeWorld({ pro = ['ada'], enabled = true, settings = null, imageBase = 'https://images.example' } = {}) {
+function makeWorld({ enabled = true, settings = null, imageBase = 'https://images.example' } = {}) {
   const slate = slateFixture()
   // lin may edit through the slate's unlisted link only: a signed-in page has that right, a token never.
   const roles = { ada: 'edit', sam: 'edit', vic: 'read', lin: 'edit' }
@@ -81,7 +81,6 @@ function makeWorld({ pro = ['ada'], enabled = true, settings = null, imageBase =
   const connections = memoryStore()
   const live = connectorSuggestions(slate)
   const audits = []
-  const proList = [...pro]
   const published = []
   const unpublished = []
   const state = { enabled }
@@ -93,7 +92,7 @@ function makeWorld({ pro = ['ada'], enabled = true, settings = null, imageBase =
   let connectors = null
   const googleService = createGoogleService({
     vault, integrations, docLinks: memoryStore(), slateFiles: memoryStore(), fetch, config: () => cfg,
-    pro: async (userId) => proList.includes(userId), enabled: async () => state.enabled, access,
+    enabled: async () => state.enabled, access,
     applyOperations: live.applyOperations,
     publishImage: async ({ slateId }) => {
       published.push(slateId)
@@ -114,14 +113,14 @@ function makeWorld({ pro = ['ada'], enabled = true, settings = null, imageBase =
     model: async ({ tool, user }) => (tool.name === 'plan_calls'
       ? { calls: [/read_drive_file/.test(user) && /docFile0000001/.test(user) ? { tool: 'read_drive_file', arguments: { fileId: 'docFile0000001' } } : { tool: 'list_slate_files', arguments: {} }], done: true }
       : { groups: [{ label: 'From Drive', notes: [{ key: 'a', text: 'Retry after 24 hours' }] }] }),
-    applyOperations: live.applyOperations, access, pro: async (userId) => proList.includes(userId),
+    applyOperations: live.applyOperations, access,
     firstName: async (userId) => userId[0].toUpperCase() + userId.slice(1), sanitizeName: sanitizeClientName,
     presence: { plan: async () => {}, step: async () => {}, saved: async () => {}, end: async () => {} },
     vault, sleep: async () => {}, later: () => {}, audit: (entry) => audits.push(entry),
   })
   const person = (userId) => ({ kind: 'person', userId, scopes: ['slates:read', 'slates:write'] })
   const token = (userId) => ({ kind: 'agent', userId, tokenId: 'pat-' + userId, scopes: ['slates:read', 'slates:write'] })
-  return { google: googleService, connectors, vault, credentials, integrations, connections, live, audits, proList, published, unpublished, state, slate, cfg, ada: person('ada'), sam: person('sam'), vic: person('vic'), lin: person('lin'), token }
+  return { google: googleService, connectors, vault, credentials, integrations, connections, live, audits, published, unpublished, state, slate, cfg, ada: person('ada'), sam: person('sam'), vic: person('vic'), lin: person('lin'), token }
 }
 
 // Everything a person, page or log could see must hold no Google token.
@@ -177,15 +176,19 @@ test('connect refuses less or more than drive.file, and short-lived access, revo
   assert.equal(world.integrations.rows.length, 0)
 })
 
-test('Pro or Business, the Google card on, and a configured client are each needed, on the server', async () => {
-  await refusedWith(makeWorld({ pro: [] }).google.connect(makeWorld().ada, { code: 'good-code' }), 'pro_required')
+test('the Google card on and a configured client are each needed, on the server; no plan is (free, owner 2026-11-26)', async () => {
+  // A free account connects Google: nothing asks about a plan.
+  const anyone = makeWorld()
+  await anyone.google.connect(anyone.sam, { code: 'good-code' })
+  assert.equal((await anyone.google.status(anyone.sam)).connected, true)
+  assert.equal((await anyone.google.status(anyone.sam)).pro, undefined, 'the status says nothing about a plan')
   await refusedWith(makeWorld({ enabled: false }).google.connect(makeWorld().ada, { code: 'good-code' }), 'disabled')
   const bare = makeWorld({ settings: { google: { apiBase: google.origin } } })
   await refusedWith(bare.google.connect(bare.ada, { code: 'good-code' }), 'not_configured')
   const world = makeWorld()
   await refusedWith(world.google.connect({ kind: 'guest', userId: 'g' }, { code: 'good-code' }), 'sign_in')
-  // someone who can't open the slate learns nothing else (refused before the Pro check)
-  const free = makeWorld({ pro: [] })
+  // someone who can't open the slate learns nothing else
+  const free = makeWorld()
   await refusedWith(free.google.exportDoc({ kind: 'person', userId: 'mallory' }, { shareId: 'shareA' }), 'not_found')
 })
 
@@ -343,7 +346,7 @@ test('the google actions join the one registry; signing in is the app\'s own; th
 // ---------- review fixes (2026-11-24) ----------
 
 test('a token (API, exec, MCP) gets its account\'s own rights only: never a slate it reaches by an unlisted link', async () => {
-  const world = makeWorld({ pro: ['ada', 'lin'] })
+  const world = makeWorld()
   await world.google.connect(world.lin, { code: 'good-code' })
   // in the app, lin's session may use the unlisted link
   assert.ok((await world.google.saveToDrive(world.lin, { shareId: 'shareA', format: 'slatebox' })).fileId)
@@ -361,7 +364,7 @@ test('a token (API, exec, MCP) gets its account\'s own rights only: never a slat
 })
 
 test('Docs and Slides export: only people who can edit; every published picture removed right after; an hourly picture budget and a size cap', async () => {
-  const world = makeWorld({ pro: ['ada', 'vic'] })
+  const world = makeWorld()
   await world.google.connect(world.ada, { code: 'good-code' })
   await world.google.connect(world.vic, { code: 'good-code' })
   await refusedWith(world.google.exportDoc(world.vic, { shareId: 'shareA', image: PNG }), 'forbidden')
@@ -446,7 +449,7 @@ test('Google turned off in /admin/ai: Drive agents already on slates stop, none 
 })
 
 test('the Picker is told which Google account is connected (Drive\'s about, under drive.file): the owner sees it, nobody else', async () => {
-  const world = makeWorld({ pro: ['ada', 'sam'] })
+  const world = makeWorld()
   const connected = await world.google.connect(world.ada, { code: 'good-code' })
   assert.equal(connected.account, 'ada@example.com')
   assert.equal((await world.google.status(world.ada)).account, 'ada@example.com')

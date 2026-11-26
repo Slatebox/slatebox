@@ -1,8 +1,10 @@
-// The license check that unlocks enterprise code on a self-hosted install ("Upgrade on prem",
-// web/app/server/enterprise-license.mjs): offline, Ed25519, Slatebox LLC's public keys only.
+// The key check that proves a server is Slatebox Cloud (web/app/server/enterprise-license.mjs):
+// offline, Ed25519, Slatebox LLC's public keys only. A self-hosted install needs no key at all:
+// integrations are free everywhere (owner, 2026-11-26).
 import assert from 'node:assert/strict'
 import { generateKeyPairSync } from 'node:crypto'
 import { test } from 'node:test'
+import { readFileSync } from 'node:fs'
 import {
   enterpriseAccess, LICENSE_GRACE_DAYS, LICENSE_KEYS, LICENSE_WORDS, parseLicense, readLicenseText, signLicense, verifyLicense,
 } from '../web/app/server/enterprise-license.mjs'
@@ -53,7 +55,8 @@ test('the app trusts only Slatebox LLC\'s keys, and never a key a settings file 
   assert.equal(verifyLicense(key, { now: at('2027-01-01') }).reason, 'unknown_key')
   assert.ok(Object.keys(LICENSE_KEYS).length >= 1)
   for (const spki of Object.values(LICENSE_KEYS)) assert.match(spki, /^MCowBQYDK2VwAyEA[\w+/]{43}=$/, 'an Ed25519 public key, nothing more')
-  const settings = { public: { edition: 'self-host' }, enterprise: { license: key, publicKey: keys['test-key'], keys } }
+  const cloudKey = await sign({ kind: 'cloud', hosts: ['app.slatebox.com'] })
+  const settings = { public: { edition: 'cloud', baseUrl: 'https://app.slatebox.com' }, enterprise: { license: cloudKey, publicKey: keys['test-key'], keys } }
   assert.equal(enterpriseAccess({ settings, env: { SLATEBOX_LICENSE_KEYS: JSON.stringify(keys) }, now: at('2027-01-01') }).unlocked, false)
 })
 
@@ -66,7 +69,7 @@ test('where the key is read from: settings, then the environment, then a file', 
   assert.deepEqual(readLicenseText({ settings: {}, env: {} }), { text: null })
 })
 
-test('enterpriseAccess: Cloud by its Cloud key, a self-hosted install by its license, and each state has plain words', async () => {
+test('enterpriseAccess: Cloud by its Cloud key, every self-hosted install with no key, and each state has plain words', async () => {
   const key = await sign({})
   const cloudKey = await sign({ id: 'cloud_1', licensee: 'Slatebox Cloud', kind: 'cloud', hosts: ['app.slatebox.com'] })
   const pick = ({ unlocked, via, reason }) => ({ unlocked, via, reason })
@@ -78,43 +81,48 @@ test('enterpriseAccess: Cloud by its Cloud key, a self-hosted install by its lic
   assert.equal(enterpriseAccess({ settings: cloudAt('https://app.slatebox.com', key), keys, now: at('2027-01-01') }).reason, 'wrong_kind')
   assert.equal(enterpriseAccess({ settings: cloudAt('https://slatebox.example.com', cloudKey), keys, now: at('2027-01-01') }).reason, 'wrong_host')
   assert.equal(enterpriseAccess({ settings: cloudAt('https://app.slatebox.com', await sign({ kind: 'cloud' })), keys, now: at('2027-01-01') }).reason, 'wrong_kind')
-  assert.equal(enterpriseAccess({ settings: { public: { edition: 'self-host', baseUrl: 'https://app.slatebox.com' }, enterprise: { license: cloudKey } }, keys, now: at('2027-01-01') }).reason, 'wrong_kind')
+  // A Cloud key on a self-hosted install does not make it Cloud (payments stay off: cloud-lock.mjs).
+  assert.deepEqual(pick(enterpriseAccess({ settings: { public: { edition: 'self-host', baseUrl: 'https://app.slatebox.com' }, enterprise: { license: cloudKey } }, keys, now: at('2027-01-01') })), { unlocked: true, via: 'self-host', reason: 'self_host' })
   assert.equal(enterpriseAccess({ settings: cloudAt('https://app.slatebox.com', await sign({ kind: 'trial', hosts: ['app.slatebox.com'] })), keys, now: at('2027-01-01') }).reason, 'wrong_kind')
-  const locked = enterpriseAccess({ settings: { public: { edition: 'self-host' } }, env: {} })
-  assert.equal(locked.unlocked, false)
-  assert.equal(locked.reason, 'no_license')
-  assert.match(locked.words, /on-prem license/)
-  const on = enterpriseAccess({ settings: { public: { edition: 'self-host', baseUrl: 'https://slatebox.example.com' }, enterprise: { license: key } }, keys, now: at('2027-01-01') })
-  assert.equal(on.unlocked, true)
-  assert.equal(on.via, 'license')
-  assert.equal(on.license.licensee, 'Example Co')
-  for (const reason of ['cloud', 'cloud_no_key', 'wrong_kind', 'license', 'grace', 'no_license', 'malformed', 'unknown_key', 'bad_signature', 'wrong_product', 'not_yet', 'expired', 'wrong_host', 'unreadable_file'])
-    assert.ok(LICENSE_WORDS[reason], reason)
+  // Free (owner, 2026-11-26): every self-hosted install runs it with no key, and no key, file or
+  // date can lock it: none is even read.
+  const selfHosted = [
+    { settings: { public: { edition: 'self-host' } }, env: {} },
+    { settings: {}, env: {} },
+    { settings: { public: { edition: 'self-host', baseUrl: 'https://slatebox.example.com' }, enterprise: { license: key } }, keys, now: at('2099-01-01') },
+    { settings: { public: { edition: 'self-host' }, enterprise: { license: 'garbled' } }, env: { SLATEBOX_LICENSE_FILE: '/nope' }, readFile: () => { throw new Error('read') } },
+  ]
+  for (const options of selfHosted) {
+    const on = enterpriseAccess(options)
+    assert.deepEqual(pick(on), { unlocked: true, via: 'self-host', reason: 'self_host' })
+    assert.equal(on.license, null)
+    assert.match(on.words, /free on every self-hosted install/)
+  }
+  assert.equal(LICENSE_WORDS.no_license, undefined, 'no self-hosted state asks for a license')
+  // Exactly the states enterpriseAccess produces (a valid Cloud key reads 'cloud', never verifyLicense's 'license').
+  const states = ['self_host', 'cloud', 'cloud_no_key', 'wrong_kind', 'grace', 'malformed', 'unknown_key', 'bad_signature', 'wrong_product', 'not_yet', 'expired', 'wrong_host', 'unreadable_file']
+  assert.deepEqual(Object.keys(LICENSE_WORDS).sort(), [...states].sort())
+  for (const reason of states) assert.ok(LICENSE_WORDS[reason], reason)
   // The words never name a price.
   for (const words of Object.values(LICENSE_WORDS)) assert.doesNotMatch(words, /\$|USD|per year|\d+\s*(dollars|a year)/i)
 })
 
-test('Admin tools › Enterprise features: the state, never the key, and Upgrade on prem off Cloud only', async () => {
-  const { licenseStatusFor, UPGRADE_URL } = await import('../web/app/server/enterprise-license-status.mjs')
-  const key = await sign({})
-  const locked = licenseStatusFor({ settings: { public: { edition: 'self-host' } }, running: { loaded: false, access: { unlocked: false } } })
-  assert.equal(locked.unlocked, false)
-  assert.equal(locked.reason, 'no_license')
-  assert.equal(locked.upgradeUrl, UPGRADE_URL)
-  assert.match(UPGRADE_URL, /^https:\/\/slatebox\.com\/contact\/\?topic=on-prem/)
-  const settings = { public: { edition: 'self-host' }, enterprise: { license: key } }
-  const access = (options) => enterpriseAccess({ ...options, keys })
-  const running = { loaded: true, access: access({ settings, now: at('2027-01-01') }) }
-  const on = licenseStatusFor({ settings, running, now: at('2027-01-01'), access })
-  assert.equal(on.unlocked, true)
-  assert.equal(on.via, 'license')
-  assert.equal(on.license.licensee, 'Example Co')
-  assert.equal(on.worksUntil, '2027-11-30')
-  assert.equal(on.restartNeeded, false)
-  assert.ok(!JSON.stringify(on).includes(key), 'the key itself never leaves the server')
-  // A key added after start: the page says a restart applies it.
-  assert.equal(licenseStatusFor({ settings, running: { loaded: false, access: { unlocked: false } }, now: at('2027-01-01'), access }).restartNeeded, true)
-  assert.equal(licenseStatusFor({ settings: { public: { edition: 'cloud' } }, running: { loaded: true, access: { via: 'cloud' } } }).upgradeUrl, null)
+test('Admin tools › Integrations: on with no key on a self-hosted install, off only without the code or by the switch; nothing to buy', async () => {
+  const { enterpriseStatusFor, STATUS_WORDS } = await import('../web/app/server/enterprise-status.mjs')
+  const selfHost = { public: { edition: 'self-host' } }
+  const on = enterpriseStatusFor({ settings: selfHost, running: { loaded: true, features: ['agents.invite'], access: { via: 'self-host' } } })
+  assert.deepEqual(on, { edition: 'self-host', on: true, reason: 'on', words: STATUS_WORDS.on })
+  const bare = enterpriseStatusFor({ settings: selfHost, running: { loaded: false, reason: 'missing' } })
+  assert.deepEqual([bare.on, bare.reason], [false, 'not_in_build'])
+  assert.equal(enterpriseStatusFor({ settings: selfHost, running: { loaded: false, reason: 'stub' } }).reason, 'not_in_build')
+  const off = enterpriseStatusFor({ settings: selfHost, running: { loaded: true, features: [] } })
+  assert.deepEqual([off.on, off.reason], [false, 'switched_off'])
+  assert.equal(enterpriseStatusFor({ settings: { public: { edition: 'cloud' } }, running: { loaded: true, features: ['agents.invite'] } }).edition, 'cloud')
+  // No license, trial, upgrade, price or payment words anywhere in what an administrator reads.
+  for (const words of Object.values(STATUS_WORDS)) assert.doesNotMatch(words, /licen[cs]e|trial|upgrade|unlock|\$|price|pay|Pro\b/i)
+  const page = readFileSync(new URL('../web/app/imports/ui/pages/admin/IntegrationsStatus.jsx', import.meta.url), 'utf8')
+  assert.match(page, /enterprise\.status/)
+  assert.doesNotMatch(page, /licen[cs]e|trial|Upgrade|unlock|\$|price|Pro\b/i)
 })
 
 test('license-sign: every key names the installs it covers; a Cloud key is signed the same way', async () => {

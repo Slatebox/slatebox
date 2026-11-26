@@ -1,8 +1,8 @@
 // The public README points at the one-container image (round-2 review findings 3 and 9):
 // - it says the image is being published while it is not (the installer's PINNED_DIGEST is not a
 //   digest yet, or the installer is absent), and stops saying so once the release pins it;
-// - it carries the one payments sentence a self-hoster needs ("Slatebox Pro exists only on Slatebox
-//   Cloud."), which scripts/selfhost-no-payments-docs.test.mjs asserts too.
+// - it never mentions payments or Pro (owner rule, 2026-11-26: self-host copy never mentions payments,
+//   Pro, prices or Stripe), which scripts/selfhost-no-payments-docs.test.mjs asserts too.
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
@@ -24,8 +24,8 @@ test('the README says the image is being published exactly while it is not pinne
   assert.doesNotMatch(readme, /coming soon/i)
 })
 
-// Restated (round-2 review finding 9): the self-host README never mentions balances, not even in its one sentence.
-test('the README carries the one payments sentence and nothing else about payments', () => {
-  assert.match(readme, /Slatebox Pro exists only on Slatebox Cloud\./)
+// Restated (owner rule 2026-11-26): the self-host README never mentions Pro or payments, not even in one sentence.
+test('the README says nothing about Pro or payments', () => {
+  assert.doesNotMatch(readme, /\bPro\b/)
   assert.doesNotMatch(readme, /stripe|\bmeter(ing|ed)?\b|top[- ]?ups?|\bbalances?\b|webhook/i)
 })

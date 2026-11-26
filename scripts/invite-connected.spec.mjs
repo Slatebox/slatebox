@@ -9,7 +9,7 @@
 //
 //   cd scripts && SLATEBOX_ORIGIN=http://127.0.0.1:3920 SLATEBOX_PROMOTE=<cmd> SLATEBOX_MCP=http://127.0.0.1:8796 \
 //     npx playwright test invite-connected.spec.mjs
-// Against a running app where enterprise code is unlocked (a licensed install, or Cloud with Pro).
+// Against a running app where enterprise code runs (any self-hosted install, or Cloud, for any signed-in account).
 // SLATEBOX_PROMOTE names a command, run as `<cmd> <userId> <first> <last>`, that turns a guest into a
 // signed-in account on that local app (a local database only). SLATEBOX_MCP is the origin of
 // scripts/mcp-test-servers.mjs, listed in the app's connectors.devOrigins. SLATEBOX_SHOTS is a folder for screenshots.

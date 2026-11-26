@@ -1,16 +1,9 @@
-// The header button on a self-hosted install that unlocks enterprise or moves the team to Cloud, the server's side (owner, 2026-11-25). MIT, runs
-// without Meteor (scripts/selfhost-options.test.mjs); server/selfhost-options/meteor.js wires it.
+// The header's Move to Cloud on a self-hosted install, the server's side (owner, 2026-11-25; since
+// 2026-11-26 integrations are free on every install, so moving to Cloud is the button's only job).
+// MIT, runs without Meteor (scripts/selfhost-options.test.mjs); server/selfhost-options/meteor.js wires it.
 //
-// Two flows, each started by one click and followed by the panel (flow(id) every second or two):
+// One flow, started by one click and followed by the panel (follow(id) every second or two):
 //
-//   trial   signing_in → issuing → applying → unlocked
-//           Offered only when Cloud says it issues trials (offer(): GET /licenses/offer, which also
-//           names their length). A device sign-in to Slatebox Cloud ("Your Slatebox server":
-//           license:trial), then Cloud's POST /licenses/key with a one-time proof this server answers
-//           at its own address (licenses/host-proof.mjs), so Cloud knows the host is really this
-//           server's: a trial key bound to this server's host (or the account's own license). The key is checked and kept here (enterprise-key.mjs) and the enterprise code
-//           is registered at once (server/enterprise.js unlockNow). After that it is checked
-//           offline, like any key: nothing more is asked of Cloud.
 //   move    signing_in → exporting → uploading → review → confirming → moved
 //           A device sign-in for team:export team:move, then the team's export, written here and
 //           streamed straight to Cloud's one-time move address (no file, no passphrase to keep: a
@@ -20,25 +13,22 @@
 //           it was; nothing here is deleted.
 //
 // Re-runnable and resumable:
-//   - starting a flow while one of its kind is under way answers that one (one at a time per server);
+//   - starting a move while one is under way answers that one (one at a time per server);
 //   - every step keeps what it achieved on the flow (the Cloud move id once uploaded), so resume()
 //     goes on from the step that stopped, after a new sign-in when Cloud's token ended (an hour for
 //     a move) or the server restarted (tokens are kept in memory only, never in the database);
 //   - Cloud's writes carry Idempotency-Keys kept on the flow, so a retried confirm is one confirm.
-// Cancel stops a flow at any step before it is done: a sign-in nobody wants to finish (a closed
-// window, the wrong account), or a move's export and upload (aborted, and discarded on Cloud).
-// Refusals are UpgradeError with a code and words a person can act on.
+// Cancel stops a move at any step before it is done: a sign-in nobody wants to finish (a closed
+// window, the wrong account), or its export and upload (aborted, and discarded on Cloud).
+// Refusals are MoveError with a code and words a person can act on.
 import { randomBytes, randomUUID } from 'node:crypto'
 import { Transform } from 'node:stream'
-import { CLI_CLIENT, CloudError, LICENSE_SCOPE, MOVE_SCOPE, SERVER_CLIENT } from './cloud-client.mjs'
+import { CLI_CLIENT, CloudError, MOVE_SCOPE, SERVER_CLIENT } from './cloud-client.mjs'
 
-export const ACTIVE = Object.freeze({
-  trial: ['signing_in', 'issuing', 'applying'],
-  move: ['signing_in', 'exporting', 'uploading', 'review', 'confirming'],
-})
+export const ACTIVE = Object.freeze(['signing_in', 'exporting', 'uploading', 'review', 'confirming'])
 export const RESUMABLE = Object.freeze(['failed', 'needs_sign_in'])
 
-export class UpgradeError extends Error {
+export class MoveError extends Error {
   constructor(code, message, status = 400) {
     super(message)
     this.code = code
@@ -54,10 +44,6 @@ const CLOUD_WORDS = {
   unreachable: null,
   move_limit: null,
   team_owner_required: 'On Slatebox Cloud, only the owner of a team can move a team into it. Sign in there as the owner, or with an account in no team yet.',
-  trial_used: null,
-  trial_used_host: null,
-  trial_needs_public_host: null,
-  host_unproven: null,
 }
 const cloudWords = (error) => (Object.hasOwn(CLOUD_WORDS, error.code) && CLOUD_WORDS[error.code]) || error.message
 const signInEnded = (error) => error instanceof CloudError && (error.status === 401 || error.code === 'unauthorized' || error.code === 'invalid_token')
@@ -84,28 +70,19 @@ export function memoryFlows() {
  * @param {object} deps
  * @param {ReturnType<import('./cloud-client.mjs').createCloudClient>} deps.cloud
  * @param {ReturnType<typeof memoryFlows>} deps.flows
- * @param {ReturnType<import('../enterprise-key.mjs').createLicenseKeyStore>} deps.keys
- * @param {() => Promise<{ unlocked: boolean, reason?: string }>} deps.unlock    registers enterprise code now
- * @param {() => boolean} deps.unlocked                  whether enterprise code runs here now
  * @param {(userId: string) => Promise<boolean>} deps.isServerAdmin
  * @param {(userId: string) => Promise<{ team: { name: string }, members: number, slates: number }>} deps.preflight
  *   the caller's team, or throws (not a team admin, no team): transfer.mjs startExport's checks
  * @param {(userId: string, passphrase: string, onEnd: (end: object) => void) => Promise<import('node:stream').Readable>} deps.exportStream
- * @param {{ host: string, origin: string, installId: string, label: string }} deps.install
- * @param {ReturnType<import('../licenses/host-proof.mjs').createProofStore>} deps.proofs
- *   the one-time proofs this server answers at /.well-known/slatebox-license-proof/<id>
+ * @param {{ label: string }} deps.install  how this server names itself on Cloud's sign-in page
  */
-export function createUpgradeService({
+export function createMoveService({
   cloud,
   flows,
-  keys,
-  unlock,
-  unlocked,
   isServerAdmin,
   preflight,
   exportStream,
   install,
-  proofs,
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   now = Date.now,
   newId = () => randomBytes(12).toString('hex'),
@@ -119,7 +96,7 @@ export function createUpgradeService({
   const cancelled = async (flowId) => (await flows.get(flowId))?.state === 'cancelled'
 
   async function admin(userId) {
-    if (!userId || !(await isServerAdmin(userId))) throw new UpgradeError('admin_required', 'Only an administrator of this server can do this. Ask your admin.', 403)
+    if (!userId || !(await isServerAdmin(userId))) throw new MoveError('admin_required', 'Only an administrator of this server can do this. Ask your admin.', 403)
   }
 
   const view = (flow) => {
@@ -130,7 +107,7 @@ export function createUpgradeService({
 
   async function own(userId, flowId, kind) {
     const flow = typeof flowId === 'string' && /^[a-f0-9]{24}$/.test(flowId) ? await flows.get(flowId) : null
-    if (!flow || flow.kind !== kind) throw new UpgradeError('not_found', 'There is no such step to follow.', 404)
+    if (!flow || flow.kind !== kind) throw new MoveError('not_found', 'There is no such step to follow.', 404)
     return flow
   }
 
@@ -150,7 +127,7 @@ export function createUpgradeService({
       }
     }
     if (!grant) throw lastError
-    if (!grant.device_code || !grant.user_code) throw new UpgradeError('cloud_refused', 'Slatebox Cloud did not start a sign-in.', 502)
+    if (!grant.device_code || !grant.user_code) throw new MoveError('cloud_refused', 'Slatebox Cloud did not start a sign-in.', 502)
     // Only a link on Cloud's own origin is shown or opened.
     const sameOrigin = (link) => {
       try {
@@ -176,10 +153,10 @@ export function createUpgradeService({
     for (;;) {
       await sleep(interval)
       const live = await flows.get(flow._id)
-      if (!live || live.state === 'cancelled') throw new UpgradeError('cancelled', 'Cancelled.')
+      if (!live || live.state === 'cancelled') throw new MoveError('cancelled', 'Canceled.')
       try {
         const token = await cloud.deviceToken({ clientId: secret.clientId, deviceCode: secret.deviceCode })
-        if (!token?.access_token) throw new UpgradeError('cloud_refused', 'Slatebox Cloud approved the sign-in but sent no token.', 502)
+        if (!token?.access_token) throw new MoveError('cloud_refused', 'Slatebox Cloud approved the sign-in but sent no token.', 502)
         secrets.set(flow._id, { ...secrets.get(flow._id), token: token.access_token, deviceCode: null, tokenEndsAt: now() + (Number(token.expires_in) || 900) * 1000 })
         await flows.set(flow._id, { signIn: null, signedInAt: now(), updatedAt: now() })
         return token.access_token
@@ -196,12 +173,12 @@ export function createUpgradeService({
   async function fail(flow, error) {
     const ended = signInEnded(error)
     const code = error?.code || 'failed'
-    // A refusal with its own words (this module's, Cloud's, or the key store's: a key that would not unlock).
-    const known = error instanceof UpgradeError || error instanceof CloudError || (typeof error?.code === 'string' && error?.status >= 400 && error?.status < 500)
+    // A refusal with its own words (this module's or Cloud's).
+    const known = error instanceof MoveError || error instanceof CloudError || (typeof error?.code === 'string' && error?.status >= 400 && error?.status < 500)
     const message = error instanceof CloudError ? cloudWords(error) : known ? error.message : 'Something went wrong on this server. Try again.'
     if (!known) log('selfhost step failed', { flow: flow._id, error: error?.stack || error?.message || String(error) })
     if (error?.detail) log('selfhost step failed', { flow: flow._id, code, detail: error.detail })
-    // Cancelled by the administrator: the flow says so already, whatever the step threw on its way out.
+    // Canceled by the administrator: the flow says so already, whatever the step threw on its way out.
     if (code === 'cancelled' || (await cancelled(flow._id))) return
     secrets.delete(flow._id)
     await flows.set(flow._id, {
@@ -220,95 +197,6 @@ export function createUpgradeService({
       .then(() => steps(flow))
       .catch((error) => fail(flow, error))
       .finally(() => running.delete(flow._id))
-  }
-
-  // ------------------------------------------------------------------ trial / license
-
-  async function trialSteps(flow) {
-    const token = secrets.get(flow._id)?.token || (await waitForToken(flow))
-    if (await cancelled(flow._id)) return
-    await flows.set(flow._id, { state: 'issuing', updatedAt: now() })
-    // Cloud fetches this back from https://<host> while it answers: only this server can.
-    const proof = proofs.make()
-    let issued
-    try {
-      issued = await cloud.licenseKey(token, { host: install.host, installId: install.installId, proof })
-    } finally {
-      proofs.forget(proof.id)
-    }
-    if (typeof issued?.key !== 'string') throw new UpgradeError('cloud_refused', 'Slatebox Cloud sent no license key.', 502)
-    if (await cancelled(flow._id)) return
-    await flows.set(flow._id, { state: 'applying', updatedAt: now() })
-    const saved = await keys.save(issued.key, { host: install.host, by: flow.userId, source: issued.trial ? 'trial' : 'license' })
-    const applied = await unlock()
-    secrets.delete(flow._id)
-    if (!applied.unlocked) throw new UpgradeError(applied.reason || 'not_applied', applied.reason === 'missing' || applied.reason === 'stub' ? 'This server\'s build carries no enterprise code. Update to the latest Slatebox image, then try again: your key is kept.' : 'The key was kept, but enterprise features did not turn on. Restart the app.', 500)
-    await flows.set(flow._id, { state: 'unlocked', license: saved.license, worksUntil: saved.license.expiresAt, trial: Boolean(issued.trial), updatedAt: now() })
-  }
-
-  async function startTrial(userId) {
-    await admin(userId)
-    if (unlocked()) return { state: 'unlocked', already: true }
-    const latest = await flows.latest('trial')
-    if (latest && ACTIVE.trial.includes(latest.state) && !(latest.state === 'signing_in' && latest.signIn?.expiresAt < now())) {
-      if (!running.has(latest._id)) {
-        if (latest.state === 'signing_in' && secrets.get(latest._id)?.deviceCode) drive(latest, trialSteps)
-        else return resumeTrial(userId, latest._id)
-      }
-      return view(await flows.get(latest._id))
-    }
-    const flow = { _id: newId(), kind: 'trial', state: 'signing_in', userId, createdAt: now(), updatedAt: now() }
-    await flows.insert(flow)
-    try {
-      await signIn(flow, { scope: LICENSE_SCOPE, clients: [SERVER_CLIENT] })
-    } catch (error) {
-      await flows.set(flow._id, { state: 'failed', failure: { code: 'trial_unavailable', message: notOffered(error) ? 'Slatebox Cloud does not issue trials to servers yet. Get a license at slatebox.com and paste it here.' : cloudWords(error) }, updatedAt: now() })
-      if (notOffered(error)) throw new UpgradeError('trial_unavailable', 'Slatebox Cloud does not issue trials to servers yet. Get a license at slatebox.com and paste it here.', 503)
-      throw new UpgradeError(error.code || 'cloud_refused', cloudWords(error), 502)
-    }
-    drive(flow, trialSteps)
-    return view(await flows.get(flow._id))
-  }
-
-  async function resumeTrial(userId, flowId) {
-    await admin(userId)
-    const flow = await own(userId, flowId, 'trial')
-    if (flow.state === 'unlocked') return view(flow)
-    if (running.has(flow._id)) return view(flow)
-    if (!secrets.get(flow._id)?.token) await signIn(flow, { scope: LICENSE_SCOPE, clients: [SERVER_CLIENT] })
-    else await flows.set(flow._id, { failure: null, updatedAt: now() })
-    drive(flow, trialSteps)
-    return view(await flows.get(flow._id))
-  }
-
-  /**
-   * Whether Slatebox Cloud issues free trials to servers now, and how long they run (Cloud decides).
-   * @returns {Promise<{ trial: boolean, trialDays: number|null, reason?: 'not_offered'|'unreachable'|'no_host', message?: string }>}
-   */
-  async function offer(userId) {
-    await admin(userId)
-    if (!install.host || !install.host.includes('.'))
-      return { trial: false, trialDays: null, reason: 'no_host', message: `A free trial needs this server's public address (like slatebox.example.com)${install.host ? `, and ${install.host} is a local name` : ''}. A license key from slatebox.com works on any install, offline.` }
-    try {
-      const answer = await cloud.licenseOffer()
-      const days = Number(answer?.trialDays)
-      if (answer?.trial !== true) return { trial: false, trialDays: null, reason: 'not_offered', message: 'Slatebox Cloud does not issue free trials to servers right now. Get a license at slatebox.com and paste it here.' }
-      return { trial: true, trialDays: Number.isInteger(days) && days > 0 ? days : null }
-    } catch (error) {
-      if (error instanceof CloudError && error.code === 'unreachable') {
-        log('selfhost cloud unreachable', { detail: error.detail })
-        return { trial: false, trialDays: null, reason: 'unreachable', message: error.message }
-      }
-      return { trial: false, trialDays: null, reason: 'not_offered', message: 'Slatebox Cloud does not issue free trials to servers right now. Get a license at slatebox.com and paste it here.' }
-    }
-  }
-
-  /** A license key pasted in: checked, kept and applied at once. Never echoed. */
-  async function enterKey(userId, text) {
-    await admin(userId)
-    const saved = await keys.save(text, { host: install.host, by: userId, source: 'pasted' })
-    const applied = await unlock()
-    return { unlocked: applied.unlocked, license: saved.license, worksUntil: saved.license.expiresAt, ...(applied.unlocked ? {} : { reason: applied.reason }) }
   }
 
   // ------------------------------------------------------------------ move to Cloud
@@ -350,7 +238,7 @@ export function createUpgradeService({
       } catch (error) {
         if (error.code !== 'move_pending') throw error
         const waiting = ((await cloud.listMoves(token)).moves || []).find((move) => ['pending', 'running'].includes(move.state))
-        if (!waiting || !live.replaceWaiting) throw new UpgradeError('move_pending', `A move${waiting?.teamName ? ` of ${waiting.teamName}` : ''} is already waiting on Slatebox Cloud for that account. Replace it to start again, or finish it there.`, 409)
+        if (!waiting || !live.replaceWaiting) throw new MoveError('move_pending', `A move${waiting?.teamName ? ` of ${waiting.teamName}` : ''} is already waiting on Slatebox Cloud for that account. Replace it to start again, or finish it there.`, 409)
         await cloud.discardMove(token, waiting.importId)
         ticket = await cloud.startMove(token, randomUUID())
       }
@@ -389,8 +277,8 @@ export function createUpgradeService({
         aborts.delete(flow._id)
         if (abort.signal.aborted) archive.destroy?.()
       }
-      if (!result?.importId) throw new UpgradeError('cloud_refused', 'Slatebox Cloud did not take the archive.', 502)
-      // Cancelled as the upload finished: nothing goes live, and Cloud's copy is discarded.
+      if (!result?.importId) throw new MoveError('cloud_refused', 'Slatebox Cloud did not take the archive.', 502)
+      // Canceled as the upload finished: nothing goes live, and Cloud's copy is discarded.
       if (await cancelled(flow._id)) {
         await cloud.discardMove(token, result.importId).catch(() => {})
         return
@@ -436,20 +324,20 @@ export function createUpgradeService({
     await admin(userId)
     const team = await preflight(userId)
     const latest = await flows.latest('move')
-    if (latest && (ACTIVE.move.includes(latest.state) || RESUMABLE.includes(latest.state)) && latest.userId === userId) {
+    if (latest && (ACTIVE.includes(latest.state) || RESUMABLE.includes(latest.state)) && latest.userId === userId) {
       if (RESUMABLE.includes(latest.state) || (latest.state === 'signing_in' && latest.signIn?.expiresAt < now()) || (!running.has(latest._id) && latest.state !== 'review'))
         return resumeMove(userId, latest._id, { replaceWaiting })
       return view(latest)
     }
-    if (latest && ACTIVE.move.includes(latest.state) && latest.userId !== userId)
-      throw new UpgradeError('move_running', 'Another administrator is moving a team from this server right now.', 409)
+    if (latest && ACTIVE.includes(latest.state) && latest.userId !== userId)
+      throw new MoveError('move_running', 'Another administrator is moving a team from this server right now.', 409)
     const flow = { _id: newId(), kind: 'move', state: 'signing_in', userId, team: team.team, members: team.members, slates: team.slates, replaceWaiting, keys: { start: randomUUID(), confirm: randomUUID() }, createdAt: now(), updatedAt: now() }
     await flows.insert(flow)
     try {
       await signIn(flow, { scope: MOVE_SCOPE, clients: [SERVER_CLIENT, CLI_CLIENT] })
     } catch (error) {
       await fail(flow, error)
-      throw error instanceof UpgradeError ? error : new UpgradeError(error.code || 'cloud_refused', cloudWords(error), 502)
+      throw error instanceof MoveError ? error : new MoveError(error.code || 'cloud_refused', cloudWords(error), 502)
     }
     drive(flow, moveSteps)
     return view(await flows.get(flow._id))
@@ -458,7 +346,7 @@ export function createUpgradeService({
   async function resumeMove(userId, flowId, { replaceWaiting } = {}) {
     await admin(userId)
     const flow = await own(userId, flowId, 'move')
-    if (flow.userId !== userId) throw new UpgradeError('not_found', 'There is no such step to follow.', 404)
+    if (flow.userId !== userId) throw new MoveError('not_found', 'There is no such step to follow.', 404)
     if (['moved', 'cancelled'].includes(flow.state) || running.has(flow._id)) return view(flow)
     if (replaceWaiting !== undefined) await flows.set(flow._id, { replaceWaiting: Boolean(replaceWaiting) })
     if (!secrets.get(flow._id)?.token) {
@@ -472,9 +360,9 @@ export function createUpgradeService({
   async function confirmMove(userId, flowId, { invite = true } = {}) {
     await admin(userId)
     const flow = await own(userId, flowId, 'move')
-    if (flow.userId !== userId) throw new UpgradeError('not_found', 'There is no such step to follow.', 404)
+    if (flow.userId !== userId) throw new MoveError('not_found', 'There is no such step to follow.', 404)
     if (flow.state === 'moved') return view(flow)
-    if (flow.state !== 'review' && !(RESUMABLE.includes(flow.state) && flow.importId)) throw new UpgradeError('not_ready', 'The move is not ready to go live yet.', 409)
+    if (flow.state !== 'review' && !(RESUMABLE.includes(flow.state) && flow.importId)) throw new MoveError('not_ready', 'The move is not ready to go live yet.', 409)
     await flows.set(flow._id, { invite: Boolean(invite), confirmAsked: true, failure: null, updatedAt: now() })
     if (!secrets.get(flow._id)?.token) {
       // The sign-in ended (an hour) or the server restarted: sign in again, then confirm.
@@ -487,16 +375,16 @@ export function createUpgradeService({
     return view(await flows.get(flow._id))
   }
 
-  /** Stops a flow. A move uploaded but not live is discarded on Cloud; nothing here changes. */
-  async function cancel(userId, flowId, kind) {
+  /** Stops a move. One uploaded but not live is discarded on Cloud; nothing here changes. */
+  async function cancel(userId, flowId) {
     await admin(userId)
-    const flow = await own(userId, flowId, kind)
-    if (['moved', 'unlocked', 'cancelled'].includes(flow.state)) return view(flow)
+    const flow = await own(userId, flowId, 'move')
+    if (['moved', 'cancelled'].includes(flow.state)) return view(flow)
     const token = secrets.get(flow._id)?.token
     // Said first, so a step still running sees it and stops without writing over it.
     await flows.set(flow._id, { state: 'cancelled', signIn: null, failure: null, updatedAt: now() })
     aborts.get(flow._id)?.abort()
-    if (kind === 'move' && flow.importId && token) await cloud.discardMove(token, flow.importId).catch(() => {})
+    if (flow.importId && token) await cloud.discardMove(token, flow.importId).catch(() => {})
     secrets.delete(flow._id)
     return view(await flows.get(flow._id))
   }
@@ -504,14 +392,14 @@ export function createUpgradeService({
   async function follow(userId, flowId) {
     await admin(userId)
     const flow = typeof flowId === 'string' && /^[a-f0-9]{24}$/.test(flowId) ? await flows.get(flowId) : null
-    if (!flow) throw new UpgradeError('not_found', 'There is no such step to follow.', 404)
+    if (!flow || flow.kind !== 'move') throw new MoveError('not_found', 'There is no such step to follow.', 404)
     // A sign-in nobody approved in time.
     if (flow.state === 'signing_in' && flow.signIn?.expiresAt < now() - 5000 && !running.has(flow._id)) {
       await flows.set(flow._id, { state: 'failed', signIn: null, failure: { code: 'expired_token', message: CLOUD_WORDS.expired_token }, updatedAt: now() })
       return view(await flows.get(flow._id))
     }
     // The server restarted mid-way: the in-memory token is gone, so it needs a new sign-in.
-    if ([...ACTIVE[flow.kind]].filter((state) => state !== 'review').includes(flow.state) && !running.has(flow._id) && !secrets.has(flow._id)) {
+    if (ACTIVE.filter((state) => state !== 'review').includes(flow.state) && !running.has(flow._id) && !secrets.has(flow._id)) {
       await flows.set(flow._id, { state: 'needs_sign_in', signIn: null, failure: { code: 'sign_in_ended', message: 'This server restarted while it worked. Sign in again to go on from where it stopped.' }, updatedAt: now() })
       return view(await flows.get(flow._id))
     }
@@ -519,18 +407,14 @@ export function createUpgradeService({
   }
 
   return {
-    offer,
-    startTrial,
-    resumeTrial,
-    enterKey,
     startMove,
     resumeMove,
     confirmMove,
     cancel,
     follow,
-    latest: async (userId, kind) => {
+    latest: async (userId) => {
       await admin(userId)
-      return view(await flows.latest(kind))
+      return view(await flows.latest('move'))
     },
     // for tests: wait until no flow is running
     idle: async () => {

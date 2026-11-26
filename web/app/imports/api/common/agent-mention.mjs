@@ -97,11 +97,14 @@ export function agentChatReply(name, result = {}) {
 export function agentErrorReply(name, error = {}) {
   const code = error?.error || error?.code || ''
   const reason = typeof (error?.reason ?? error?.message) === 'string' ? String(error.reason ?? error.message).trim() : ''
+  // Inviting and asking agents is free; the agent work is metered: the meter's refusal (it carries
+  // its pay action; over DDP the registry nests it: details.details.pay) is said in its own words,
+  // with the pay sheet next.
+  if (error?.details?.pay || error?.details?.details?.pay) return { text: reason || `Asking ${name} needs more agent credits.`, next: 'pay' }
   switch (code) {
     case 'needs_sign_in': return { text: `${name} needs you to sign in again before it can look anything up.`, next: 'signIn' }
     case 'tools_changed': return { text: `${name}'s tools changed since you invited it. Invite it again from + Invite agent to look at them, then ask again.`, next: null }
     case 'agents_paused': return { text: `Agents are paused on this slate. Resume agents on the roster under the canvas, then ask ${name} again.`, next: 'chip' }
-    case 'pro_required': return { text: `Asking ${name} is part of Slatebox Pro and Slatebox Business.`, next: 'pay' }
     case 'busy': return { text: `${name} is still working on your last ask. Wait for it to finish, then ask again.`, next: null }
     case 'not_found': return { text: `${name} is not on this slate any more. Invite it again with + Invite agent.`, next: null }
     case 'inviter_only': return { text: reason || `Only the person who invited ${name} can ask it.`, next: null }

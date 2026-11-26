@@ -19,11 +19,11 @@ export function register(api, context) {
   if (!context?.agentInvite) return
   // The slate's invited agents: each one chip on the app's roster, "+ Invite agent" and the walkthrough.
   api.fill('canvas.agents', AgentsOnSlate)
-  // Inside an invited agent's roster chip: its summary, Ask in chat (Ask Slatebox, replying to it), Sign in again, Renew Pro, Remove.
+  // Inside an invited agent's roster chip: its summary, Ask in chat (Ask Slatebox, replying to it), Sign in again, Remove.
   api.fill('agents.chip', InvitedAgentControls)
   // /integrations: everything a person connected once (agents and Google), and the standing rules.
   api.fill('integrations.page', IntegrationsPage)
-  // Google (Pro or Business): Save to Google Drive and Export to Google Docs in the export panel,
+  // Google: Save to Google Drive and Export to Google Docs in the export panel,
   // Import from Google Drive in the + menu.
   api.fill('slate.export.google', GoogleExport)
   api.fill('addmenu.import', GoogleImport)

@@ -23,9 +23,9 @@ console.log(engineIdentity(() => require('slateboxjs/dist/BUILD.json')))
 // refuse Mongo operators and unsafe field names in every method and publication argument
 import './argument-guard'
 
-// The enterprise/ code (outside agent connections), registered before any
-// module builds the action registry, where it is unlocked: Slatebox Cloud, or a self-hosted install
-// with a license key. A locked install registers nothing (server/enterprise-loader.mjs).
+// The enterprise/ code (outside agent connections: integrations, free everywhere), registered before
+// any module builds the action registry: on every self-hosted install whose build carries it, and on
+// Slatebox Cloud by Cloud's key (server/enterprise-loader.mjs).
 import './enterprise'
 
 // global methods
@@ -66,7 +66,7 @@ import './methods/images'
 import './metering/meteor'
 // Server admin: admin.status and the admin home's Overview (server/admin/meteor.js)
 import './admin/meteor'
-// The header button on a self-hosted install: unlock enterprise here, or move the team to Slatebox Cloud
+// The header's Move to Cloud on a self-hosted install: move the team to Slatebox Cloud
 import './selfhost-options/meteor'
 import './agent-reach/sov-meteor' // share of voice: the weekly job (Cloud) and its admin methods
 

@@ -2,7 +2,7 @@
 // Not MIT: see enterprise/README.md.
 //
 // Admin tools › Team addresses: the methods the admin view calls (client/TeamAddressesAdmin.jsx).
-// Plain Meteor methods, not registry actions, on purpose (like enterprise.licenseStatus): they are
+// Plain Meteor methods, not registry actions, on purpose (like enterprise.status): they are
 // Cloud administrators' own operations, with nothing a token or an agent should reach. Each one
 // checks, every call, that team addresses run here (gate) and that the caller holds the platform
 // administrator claim; every change is audited by the service.

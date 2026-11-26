@@ -17,7 +17,7 @@ export const INTEGRATION_CATEGORY_LABELS = Object.freeze({ work: 'Work', busines
 export const INTEGRATION_AUTH = Object.freeze(['none', 'oauth', 'key'])
 export const INTEGRATION_AUTH_LABELS = Object.freeze({ none: 'No sign-in', oauth: 'Sign in on its own page (OAuth)', key: 'API key or token' })
 // What the author agrees to: everything that becomes public, their own name included (a Community card
-// says "Suggested by <name>", here and on every licensed self-hosted install that lists Cloud's cards).
+// says "Suggested by <name>", here and on every self-hosted install that lists Cloud's cards).
 export const INTEGRATION_CONSENT_LINE = 'If it is approved, its address, homepage, name, description and category are public, with your name as the person who suggested it: anyone using Slatebox can find and connect it. Your sign-in is never shared.'
 
 // A path segment that reads like a credential: many hosted MCP servers put a per-account secret in

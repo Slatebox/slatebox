@@ -70,13 +70,13 @@ test('self-host + metering.enabled + Stripe keys + no Cloud license: no payments
   assert.equal(meteringEnabled({ metering: { enabled: true }, public: { env: 'dev' } }, { cloud: false }), false)
 })
 
-test('an on-prem license unlocks enterprise features, never payments; nor does a Cloud key for another host', async () => {
+test('an on-prem key never turns payments on (integrations need no key on a self-hosted install); nor does a Cloud key for another host', async () => {
   const onPrem = paidClone({ public: { env: 'selfhost', edition: 'self-host', baseUrl: 'https://boards.example.org' }, enterprise: { license: await sign({ kind: 'on-prem' }) } })
   assert.equal(cloudLicensed({ settings: onPrem, keys, now: NOW }), false)
   // a copied Cloud key on another host, with edition cloud: wrong_host
   const copied = paidClone({ public: { env: 'test', edition: 'cloud', baseUrl: 'https://boards.example.org' }, enterprise: { license: await sign({ kind: 'cloud', hosts: ['app.slatebox.com'] }) } })
   assert.equal(cloudLicensed({ settings: copied, keys, now: NOW }), false)
-  // a Cloud key on Cloud's host, but self-host edition: wrong_kind
+  // a Cloud key on Cloud's host, but self-host edition: a self-hosted install, never Cloud
   const selfEdition = { ...(await cloudSettings()), public: { env: 'prod', edition: 'self-host', baseUrl: 'https://app.slatebox.com' } }
   assert.equal(cloudLicensed({ settings: selfEdition, keys, now: NOW }), false)
   // a key signed by anyone else

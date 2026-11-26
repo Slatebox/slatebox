@@ -2,7 +2,7 @@
 // and call pool, Pro's monthly amount for every member it pays for (business/catalog.mjs, terms A3),
 // drawn on through the team's month counter while each person's day caps still hold, and never
 // paused by the shared free budget. Without Business (or once it ends) the member is back on the
-// Pro rule. Inviting outside agents counts Business as Pro (membership.mjs invitesAgents).
+// Pro rule. Inviting outside agents is free for everyone, so Business does not sell it (owner, 2026-11-26).
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -11,7 +11,6 @@ import { creditsForPool, inPool, poolMonthKey, teamPool } from '../web/app/serve
 import { guardsPass, holdFree, releaseHold } from '../web/app/server/metering/holds.mjs'
 import { recordUsage } from '../web/app/server/metering/record.mjs'
 import { CALL_LIMITS, startCall, tick } from '../web/app/server/metering/calls.mjs'
-import { invitesAgents } from '../web/app/imports/api/business/membership.mjs'
 
 const NOW = Date.UTC(2026, 10, 19, 12)
 const DAY = 86_400_000
@@ -145,11 +144,11 @@ test('the meter reads the pool for every included use: route, hold, calls and th
   assert.match(daily, /usageFor\(user\._id, now, call\.pool \?\? null\)/)
 })
 
-test('inviting outside agents: Business counts as Pro, and the Cloud gate asks it (enterprise/server/meteor.js)', () => {
-  assert.equal(invitesAgents({ pro: false, org: org({ status: 'active' }) }, NOW), true)
-  assert.equal(invitesAgents({ pro: false, org: org({ status: 'active', until: NOW - 1 }) }, NOW), false)
+test('inviting outside agents is free (owner, 2026-11-26): no Cloud gate asks for Pro or a Business seat', () => {
   const gate = readFileSync(new URL('../enterprise/server/meteor.js', import.meta.url), 'utf8')
-  assert.match(gate, /return invitesAgents\(\{ pro: false, org \}\)/)
+  assert.doesNotMatch(gate, /invitesAgents|proActive|\bpro: /)
+  const membership = readFileSync(new URL('../web/app/imports/api/business/membership.mjs', import.meta.url), 'utf8')
+  assert.doesNotMatch(membership, /invitesAgents/)
 })
 
 test('a call on the pool is never cut off because the pool ran out (terms A3); other calls still are', () => {

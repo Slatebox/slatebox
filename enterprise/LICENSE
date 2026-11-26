@@ -17,28 +17,32 @@ Initiative.
    contribute back to Slatebox LLC. You may run it for those purposes on
    your own computers and test systems.
 
+   You may also copy, install and run the Enterprise Software, unchanged or
+   changed, in production, for real users and with real data, as part of any
+   install of Slatebox: Slatebox Cloud, or Slatebox installed on your own or
+   anyone else's servers. This use is free of charge and needs no license
+   key.
+
 2. What needs an agreement
 
    Any other use needs a written agreement with Slatebox LLC. "Other use"
    includes, without limit:
 
-   a. running the Enterprise Software, or a changed version of it, in
-      production, for real users, or to process real data;
-   b. offering it, or a service built on it, to anyone else, hosted or not;
+   a. running the Enterprise Software, or a changed version of it, apart
+      from Slatebox, or as part of a product other than Slatebox;
+   b. offering it, or a service built on it, to anyone else, hosted or not,
+      except as part of an install of Slatebox that section 1 allows;
    c. selling, sublicensing, renting or distributing it, or a changed
-      version of it, on its own or as part of another product.
+      version of it, on its own or as part of another product. This does
+      not limit passing on a copy of Slatebox, with this license kept in
+      it, for someone to run under section 1;
+   d. offering Slatebox with the Enterprise Software in it to others as a
+      paid hosted service. Running Slatebox for your own organization, or
+      hosting it for others at no charge, needs no agreement.
 
    Slatebox LLC runs the Enterprise Software as part of Slatebox Cloud. Using
    Slatebox Cloud under its terms of service is the agreement that covers
    people who use these features there.
-
-   The self-hosted Slatebox images that Slatebox LLC publishes include the
-   Enterprise Software, locked. Receiving and running such an image is
-   allowed; the Enterprise Software in it stays locked. An on-prem license
-   key that Slatebox LLC issues for an install, under the terms it is sold
-   with, is the written agreement for running the Enterprise Software in
-   production on that install while the key is valid. Removing, changing or
-   getting around the license check, or making license keys, is not allowed.
 
 3. Changes and contributions
 

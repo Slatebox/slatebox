@@ -65,7 +65,10 @@ test('an agent\'s turn says what it did in plain words, and keeps only a safe na
 test('a failed ask says why and what to do next, never a bare error', async () => {
   const { agentErrorReply } = await import('../web/app/imports/api/common/agent-mention.mjs')
   assert.deepEqual(agentErrorReply('GitHub', { error: 'needs_sign_in', reason: 'x' }), { text: 'GitHub needs you to sign in again before it can look anything up.', next: 'signIn' })
-  assert.equal(agentErrorReply('GitHub', { error: 'pro_required' }).next, 'pay')
+  // Asking is free (owner, 2026-11-26); the meter's refusal says its own words and offers the pay sheet.
+  assert.deepEqual(agentErrorReply('GitHub', { error: 'pro', reason: 'Get Slatebox Pro.', details: { pay: { action: 'pro', wallet: null } } }), { text: 'Get Slatebox Pro.', next: 'pay' })
+  assert.equal(agentErrorReply('GitHub', { error: 'pro', reason: 'Get Slatebox Pro.', details: { status: 402, details: { pay: { action: 'pro', wallet: null } } } }).next, 'pay', 'as the registry sends it over DDP')
+  assert.equal(agentErrorReply('GitHub', { error: 'pro_required' }).next, 'retry', 'no plan refusal is known any more')
   assert.equal(agentErrorReply('GitHub', { error: 'agents_paused' }).text, 'Agents are paused on this slate. Resume agents on the roster under the canvas, then ask GitHub again.')
   assert.equal(agentErrorReply('GitHub', { error: 'upstream', reason: 'Bad credentials.' }).text, 'GitHub couldn\'t do that: Bad credentials. Try asking in other words.')
   assert.equal(agentErrorReply('GitHub', { error: 'x', reason: 'Internal server error' }).text, 'GitHub couldn\'t do that. Try asking in other words.')
@@ -112,7 +115,7 @@ test('after "@GitHub", follow-ups stay with GitHub until cleared or someone else
   // buttons choose: "Ask @GitHub" and "Ask Slatebox anyway"
   assert.equal(routeMessage('what are my latest commits?', { agents, to: 'gh' }).agent, github)
   assert.deepEqual(routeMessage('what are my latest commits?', { agents, replyingTo: 'gh', to: 'slatebox' }), { kind: 'slatebox', replyingTo: null })
-  // an agent that can no longer be asked (removed, Pro ended) does not hold the conversation
+  // an agent that can no longer be asked (removed, or needing sign-in) does not hold the conversation
   assert.deepEqual(routeMessage('add three ideas', { agents: [{ ...github, canAsk: false }], replyingTo: 'gh' }), { kind: 'slatebox', replyingTo: null })
 })
 

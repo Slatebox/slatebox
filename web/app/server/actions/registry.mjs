@@ -249,8 +249,6 @@ export function createRegistry({
     for (const action of list) byId.set(action.id, action)
   }
   accept(actions)
-  // Bumped by extend(): what is built from the list (exec's redactor) is built again.
-  let version = 0
   function admit(action, caller) {
     // No session and no token: a read open to visitors runs as one (over HTTP, http.mjs has
     // already made one that carries the address it is counted by).
@@ -464,14 +462,6 @@ export function createRegistry({
     neededScopes,
     get: (id) => byId.get(id),
     list: () => [...byId.values()],
-    // Actions that join after start: enterprise code a license unlocked while the server ran
-    // (server/enterprise.js unlockNow). The same checks as at start; nothing is replaced.
-    extend(more) {
-      accept(more)
-      version += 1
-      return more.map((action) => action.id)
-    },
-    version: () => version,
     admits,
     peek,
     components,

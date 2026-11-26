@@ -1,6 +1,6 @@
 // The slate's export panel: Mermaid, PNG and SVG downloads (and cloud links where the host has an
-// image store). Google Drive and Docs are the Google integration's (enterprise code, Pro or
-// Business): the slate.export.google slot, empty where enterprise code is locked.
+// image store). Google Drive and Docs are the Google integration's (enterprise code, free): the
+// slate.export.google slot, empty where enterprise code does not run.
 import React from 'react'
 import { Meteor } from 'meteor/meteor'
 import PropTypes from 'prop-types'

@@ -46,13 +46,15 @@ test('its tools changed since it was connected: it needs one look first, and say
   assert.match(d.why, /Integrations page/)
 })
 
-test('a new sign-in, Pro ended, or an unknown state: not instant, each with its reason', () => {
+test('a new sign-in, or an unknown state: not instant, each with its reason; never a plan (integrations are free)', () => {
   const signIn = addDecision({ ...active, status: 'needs_sign_in' })
   assert.equal(signIn.act, 'sign-in')
   assert.match(signIn.why, /sign in again/)
-  const pro = addDecision({ ...active, status: 'pro_ended' })
-  assert.equal(pro.act, 'pro')
-  assert.match(pro.why, /Slatebox Pro/)
+  for (const status of ['active', 'paused', 'needs_sign_in', 'something_new']) {
+    const { act, why } = addDecision({ ...active, status })
+    assert.notEqual(act, 'pro', status)
+    assert.doesNotMatch(why, /Pro\b|Business|plan/, status)
+  }
   const odd = addDecision({ ...active, status: 'something_new' })
   assert.equal(odd.act, 'review')
   assert.ok(odd.why)
@@ -74,7 +76,7 @@ test('the slate owner\'s rule: off blocks everyone (the owner is told how to tur
 
 test('every reason is plain words: no codes, no all-caps placeholders', () => {
   const cases = [
-    addDecision({ ...active, status: 'paused' }), addDecision({ ...active, status: 'needs_sign_in' }), addDecision({ ...active, status: 'pro_ended' }),
+    addDecision({ ...active, status: 'paused' }), addDecision({ ...active, status: 'needs_sign_in' }),
     addDecision(active, { setting: { outsideAgents: 'off' }, isOwner: true }), addDecision(active, { setting: { outsideAgents: 'owner' } }),
   ]
   for (const { why } of cases) {
@@ -115,7 +117,6 @@ function makeWorld() {
       forUser: async (shareId, userId) => (slates[shareId] && roles[shareId][userId] ? { slate: slates[shareId], canRead: true, canEdit: roles[shareId][userId] === 'edit' } : null),
       reload: async (shareId) => slates[shareId],
     },
-    pro: async () => true,
     firstName: async (userId) => userId[0].toUpperCase() + userId.slice(1),
     sanitizeName: sanitizeClientName,
     presence: { plan: async () => {}, step: async () => {}, saved: async (...args) => presenceCalls.push(args), end: async () => {} },

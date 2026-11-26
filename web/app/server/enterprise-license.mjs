@@ -1,14 +1,15 @@
-// Whether this server may run the code in the repository's enterprise/ directory (enterprise/LICENSE).
-// MIT, and runs without Meteor (scripts/enterprise-license.test.mjs).
+// Whether this server may run the code in the repository's enterprise/ directory (enterprise/LICENSE),
+// and as which edition. MIT, and runs without Meteor (scripts/enterprise-license.test.mjs).
 //
-// - Slatebox Cloud runs it: Slatebox LLC's own service. Saying so in settings is not enough:
-//   settings.public.edition 'cloud' unlocks only with a Cloud key (kind 'cloud', bound to Cloud's
-//   host names) signed like any license, so no settings change alone unlocks a self-hosted install.
-// - A self-hosted install carries the same code, locked. A license key from Slatebox LLC unlocks it
-//   (an on-prem license: a flat yearly fee per install). The key is checked offline: it is signed
-//   with Slatebox LLC's private Ed25519 key, and this file holds only the public half, so no one
-//   else can make a key that passes. Nothing is sent anywhere to check it.
-// - Single sign-on with the bundled Keycloak is not enterprise code: it stays free on every install.
+// - Every self-hosted install runs it, with no key and no trial (owner, 2026-11-26: integrations are
+//   free everywhere; enterprise/LICENSE allows it at no charge). A build without the code still runs,
+//   without integrations (server/enterprise-loader.mjs).
+// - Slatebox Cloud runs it as Cloud. Saying so in settings is not enough: settings.public.edition
+//   'cloud' counts only with a Cloud key (kind 'cloud', bound to Cloud's host names) signed by
+//   Slatebox LLC, so no settings change alone turns a self-hosted install into Cloud (payments and
+//   the meter follow that key: server/cloud-lock.mjs). The key is checked offline: it is signed with
+//   Slatebox LLC's private Ed25519 key, and this file holds only the public half, so no one else can
+//   make a key that passes. Nothing is sent anywhere to check it.
 //
 // A license key is one line:
 //   sblic1.<key id>.<payload, base64url JSON>.<Ed25519 signature of "sblic1.<key id>.<payload>", base64url>
@@ -16,15 +17,13 @@
 //            hosts?: ['slatebox.example.com'] }   (dates as YYYY-MM-DD, UTC; hosts binds it to installs,
 //            and a Cloud key must name them)
 //
-// Where an install puts it (the first one found wins):
+// (Cloud's license issuer, server/licenses, still signs on-prem keys; no install reads them any more.)
+//
+// Where Slatebox Cloud puts its key (the first one found wins):
 //   settings.enterprise.license        the key itself (private settings, never sent to browsers)
 //   SLATEBOX_LICENSE                    the key itself, as an environment variable
 //   settings.enterprise.licenseFile     a file holding the key
 //   SLATEBOX_LICENSE_FILE               a file holding the key, as an environment variable
-//   the key an administrator entered     kept in this server's database (server/enterprise-key.mjs):
-//                                       the header button › Unlock (a trial key from Slatebox
-//                                       Cloud, or a license key pasted in). Checked exactly like the
-//                                       others, so a database row unlocks nothing Slatebox did not sign.
 import { createPublicKey, verify as verifySignature } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 
@@ -43,19 +42,18 @@ export const LICENSE_KEYS = Object.freeze({
 
 // What an administrator reads for each state (the admin page and the server log).
 export const LICENSE_WORDS = Object.freeze({
-  cloud: 'Slatebox Cloud: enterprise features are on.',
-  cloud_no_key: 'These settings say Slatebox Cloud, but there is no Slatebox Cloud key: enterprise features are off.',
-  wrong_kind: 'The license key is for another kind of install (Slatebox Cloud or on-prem).',
-  license: 'Enterprise features are on with this install\'s license.',
-  grace: 'This install\'s license has ended. Enterprise features stay on for a few more days: renew to keep them.',
-  no_license: 'Enterprise features are off on this install. An on-prem license from Slatebox turns them on.',
+  self_host: 'Integrations are on: they are free on every self-hosted install.',
+  cloud: 'Slatebox Cloud: integrations are on.',
+  cloud_no_key: 'These settings say Slatebox Cloud, but there is no Slatebox Cloud key: integrations are off.',
+  wrong_kind: 'The license key is not a Slatebox Cloud key.',
+  grace: 'The Slatebox Cloud key has ended. Integrations stay on for a few more days: renew the key to keep them.',
   malformed: 'The license key could not be read. Check that it was copied in full.',
   unknown_key: 'The license key was not issued by Slatebox.',
   bad_signature: 'The license key was not issued by Slatebox, or it was changed.',
-  wrong_product: 'The license key is not for Slatebox enterprise features.',
+  wrong_product: 'The license key is not for Slatebox.',
   not_yet: 'The license key is not valid yet.',
-  expired: 'This install\'s license has ended. Renew it to unlock enterprise features again.',
-  wrong_host: 'The license key is for another install.',
+  expired: 'The Slatebox Cloud key has ended. Renew it to turn integrations on again.',
+  wrong_host: 'The license key is for another server.',
   unreadable_file: 'The license file could not be read.',
 })
 
@@ -100,9 +98,8 @@ export const hostOf = (url) => {
 }
 
 /**
- * This install's host name, worked out one way everywhere a key is checked, kept or asked for
- * (enterpriseAccess, enterprise-key.mjs save, the trial request): settings.public.baseUrl, else
- * ROOT_URL (what Meteor.absoluteUrl() answers from). '' when neither says.
+ * This server's host name, worked out one way wherever a key is checked (enterpriseAccess):
+ * settings.public.baseUrl, else ROOT_URL (what Meteor.absoluteUrl() answers from). '' when neither says.
  */
 export const installHost = ({ settings, env = {} } = {}) => hostOf(settings?.public?.baseUrl || env?.ROOT_URL || '')
 
@@ -146,8 +143,8 @@ export function verifyLicense(text, { keys = LICENSE_KEYS, now = Date.now(), hos
   return { valid: false, reason: 'expired', license }
 }
 
-/** The install's license key as written in its settings or environment (else the one an administrator entered), or null. */
-export function readLicenseText({ settings, env = {}, readFile = (path) => readFileSync(path, 'utf8'), stored = null }) {
+/** The server's license key as written in its settings or environment, or null. */
+export function readLicenseText({ settings, env = {}, readFile = (path) => readFileSync(path, 'utf8') }) {
   const inline = settings?.enterprise?.license || env.SLATEBOX_LICENSE
   if (typeof inline === 'string' && inline.trim()) return { text: inline.trim() }
   const file = settings?.enterprise?.licenseFile || env.SLATEBOX_LICENSE_FILE
@@ -158,32 +155,30 @@ export function readLicenseText({ settings, env = {}, readFile = (path) => readF
       return { text: null, problem: 'unreadable_file' }
     }
   }
-  if (typeof stored === 'string' && stored.trim()) return { text: stored.trim(), entered: true }
   return { text: null }
 }
 
 /**
- * Whether enterprise code may run here, and why.
- * @returns {{ unlocked: boolean, via: 'cloud'|'license'|null, reason: string, words: string,
+ * Whether enterprise code may run here, and as which edition.
+ * @returns {{ unlocked: boolean, via: 'cloud'|'self-host'|null, reason: string, words: string,
  *             license: object|null, endsAt: number|null }}
  */
-export function enterpriseAccess({ settings, env = {}, readFile, keys = LICENSE_KEYS, now = Date.now(), stored = null }) {
+export function enterpriseAccess({ settings, env = {}, readFile, keys = LICENSE_KEYS, now = Date.now() }) {
   const out = (unlocked, via, reason, license = null, endsAt = null) => ({ unlocked, via, reason, words: LICENSE_WORDS[reason] || '', license, endsAt })
-  // Cloud proves itself with a Cloud key; a self-hosted install with an on-prem key. Each kind
-  // unlocks only its own edition, so neither a settings change nor the other kind's key unlocks.
-  const cloud = settings?.public?.edition === 'cloud'
-  const { text, problem } = readLicenseText({ settings, env, readFile, stored })
+  // A self-hosted install runs it with no key at all: no key is read, so none can lock it.
+  if (settings?.public?.edition !== 'cloud') return out(true, 'self-host', 'self_host')
+  // Cloud proves itself with a Cloud key; any other key, or none, keeps these settings from being Cloud.
+  const { text, problem } = readLicenseText({ settings, env, readFile })
   if (problem) return out(false, null, problem)
-  if (!text) return out(false, null, cloud ? 'cloud_no_key' : 'no_license')
+  if (!text) return out(false, null, 'cloud_no_key')
   const checked = verifyLicense(text, { keys, now, host: installHost({ settings, env }) })
   if (!checked.valid) return out(false, null, checked.reason, checked.license || null)
-  if (checked.license.kind !== (cloud ? 'cloud' : 'on-prem')) return out(false, null, 'wrong_kind', checked.license)
-  if (cloud) return out(true, 'cloud', checked.reason === 'grace' ? 'grace' : 'cloud', checked.license, checked.endsAt)
-  return out(true, 'license', checked.reason, checked.license, checked.endsAt)
+  if (checked.license.kind !== 'cloud') return out(false, null, 'wrong_kind', checked.license)
+  return out(true, 'cloud', checked.reason === 'grace' ? 'grace' : 'cloud', checked.license, checked.endsAt)
 }
 
 /**
- * Signs a license key (Slatebox LLC's side; scripts/license-sign.mjs). Never called by the app.
+ * Signs a license key (Slatebox LLC's side: scripts/license-sign.mjs, and Cloud's license issuer).
  * @param {object} payload
  * @param {{ kid: string, privateKey: import('node:crypto').KeyObject | string }} signer
  */

@@ -1,6 +1,6 @@
 // Server admin: the admin.status and admin.dashboard methods (server/admin/dashboard-core.mjs over
 // the app's collections and Stripe client). Plain methods for the admin pages, not registry
-// actions: nothing a token or an agent should reach (like enterprise.licenseStatus).
+// actions: nothing a token or an agent should reach (like enterprise.status).
 //
 // admin.status answers for the signed-in account only: { admin } (the uberMensch claim alone, no
 // team needed). The browser uses it to draw the Admin links; every admin method still checks the

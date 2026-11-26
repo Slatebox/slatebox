@@ -2,25 +2,25 @@
 // Not MIT: see enterprise/README.md.
 //
 // The server half of outside agent connections. The MIT app calls register() once at start where
-// enterprise code is unlocked (web/app/server/enterprise-loader.mjs): on Slatebox Cloud, and on a
-// self-hosted install with a license key from Slatebox LLC. A locked install never calls it.
+// enterprise code runs (web/app/server/enterprise-loader.mjs): on Slatebox Cloud, and on every
+// self-hosted install whose build carries this code. Integrations are free on both.
 // Everything here reaches the app only through `api`:
 //   api.addActions([...])   one registry action = Meteor method + /api/v1 route + exec + MCP tool
 //   api.addMethods({...})   plain Meteor methods (prefer actions)
 //   api.addRoute({ method, path, handler })   e.g. GET /connectors/oauth/callback
 //   api.onStartup(fn)
 /* eslint-disable no-console */
-// context: { edition, settings, unlocked, via: 'cloud'|'license', features, agentInvite, isUnlocked }
+// context: { edition, settings, unlocked, via: 'cloud'|'self-host', features, agentInvite, isUnlocked }
 // where agentInvite is true unless the server-side kill switch settings.connectors.off is set, and
-// isUnlocked() says whether the key still holds (checked hourly; actions, methods and routes are
-// already guarded by the app).
+// isUnlocked() says whether enterprise code may still run (Cloud's key, checked hourly; always true
+// on a self-hosted install; actions, methods and routes are already guarded by the app).
 import { connectorActions, integrationActions } from './actions.mjs'
 import { galleryActions } from './gallery-admin.mjs'
 import { googleActions } from './google/actions.mjs'
 import { signInRoutes } from './routes.mjs'
 import { registerTeamAddresses } from '../team-addresses/index.mjs'
 
-// library.cloud: a licensed install receives Slatebox Cloud's approved Community integrations (cloud-library.mjs).
+// library.cloud: a self-hosted install receives Slatebox Cloud's approved Community integrations (cloud-library.mjs).
 export const manifest = Object.freeze({ name: 'slatebox-enterprise', features: ['agents.invite', 'library.cloud'] })
 
 export function register(api, context) {

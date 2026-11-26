@@ -107,14 +107,9 @@ The registry updates the two `latest` tags separately. If promotion stops after 
 - **Calls** — Add `daily.apiKey` to the server-only `.state/settings.json` using your organization’s Daily credential. Turn on audio or video huddles in the slate settings. Daily hosts the media rooms and handles network traversal. The bundled WebSocket service carries board changes. For browser microphone and camera access, serve the app over HTTPS or use localhost for development.
 - **Published presentation images** — Configure your own `aws.region`, `aws.accessKey`, `aws.secretKey`, `aws.imageBucket` and `aws.cloudUrl` for the app's S3 image-storage integration. Published images need an HTTPS asset origin reachable by viewers.
 
-### Unlock enterprise features (Upgrade on prem)
+### Integrations
 
-The app image includes Slatebox's enterprise features (inviting outside agents such as GitHub, Linear or Excalidraw onto a slate, and the connectors behind them), locked. An on-prem license from Slatebox unlocks them on one install, for a flat yearly fee, without moving to Slatebox Cloud. Single sign-on with the bundled Keycloak needs no license and is never locked. To ask for a license, use **Admin tools → Upgrade on prem** in the app, or [contact Slatebox](https://slatebox.com/contact/).
-
-1. Add the license key you receive to the server-only part of `.state/settings.json`: `"enterprise": { "license": "sblic1.…" }`. A file works too: `"enterprise": { "licenseFile": "/path/inside/the/container" }`.
-2. Run `./run up -d --no-deps --force-recreate --wait app`. The app log says `[enterprise] licensed to …` and **Admin tools** shows the license and its end date.
-
-The key is checked inside the app, offline: nothing is sent to Slatebox. A license covers one install: its key names that install's host name and works only at that address (`public.baseUrl`). Setting `public.edition` to `"cloud"` does not unlock anything; it locks an on-prem key instead. After its end date a key keeps working for 14 more days, so a renewal never interrupts anyone. Without a valid key the features stay locked and the rest of Slatebox works as before.
+The app image includes Slatebox's integrations (inviting outside agents such as GitHub, Linear or Hugging Face onto a slate, connecting Google once, and the connectors behind them). They are on in every install, free, with no key. The agent work they do runs on the AI connections you configure. To turn them off for everyone, add `"connectors": { "off": true }` to the server-only part of `.state/settings.json` and run `./run up -d --no-deps --force-recreate --wait app`. **Admin tools** shows whether they are on. This server also fetches the Community integrations Slatebox reviewed from `app.slatebox.com` every six hours; to stop it, add `"enterprise": { "cloudLibrary": false }` to the same server-only settings and recreate the app the same way.
 
 ### Tell the app how many proxies are in front of it
 

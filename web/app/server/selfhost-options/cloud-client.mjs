@@ -1,4 +1,4 @@
-// What a self-hosted Slatebox server asks of Slatebox Cloud for the header button on a self-hosted install (owner,
+// What a self-hosted Slatebox server asks of Slatebox Cloud for the header's Move to Cloud (owner,
 // 2026-11-25). MIT, runs without Meteor (scripts/selfhost-options.test.mjs, against an in-process
 // Cloud built from the same code: scripts/fake-slatebox-cloud.mjs).
 //
@@ -6,10 +6,6 @@
 //                    'slatebox-server' ("Your Slatebox server"); a Cloud that does not know that
 //                    client yet answers invalid_client, and a move then signs in as 'slatebox-cli'
 //                    (the installer's client, which Cloud has offered moves to since 0.2).
-//   licenses         GET /licenses/offer: whether Cloud issues trials now, and their length;
-//                    POST /licenses/key: a trial key bound to this server's host (proven with a
-//                    one-time proof Cloud fetches back from this server), or the account's own
-//                    license (server/licenses on Cloud).
 //   moves            the /api/v1 team move actions the CLI's `slatebox migrate --to cloud` uses, and
 //                    the one-time upload address they hand out.
 // Every answer that is not a success becomes a CloudError with Cloud's own code and words.
@@ -20,7 +16,6 @@ import { Readable } from 'node:stream'
 export const DEVICE_GRANT = 'urn:ietf:params:oauth:grant-type:device_code'
 export const SERVER_CLIENT = 'slatebox-server'
 export const CLI_CLIENT = 'slatebox-cli'
-export const LICENSE_SCOPE = 'license:trial'
 export const MOVE_SCOPE = 'team:export team:move'
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]'])
 
@@ -57,7 +52,7 @@ export function createCloudClient({ origin, fetch: fetchImpl = globalThis.fetch,
     const where = new URL(base).host
     return new CloudError(
       'unreachable',
-      `Slatebox Cloud (${where}) can't be reached from this server. Check that this server can make outbound https connections to ${where} (a proxy or firewall may block them). A license key works offline: choose "I have a license key".`,
+      `Slatebox Cloud (${where}) can't be reached from this server. Check that this server can make outbound https connections to ${where} (a proxy or firewall may block them).`,
       0,
       { detail: error?.cause?.code || error?.code || error?.name || 'no answer' }
     )
@@ -96,7 +91,7 @@ export function createCloudClient({ origin, fetch: fetchImpl = globalThis.fetch,
         signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeout)]) : AbortSignal.timeout(timeout),
       })
     } catch (error) {
-      if (signal?.aborted) throw new CloudError('cancelled', 'Cancelled.')
+      if (signal?.aborted) throw new CloudError('cancelled', 'Canceled.')
       throw reach(error)
     }
     const data = await readJson(response)
@@ -132,9 +127,6 @@ export function createCloudClient({ origin, fetch: fetchImpl = globalThis.fetch,
     origin: base,
     deviceAuthorize: ({ clientId = SERVER_CLIENT, scope, label }) => send('/oauth/device_authorization', { form: { client_id: clientId, scope, ...(label && { device_label: label }) } }).then((r) => r.data),
     deviceToken: ({ clientId = SERVER_CLIENT, deviceCode }) => send('/oauth/token', { form: { grant_type: DEVICE_GRANT, device_code: deviceCode, client_id: clientId } }).then((r) => r.data),
-    licenseKey: (token, { host, installId, proof }) => send('/licenses/key', { bearer: token, json: { host, installId, proof } }).then((r) => r.data),
-    /** Whether Cloud issues trials to servers now: { trial: true, trialDays } (404 where it does not). */
-    licenseOffer: () => send('/licenses/offer', { method: 'GET', timeout: 5000 }).then((r) => r.data),
     startMove: (token, key) => action('POST', '/team/moves', token, {}, { key }),
     listMoves: (token) => action('GET', '/team/moves', token),
     getMove: (token, id) => action('GET', `/team/moves/${encodeURIComponent(id)}`, token),

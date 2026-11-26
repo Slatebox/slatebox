@@ -192,7 +192,7 @@ token with the same two permissions (`SLATEBOX_CLOUD_TOKEN`) still works for scr
 ## A move started from a self-hosted server
 
 A self-hosted server's administrator can move their team from the app itself (the header's
-**Upgrade** › **Move your team to Slatebox Cloud**; `web/app/server/selfhost-options`). The server
+**Move to Cloud**; `web/app/server/selfhost-options`). The server
 plays the CLI's part: it signs in to Slatebox Cloud with a device code as client `slatebox-server`
 ("Your Slatebox server", purpose `move`: the same scopes, resource and hour as above; a Cloud that
 does not know that client yet is asked as `slatebox-cli`), writes the export in-process and streams

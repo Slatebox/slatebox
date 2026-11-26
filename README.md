@@ -59,7 +59,7 @@ You need Docker (Docker Desktop, OrbStack, Colima, Docker Engine, or Podman with
 
 ### Slatebox Cloud
 
-Open [app.slatebox.com](https://app.slatebox.com) and start a slate, just for you or for your whole company. Guests don't need an account. The canvas is free. On Slatebox Cloud, AI comes with Slatebox Pro; a self-hosted Slatebox can use its own AI key. On Cloud, AI and calls you start can also be paid from a prepaid balance. Slatebox Pro and balances exist only on Slatebox Cloud. The details are on the [pricing page](https://slatebox.com/plans/).
+Open [app.slatebox.com](https://app.slatebox.com) and start a slate, just for you or for your whole company. Guests don't need an account. The canvas is free. On Slatebox Cloud, AI comes with Slatebox Pro; a self-hosted Slatebox can use its own AI key. On Cloud, AI and calls you start can also be paid from a prepaid balance. Slatebox Pro and balances exist only on Slatebox Cloud. The details are on the [pricing page](https://slatebox.com/plans/). Integrations (outside agents and Google, connected once and invited onto any slate) are free for every account.
 
 ### Connect your agent
 
@@ -165,7 +165,7 @@ The SlateboxJS engine is versioned separately: npm [`slateboxjs`](https://www.np
 
 ## License
 
-Slatebox is [MIT licensed](LICENSE), and so is the [SlateboxJS](https://github.com/Slatebox/slateboxjs) engine. The one exception is the [`enterprise/`](enterprise/README.md) directory. It holds the connections to outside agents (inviting an outside MCP server onto a slate, and connectors) and the Slatebox Cloud team-address service behind `<name>.slatebox.team`. Everything in `enterprise/` is under the source-available [Slatebox Enterprise License](enterprise/LICENSE): you may read, change and test it, but running it in production needs an agreement with Slatebox LLC. Third-party components keep their own licenses. See [LICENSING.md](LICENSING.md).
+Slatebox is [MIT licensed](LICENSE), and so is the [SlateboxJS](https://github.com/Slatebox/slateboxjs) engine. The one exception is the [`enterprise/`](enterprise/README.md) directory. It holds the connections to outside agents (inviting an outside MCP server onto a slate, and connectors) and the Slatebox Cloud team-address service behind `<name>.slatebox.team`. Everything in `enterprise/` is under the source-available [Slatebox Enterprise License](enterprise/LICENSE): you may read, change and test it, and run it free of charge as part of any Slatebox install, on Slatebox Cloud or on your own servers. Integrations are free everywhere. Third-party components keep their own licenses. See [LICENSING.md](LICENSING.md).
 
 Slatebox's own MCP server, command line and API, and single sign-on with the bundled Keycloak, are MIT and work on every install.
 

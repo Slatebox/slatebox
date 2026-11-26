@@ -149,7 +149,6 @@ function githubWorld({ allow = null } = {}) {
     },
     applyOperations: live.applyOperations,
     access: { forUser: async (shareId, userId) => (shareId === 'share1' && userId === 'ada' ? { slate, canRead: true, canEdit: true } : null), reload: async () => slate },
-    pro: async () => true,
     firstName: async () => 'Ada',
     sanitizeName: sanitizeClientName,
     presence: { plan: async () => {}, step: async () => {}, saved: async () => {}, end: async () => {} },

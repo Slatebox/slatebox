@@ -44,10 +44,10 @@
 // brings outside agents onto it (outsideAgents: editors, owner, off). The sign-in lives as long as
 // its integration, not its slates.
 //
-// Rules every entry point enforces (owner decisions 2026-11-23/24): enterprise code unlocked
-// (Slatebox Cloud, or a licensed self-hosted install) and the kill switch off (the loader registers
-// nothing otherwise); on Cloud the inviter needs Slatebox Pro (checked on every discover, connect
-// and call, not only in the browser; a licensed install has no Pro, so `pro` answers true there); only the inviter can call the agent;
+// Rules every entry point enforces (owner decisions 2026-11-23/24/26): enterprise code loaded
+// (Slatebox Cloud, or any self-hosted install whose build carries it) and the kill switch off (the
+// loader registers nothing otherwise). Integrations are free everywhere (owner, 2026-11-26): no plan
+// is checked; the agent work they run is metered like any other (runAIAction); only the inviter can call the agent;
 // everyone who can read the slate sees its cursor and ghosts; the person who keeps must be able
 // to edit the slate.
 import { createHash, randomBytes } from 'node:crypto'
@@ -74,7 +74,7 @@ import {
   stepCalls, stepTool, trimToBudget,
 } from './recipes.mjs'
 
-export const AGENT_LIMITS = Object.freeze({ perSlate: 8, perOwnerPerSlate: 3, beatMs: 450, requestChars: 1000, nameChars: 32, proEndedDays: 30, orphanHours: 24, concurrentPerUser: 3, helloMs: 8000, integrationsPerOwner: 40 })
+export const AGENT_LIMITS = Object.freeze({ perSlate: 8, perOwnerPerSlate: 3, beatMs: 450, requestChars: 1000, nameChars: 32, orphanHours: 24, concurrentPerUser: 3, helloMs: 8000, integrationsPerOwner: 40 })
 
 /** The standing rules an integration may have: invite it yourself, or it joins every slate you own. */
 export const RULES = Object.freeze(['ask', 'my_slates'])
@@ -120,15 +120,20 @@ export class ConnectorRefused extends Error {
     if (details !== undefined) this.details = details
   }
 }
+// The meter's refusal (a Meteor.Error with its code and { pay }) as a refusal the registry passes on
+// with its code, words and pay action (status 402), so Ask Slatebox can offer the pay sheet.
+// Anything else is thrown as it is.
+export function meterRefusal(error) {
+  if (typeof error?.error === 'string' && error?.details?.pay) throw new ConnectorRefused(402, error.error, error.reason || error.message, { pay: error.details.pay })
+  throw error
+}
+
 const refuse = (status, code, message, details) => {
   throw new ConnectorRefused(status, code, message, details)
 }
 
-export const PRO_REQUIRED = 'Inviting agents onto your slates is part of Slatebox Pro and Slatebox Business.'
-export const INTEGRATIONS_PRO = 'Integrations are part of Slatebox Pro and Slatebox Business.'
-
 /** What its owner sees of an integration on the Integrations page: never a token. */
-export function publicIntegration(doc, { slates = [], cards = GALLERY, pro = true } = {}) {
+export function publicIntegration(doc, { slates = [], cards = GALLERY } = {}) {
   return {
     integrationId: doc._id,
     kind: doc.kind || 'mcp',
@@ -137,7 +142,7 @@ export function publicIntegration(doc, { slates = [], cards = GALLERY, pro = tru
     address: doc.address,
     galleryId: doc.galleryId || cardFor(doc.address, cards)?.id || null,
     owner: 'personal',
-    status: !pro && doc.status === 'active' ? 'pro_ended' : doc.status,
+    status: doc.status,
     rule: RULES.includes(doc.rule) ? doc.rule : 'ask',
     defaultContextLevel: doc.defaultContextLevel || 'request',
     signedIn: Boolean(doc.auth),
@@ -220,7 +225,6 @@ export function createConnectorService({
   metered = (fn) => fn(), // (fn, { userId, shareId }) runs fn inside one metered AI request (runAIAction)
   applyOperations, // async (principal, { shareId, plan, expectedRevision }, mode) -> { status, body }: an agent's save is a suggestion (202, outcome suggested)
   access, // { forUser(shareId, userId) -> { slate, canRead, canEdit } | null, forToken(principal, shareId) -> same | null, reload(shareId) -> slate }
-  pro, // async (userId) -> boolean
   firstName, // async (userId) -> string
   sanitizeName, // agent-label.mjs sanitizeClientName
   presence, // { plan(principal, slate, steps), step(principal, slate, index, status), saved(principal, slate, { targets, message }), end(runId, outcome) }
@@ -271,9 +275,8 @@ export function createConnectorService({
     if (!found.canEdit) refuse(403, 'forbidden', 'Only people who can edit this slate can do that.')
     return found.slate
   }
-  async function requirePro(userId, words = PRO_REQUIRED) {
-    if (!(await pro(userId))) refuse(402, 'pro_required', words)
-  }
+  // Anyone signed in may connect and invite integrations: never a guest or a visitor.
+  const signedInPerson = (principal) => Boolean(principal?.userId) && principal.kind !== 'guest' && principal.kind !== 'visitor'
   // A signed-in person (never a guest), and, when a slate is named, someone who may edit it.
   async function requirePerson(principal, shareId) {
     if (shareId !== undefined && shareId !== null) return requireEditor(principal, shareId)
@@ -388,7 +391,6 @@ export function createConnectorService({
   // shareId: discovering from a slate's walkthrough. Without one: from the Integrations page.
   async function discoverNow(principal, { shareId, address: raw }) {
     const slate = await requirePerson(principal, shareId)
-    await requirePro(principal.userId, slate ? PRO_REQUIRED : INTEGRATIONS_PRO)
     const { address, host } = checkAddress(raw)
     const cards = await gallery()
     const card = cardFor(address, cards)
@@ -499,7 +501,6 @@ export function createConnectorService({
 
   async function connectNow(principal, { shareId, address: raw, name: rawName, tools: chosen = [], contextLevel = 'request', view = null }) {
     const slate = await requireEditor(principal, shareId)
-    await requirePro(principal.userId)
     await checkOutsideAgents(principal, slate)
     const { address, host } = checkAddress(raw)
     if (!CONTEXT_LEVELS.includes(contextLevel)) refuse(400, 'invalid_request', 'Choose what the agent may see.')
@@ -631,16 +632,9 @@ export function createConnectorService({
   async function list(principal, { shareId }) {
     const { slate } = await requireReader(principal, shareId)
     const docs = await connections.find({ slateId: slate._id, status: { $ne: 'removed' } })
-    const isPro = principal.userId ? await pro(principal.userId) : false
-    // The viewer's own agents follow their Pro: "Pro ended" while it is off, back when it returns.
-    for (const doc of docs) {
-      if (doc.ownerId !== principal.userId) continue
-      if (!isPro && doc.status === 'active') await setStatus(doc, 'pro_ended')
-      else if (isPro && doc.status === 'pro_ended') await setStatus(doc, 'active')
-    }
     const cards = await gallery()
-    // canInvite: this person may invite agents here (Pro, or a Business seat; always on a licensed install).
-    return { connections: docs.map((doc) => publicConnection(doc, principal.userId, cards)), pro: isPro, canInvite: isPro }
+    // canInvite: this person may invite agents here: anyone signed in (never a guest or a visitor).
+    return { connections: docs.map((doc) => publicConnection(doc, principal.userId, cards)), canInvite: signedInPerson(principal) }
   }
 
   /**
@@ -700,7 +694,7 @@ export function createConnectorService({
   async function galleryList(principal) {
     // A vendor that needs an app registered ahead of time (no automatic registration) is hidden until it is.
     const cards = (await gallery()).filter((card) => !card.needsApp || Boolean(oauthApps?.[card.needsApp]?.clientId))
-    const canInvite = principal?.userId && principal.kind !== 'guest' && principal.kind !== 'visitor' ? await pro(principal.userId) : false
+    const canInvite = signedInPerson(principal)
     return {
       cards: cards.map(({ id, name, url, job, lands, try: tryThis, featured, signIn, keyHint, cost, group, origin, homepage, sharedBy }) => ({
         id, name, url, job, lands, try: tryThis, featured: Boolean(featured), signIn: signIn || null, keyHint: keyHint || null, cost: cost || '', group: group || null,
@@ -828,10 +822,6 @@ export function createConnectorService({
   async function callNow(principal, { connectionId, request, selection = [], view = null, history = [] }) {
     const doc = await ownConnection(principal, connectionId)
     const slate = await requireEditor(principal, doc.shareId)
-    if (!(await pro(principal.userId))) {
-      await setStatus(doc, 'pro_ended')
-      refuse(402, 'pro_required', PRO_REQUIRED)
-    }
     // A native integration an administrator turned off (Google's card in /admin/ai): its stored sign-in is not used.
     if (!(await nativeOn(doc.address))) refuse(403, 'disabled', `${doc.name} is turned off on this server.`)
     // The slate owner's choice holds for agents already here too, not only for new invitations.
@@ -1292,7 +1282,6 @@ export function createConnectorService({
     const acting = actsWithoutAsking(doc, await integrationOf(doc), slate)
     if (!mayApprove(principal, card, doc, found.canEdit, acting))
       refuse(403, 'approver_only', principal.kind === 'person' ? `Only ${doc.inviterName || 'the person who invited it'} can approve ${doc.name}'s changes.` : 'Only a person approves an agent\'s changes on the slate, unless its inviter lets it act without asking.')
-    if (!(await pro(doc.ownerId))) refuse(402, 'pro_required', PRO_REQUIRED)
     if (!(await nativeOn(doc.address))) refuse(403, 'disabled', `${doc.name} is turned off on this server.`)
     const setting = await outsideAgentsOf(slate)
     if (setting === 'off') refuse(403, 'agents_off', 'This slate\'s owner turned off outside agents here.')
@@ -1555,8 +1544,7 @@ export function createConnectorService({
   }
 
   async function startSignInNow(principal, { shareId, address: raw, clientId = null }) {
-    const slate = await requirePerson(principal, shareId)
-    await requirePro(principal.userId, slate ? PRO_REQUIRED : INTEGRATIONS_PRO)
+    await requirePerson(principal, shareId)
     const { address, host } = checkAddress(raw)
     if (!vault?.available?.() || !signIn || !probe) refuse(422, 'vault_off', 'Agents that need sign-in are not available on this server.')
     let challenge = null
@@ -1587,8 +1575,7 @@ export function createConnectorService({
   }
 
   async function useKeyNow(principal, { shareId, address: raw, key }) {
-    const slate = await requirePerson(principal, shareId)
-    await requirePro(principal.userId, slate ? PRO_REQUIRED : INTEGRATIONS_PRO)
+    await requirePerson(principal, shareId)
     const { address, host } = checkAddress(raw)
     if (!vault?.available?.()) refuse(422, 'vault_off', 'Agents that need sign-in are not available on this server.')
     const value = typeof key === 'string' ? key.trim().replace(/^Bearer\s+/i, '') : ''
@@ -1607,25 +1594,16 @@ export function createConnectorService({
 
   /**
    * Housekeeping (hourly): a sign-in lives as long as its integration. Forgotten (and revoked): a
-   * sign-in with no integration after a day (someone signed in and never connected), and one whose
-   * integration's owner lost Pro 30 days ago (the integration then needs sign-in again).
+   * sign-in with no integration after a day (someone signed in and never connected).
    * credentialRows() -> [{ ownerId, address, createdAt }]
    */
   async function sweep(credentialRows) {
     let removed = 0
-    // Pro is looked at here, not only when its owner opens a page: a lapse nobody looks at still ends.
-    const proOf = new Map()
     for (const row of await credentialRows()) {
       const integration = await integrations.findOne({ ownerId: row.ownerId, address: row.address })
-      if (integration && ['active', 'pro_ended'].includes(integration.status)) {
-        if (!proOf.has(row.ownerId)) proOf.set(row.ownerId, await pro(row.ownerId).catch(() => true))
-        await followPro(integration, proOf.get(row.ownerId))
-      }
       const orphan = !integration && now() - new Date(row.createdAt).getTime() > AGENT_LIMITS.orphanHours * 3600000
-      const lapsed = Boolean(integration) && integration.status === 'pro_ended' && now() - new Date(integration.proEndedAt || integration.updatedAt).getTime() > AGENT_LIMITS.proEndedDays * 86400000
-      if (!orphan && !lapsed) continue
+      if (!orphan) continue
       await vault.remove(row.ownerId, row.address).catch(() => {})
-      if (lapsed) await integrations.update(integration._id, { status: 'needs_sign_in', auth: null, scopes: [], updatedAt: new Date(now()) })
       removed++
     }
     return { removed }
@@ -1640,34 +1618,19 @@ export function createConnectorService({
     return doc
   }
 
-  // The integration follows its owner's Pro: "Pro ended" while it is off, back when it returns.
-  async function followPro(doc, isPro) {
-    if (!isPro && doc.status === 'active') {
-      const at = new Date(now())
-      doc.status = 'pro_ended'
-      doc.proEndedAt = at
-      await integrations.update(doc._id, { status: 'pro_ended', proEndedAt: at, updatedAt: at })
-    } else if (isPro && doc.status === 'pro_ended') {
-      doc.status = 'active'
-      await integrations.update(doc._id, { status: 'active', proEndedAt: null, updatedAt: new Date(now()) })
-    }
-  }
-
   /** The Integrations page: each of this person's integrations, the slates it is on, and whether they may connect. */
   async function integrationsList(principal) {
     await requirePerson(principal)
-    const isPro = await pro(principal.userId)
     const cards = await gallery()
     const rows = await integrations.find({ ownerId: principal.userId })
     const out = []
     for (const doc of rows) {
-      await followPro(doc, isPro)
       const agents = await agentsOf(doc)
       const slates = await slateList([...new Set(agents.map((a) => a.slateId))], principal.userId).catch(() => [])
-      out.push(publicIntegration(doc, { slates, cards, pro: isPro }))
+      out.push(publicIntegration(doc, { slates, cards }))
     }
     out.sort((a, b) => String(a.name).localeCompare(String(b.name)))
-    return { integrations: out, pro: isPro, canConnect: isPro, rules: [...RULES] }
+    return { integrations: out, rules: [...RULES] }
   }
 
   /**
@@ -1681,7 +1644,6 @@ export function createConnectorService({
 
   async function integrationConnectNow(principal, { address: raw, name: rawName, tools: chosen = [], rule = null, replaces = null }) {
     await requirePerson(principal)
-    await requirePro(principal.userId, INTEGRATIONS_PRO)
     const { address, host } = checkAddress(raw)
     const name = slateName(rawName, sanitizeName)
     if (!name) refuse(400, 'bad_name', 'Choose another name. Names can\'t say Slatebox, admin, support or a person\'s name.')
@@ -1748,7 +1710,6 @@ export function createConnectorService({
   async function integrationAllowChanges(principal, { integrationId }) {
     return oneAtATime(principal, async () => {
       const doc = await ownIntegration(principal, integrationId)
-      await requirePro(principal.userId, INTEGRATIONS_PRO)
       if ((doc.kind || 'mcp') !== 'mcp') refuse(400, 'invalid_request', `${doc.name} has fixed tools.`)
       const cards = await gallery()
       if (writesAddress(doc.address, cards)) refuse(409, 'sign_in_at_full_address', `${doc.name} makes changes at its full address. Sign in there once more to let it.`, { address: writesAddress(doc.address, cards) })
@@ -1772,7 +1733,6 @@ export function createConnectorService({
   async function integrationReview(principal, { integrationId }) {
     return oneAtATime(principal, async () => {
       const doc = await ownIntegration(principal, integrationId)
-      await requirePro(principal.userId, INTEGRATIONS_PRO)
       if (doc.kind !== 'mcp') refuse(400, 'invalid_request', `${doc.name} has fixed tools: there is nothing to review.`)
       const reached = await discoverAs(principal.userId, doc.address)
       if (reached.needsSignIn) {
@@ -1800,7 +1760,6 @@ export function createConnectorService({
   /** Its standing rule: 'ask' (you invite it) or 'my_slates' (it joins every slate you own). */
   async function integrationSetRule(principal, { integrationId, rule }) {
     const doc = await ownIntegration(principal, integrationId)
-    await requirePro(principal.userId, INTEGRATIONS_PRO)
     if (!RULES.includes(rule)) refuse(400, 'invalid_request', 'Choose when it joins: when you invite it, or on every slate you own.')
     await integrations.update(doc._id, { rule, updatedAt: new Date(now()) })
     doc.rule = rule
@@ -1921,10 +1880,8 @@ export function createConnectorService({
   /** Invite one of your integrations onto a slate: no sign-in, no consent again. */
   async function integrationInvite(principal, { shareId, integrationId, contextLevel = null, name = null, view = null }) {
     const slate = await requireEditor(principal, shareId)
-    await requirePro(principal.userId)
     await checkOutsideAgents(principal, slate)
     const integration = await ownIntegration(principal, integrationId)
-    await followPro(integration, true)
     const doc = await placeOnSlate(principal, slate, integration, { by: 'invite', contextLevel, name, view })
     return publicConnection(doc, principal.userId, await gallery())
   }
@@ -1943,9 +1900,6 @@ export function createConnectorService({
     if (!found.canEdit || slate.userId !== principal.userId) return none
     const ruled = await integrations.find({ ownerId: principal.userId, rule: 'my_slates' })
     if (!ruled.length) return none
-    const isPro = await pro(principal.userId)
-    for (const row of ruled) await followPro(row, isPro)
-    if (!isPro) return { ...none, pro: false }
     const rules = ruled.filter((row) => row.status === 'active')
     if ((await outsideAgentsOf(slate)) === 'off') return { joined: [], skipped: rules.map((row) => ({ integrationId: row._id, name: row.name, code: 'agents_off', why: 'Outside agents are turned off on this slate.' })) }
     // A slate anyone with its link may view: the agent's chip would show there to everyone, so a rule

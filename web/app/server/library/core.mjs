@@ -344,7 +344,7 @@ export function createLibraryCore(deps) {
   }
 
   async function exportPage(_principal, input = {}) {
-    // kind: one kind (integration is exported only when named: a licensed install's catalog reads it,
+    // kind: one kind (integration is exported only when named: a self-hosted install's catalog reads it,
     // enterprise/server/cloud-library.mjs); without it, what the public gallery is built from.
     if (input.kind === 'integration' && !integrations()) return { items: [] }
     const selector = { status: 'published', kind: input.kind || { $in: [...LISTED_KINDS] } }
