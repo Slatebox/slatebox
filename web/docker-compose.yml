@@ -29,8 +29,7 @@ services:
           },
           "public": {
             "env": "${MAIL_URL:-dev}",
-            "baseUrl": "${BASE_URL:-http://localhost:2006}",
-            "pixabayAPIKey": "${PIXABAY_API_KEY}"
+            "baseUrl": "${BASE_URL:-http://localhost:2006}"
           }
         }
   mongo:

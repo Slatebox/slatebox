@@ -121,13 +121,12 @@ test('the instance offers no plans, quotas or cloud links it cannot provide', as
     assert.deepEqual(usage, { error: 404, reason: "Method 'users.getAIUsage' not found" })
 
 
-    // Board settings: images download, but no cloud link and no Pixabay search without their keys.
+    // Board settings: images download, but no cloud link without its key.
     await member.page.locator('#sbManageSlate').click()
     // The drawer is taller than the window; open the Export panel the way a scroll and a click would.
     await member.page.locator('#sbSlateExportAccordionBtn').dispatchEvent('click')
     await member.page.getByRole('button', { name: 'Download PNG' }).waitFor({ timeout: 30_000 })
     assert.equal(await member.page.locator('[aria-label="copy png slatebox cloud link"], [aria-label="copy svg slatebox cloud link"]').count(), 0)
-    assert.equal(await member.page.locator('#backgroundPanelbh-header').count(), 0)
 
     // The hosted pricing page does not exist here.
     await member.page.goto(box.url + '/plans')

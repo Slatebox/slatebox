@@ -1,13 +1,16 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import PropTypes from 'prop-types'
+import { Meteor } from 'meteor/meteor'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import ButtonBase from '@mui/material/ButtonBase'
 import InputBase from '@mui/material/InputBase'
 import Typography from '@mui/material/Typography'
 import UndoIcon from '@mui/icons-material/Undo'
-import { STYLE_CHIPS } from '../presentations/presentationStyles.mjs'
-import { hasStyleOriginal, revertToOriginal, setSlateBackground, takeOffStyle, wearStyle, wornStyle } from '../presentations/presentationBake.mjs'
+import CheckIcon from '@mui/icons-material/Check'
+import CONSTANTS from '../../../api/common/constants'
+import { STYLE_CHIPS, textOn } from '../presentations/presentationStyles.mjs'
+import { hasStyleOriginal, playsWornStyle, revertToOriginal, revertedPresentation, setSlateBackground, takeOffStyle, wearStyle, wornStyle } from '../presentations/presentationBake.mjs'
 
 /**
  * Draw a styled (or unstyled) slate as one step of this person's own undo: the engine replaces the
@@ -24,19 +27,42 @@ export async function replaceSlateAsOwnStep(slate, doc, action) {
 
 /** Background colors to pick from: each style's own background, and white. */
 export const BACKGROUND_SWATCHES = [
-  ...STYLE_CHIPS.map((chip) => ({ color: chip.bg.toLowerCase(), name: `${chip.name} background` })),
-  { color: '#ffffff', name: 'White' },
+  ...STYLE_CHIPS.map((chip) => ({ color: chip.bg.toLowerCase(), name: chip.name, label: `${chip.name} background` })),
+  { color: '#ffffff', name: 'White', label: 'White' },
 ].filter((swatch, index, all) => all.findIndex((other) => other.color === swatch.color) === index)
 
 const HEX = /^#[0-9a-f]{6}$/i
+const HEX_HINT = 'Use a color like #1a2b3c.'
+
+/**
+ * "Revert to original" for the slate and for every saved presentation of it that plays a worn
+ * style's deck: the slate goes back to its original (revertToOriginal, one undoable step), and each
+ * such presentation gets back the deck kept with the original, or the camera over the slate as it
+ * is again (revertedPresentation, the same routine Present's own Revert uses), so no saved deck
+ * still points at style art the revert took away.
+ */
+export async function revertSlateAndPresentations(slate, { call = (...args) => Meteor.callAsync(...args) } = {}) {
+  const { slate: back, presentation } = revertToOriginal(slate.exportJSON())
+  await replaceSlateAsOwnStep(slate, back, 'style-revert')
+  const slateShareId = slate?.shareId ?? slate?.options?.shareId
+  if (!slateShareId) return back
+  const saved = await call(CONSTANTS.methods.presentations.get, { slateShareId, asPublished: false })
+  for (const row of saved?.presentations || []) {
+    if (!playsWornStyle(row)) continue
+    const revert = revertedPresentation(back, presentation, row.viewpoints)
+    await call(CONSTANTS.methods.presentations.update, { presentationId: row._id, revert })
+  }
+  return back
+}
 
 /**
  * The slate's style, one property of the slate (options.style): one click and the slate wears a
  * style (its background, its notes' outlines, fills, fonts and colors, its lines and the style's
- * decoration, all real and editable on the canvas). Nothing on the slate is lost: a style only adds
- * its art and restyles notes, and the first time the slate wears one its original is kept, so
- * "Revert to original" always brings it back exactly. "Remove style" takes off the style's
- * decoration and keeps every note and word. The background below is part of the style too. A
+ * decoration, all real and editable on the canvas). No note or word of anyone's is removed: a style
+ * adds its art and restyles notes, and the first time the slate wears one its original is kept, so
+ * "Revert to original" brings back its notes, layout and background (keeping notes and words added
+ * since). "Remove style" takes off the style's decoration and the words it wrote, and keeps every
+ * note and word of the slate's own. The background below is part of the style too. A
  * presentation's title cards and captions come from Present's style picker, which wears the same
  * style with the deck's words. `slate` is the live engine the drawer holds (the shared slate atom
  * keeps only a JSON copy, which cannot wear anything).
@@ -47,34 +73,59 @@ export default function SlateStyle({ slate = null }) {
   // Bumped after each change, so the panel reads the slate again.
   const [version, setVersion] = useState(0)
   let doc = null
-  try { doc = slate?.exportJSON?.() ?? null } catch { doc = null }
+  // The engine exports the slate as text (or, in some hosts, as an object).
+  try {
+    const exported = slate?.exportJSON?.() ?? null
+    doc = typeof exported === 'string' ? JSON.parse(exported) : exported
+  } catch { doc = null }
   const worn = doc ? wornStyle(doc) : null
   const original = doc ? hasStyleOriginal(doc) : false
   const background = String(doc?.options?.containerStyle?.backgroundColor || '').toLowerCase()
   const [hex, setHex] = useState(background)
   useEffect(() => { setHex(HEX.test(background) ? background : '') }, [background, version])
 
-  const run = async (make, action) => {
+  const [hexProblem, setHexProblem] = useState('')
+  const swatchRefs = useRef([])
+  const act = async (work) => {
     setBusy(true)
     setProblem('')
     try {
-      await replaceSlateAsOwnStep(slate, make(slate.exportJSON()), action)
+      await work()
       setVersion((v) => v + 1)
     } catch (error) {
-      setProblem(error?.message || 'The style could not be changed.')
+      setProblem(error?.reason || error?.message || 'The style could not be changed.')
     } finally {
       setBusy(false)
     }
   }
+  const run = (make, action) => act(() => replaceSlateAsOwnStep(slate, make(slate.exportJSON()), action))
   const pickBackground = (color) => {
-    if (!HEX.test(color) || color.toLowerCase() === background) return
-    run((json) => setSlateBackground(json, color), 'style-background')
+    if (busy) return
+    const value = String(color || '').trim()
+    if (!HEX.test(value)) {
+      setHexProblem(value ? HEX_HINT : '')
+      return
+    }
+    setHexProblem('')
+    if (value.toLowerCase() === background) return
+    run((json) => setSlateBackground(json, value), 'style-background')
+  }
+  // The swatches are one radio group: one tab stop (the chosen swatch, else the first), and the
+  // arrow keys move between them (and choose, as radios do).
+  const swatchIndex = Math.max(0, BACKGROUND_SWATCHES.findIndex((swatch) => swatch.color === background))
+  const onSwatchKey = (event, index) => {
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key]
+    const to = event.key === 'Home' ? 0 : event.key === 'End' ? BACKGROUND_SWATCHES.length - 1 : step ? (index + step + BACKGROUND_SWATCHES.length) % BACKGROUND_SWATCHES.length : null
+    if (to === null) return
+    event.preventDefault()
+    swatchRefs.current[to]?.focus()
+    pickBackground(BACKGROUND_SWATCHES[to].color)
   }
 
   return (
     <Box data-slate-style-panel>
       <Typography variant="body2" sx={{ mb: 1 }}>
-        Pick a style: the slate takes its colors, fonts, shapes and art, and Present shows exactly what the canvas shows. Nothing on your slate is lost.
+        Pick a style: the slate takes its colors, fonts, shapes and art, and Present shows exactly what the canvas shows. No note or word of yours is removed.
       </Typography>
       <Box role="radiogroup" aria-label="Slate style" sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1 }}>
         {STYLE_CHIPS.map((chip) => {
@@ -106,7 +157,7 @@ export default function SlateStyle({ slate = null }) {
           variant="outlined"
           startIcon={<UndoIcon />}
           disabled={busy || !original}
-          onClick={() => run((json) => revertToOriginal(json).slate, 'style-revert')}
+          onClick={() => act(() => revertSlateAndPresentations(slate))}
           data-slate-style-revert
         >
           Revert to original
@@ -118,26 +169,34 @@ export default function SlateStyle({ slate = null }) {
         )}
       </Box>
       <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 0.5 }}>
-        {original ? 'Revert to original brings back the slate exactly as it was before its first style.' : 'Once the slate wears a style, Revert to original brings it back as it is now.'}
-        {worn ? ' Remove style takes off the decoration and keeps every note and word.' : ''}
+        {original ? 'Revert to original brings back the notes, layout and background from before the first style. Notes and words added since are kept.' : 'Once the slate wears a style, Revert to original brings back its notes, layout and background as they are now.'}
+        {worn ? ' Remove style takes off the style\'s decoration and the words it wrote, and keeps every note and word of yours.' : ''}
       </Typography>
 
       <Typography component="h3" variant="overline" sx={{ display: 'block', mt: 2, letterSpacing: '.1em' }}>Background</Typography>
-      <Box role="radiogroup" aria-label="Background color" sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 0.5 }}>
-        {BACKGROUND_SWATCHES.map((swatch) => {
+      <Box role="radiogroup" aria-label="Background color" sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(64px, 1fr))', gap: 0.75, mt: 0.5 }}>
+        {BACKGROUND_SWATCHES.map((swatch, index) => {
           const on = swatch.color === background
           return (
             <ButtonBase
               key={swatch.color}
+              ref={(el) => { swatchRefs.current[index] = el }}
               role="radio"
               aria-checked={on}
-              aria-label={swatch.name}
-              title={swatch.name}
+              aria-label={swatch.label}
+              tabIndex={index === swatchIndex ? 0 : -1}
               data-slate-background={swatch.color}
-              disabled={busy}
+              // Never disabled while a change saves: a disabled swatch drops the keyboard's focus.
+              aria-disabled={busy || undefined}
               onClick={() => pickBackground(swatch.color)}
-              sx={{ width: 28, height: 28, borderRadius: '50%', bgcolor: swatch.color, border: '2px solid', borderColor: on ? 'primary.main' : 'divider', boxShadow: on ? (theme) => `0 0 0 2px ${theme.palette.background.paper} inset` : 'none' }}
-            />
+              onKeyDown={(event) => onSwatchKey(event, index)}
+              sx={{ flexDirection: 'column', gap: 0.25, borderRadius: '8px', p: 0.25, fontSize: 11, fontWeight: on ? 700 : 500 }}
+            >
+              <Box component="span" aria-hidden="true" sx={{ display: 'grid', placeItems: 'center', width: 28, height: 28, borderRadius: '50%', bgcolor: swatch.color, color: textOn(swatch.color), border: '2px solid', borderColor: on ? 'primary.main' : 'divider' }}>
+                {on && <CheckIcon sx={{ fontSize: 16 }} />}
+              </Box>
+              <Box component="span">{swatch.name}</Box>
+            </ButtonBase>
           )
         })}
       </Box>
@@ -150,18 +209,20 @@ export default function SlateStyle({ slate = null }) {
         <InputBase
           value={hex}
           disabled={busy}
-          onChange={(event) => setHex(event.target.value)}
+          onChange={(event) => { setHex(event.target.value); if (hexProblem) setHexProblem('') }}
           onBlur={() => pickBackground(hex.trim())}
           placeholder="#1a2b3c"
-          inputProps={{ 'aria-label': 'Background color (hex)', spellCheck: false, maxLength: 7, 'data-slate-background-hex': true }}
-          sx={{ flex: 1, fontFamily: 'ui-monospace, monospace', fontSize: 13, px: 1, py: 0.25, border: 1, borderColor: 'divider', borderRadius: '8px' }}
+          error={Boolean(hexProblem)}
+          inputProps={{ 'aria-label': 'Background color (hex)', 'aria-invalid': Boolean(hexProblem), 'aria-describedby': hexProblem ? 'slate-background-hex-problem' : undefined, spellCheck: false, maxLength: 7, 'data-slate-background-hex': true }}
+          sx={{ flex: 1, fontFamily: 'ui-monospace, monospace', fontSize: 13, px: 1, py: 0.25, border: 1, borderColor: hexProblem ? 'error.main' : 'divider', borderRadius: '8px' }}
         />
       </Box>
+      {hexProblem && <Typography id="slate-background-hex-problem" role="alert" variant="caption" color="error" sx={{ display: 'block', mt: 0.5 }} data-slate-background-hex-problem>{hexProblem}</Typography>}
       {problem && <Typography role="alert" variant="caption" color="error" sx={{ display: 'block', mt: 1 }}>{problem}</Typography>}
     </Box>
   )
 }
 
 SlateStyle.propTypes = {
-  slate: PropTypes.shape({ exportJSON: PropTypes.func }),
+  slate: PropTypes.shape({ exportJSON: PropTypes.func, shareId: PropTypes.string }),
 }

@@ -251,8 +251,6 @@ test('GET /sbimages never crashes the server on a row without bytes', live, asyn
 
 test('server-side fetches refuse private, loopback and metadata addresses', live, async () => {
   for (const url of [base + '/livez', 'http://127.0.0.1:4374/livez', 'http://169.254.169.254/latest/meta-data/', 'http://[::1]/', 'file:///etc/passwd.png', 'http://localhost/x.png']) {
-    const cache = await errorOf(stranger.call('slates.cacheImage', { url }))
-    assert.ok(cache.error, 'cacheImage fetched ' + url)
     const b64 = await errorOf(stranger.call('utils.base64StringFromRemoteUrl', { type: 'application/pdf', url }))
     assert.ok(b64.error, 'base64StringFromRemoteUrl fetched ' + url)
     const exists = await errorOf(stranger.call('utils.urlExists', url))

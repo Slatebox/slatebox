@@ -11,9 +11,11 @@ export const sourceOnly = ['_id', 'shareId', 'userId', 'orgId', 'created', 'last
   'sharingRevision', 'nativeConversationRevision', 'lastNativeCanvasProposal', 'livePresentation', 'archivedDate', 'library']
 // The source's own sharing and search fields, and what belongs to its author's work on it: the
 // AI conversation it started (welcomeAid) and the files attached to that conversation, and the
-// Google Doc it was last exported to with that export's rendered images.
+// Google Doc it was last exported to with that export's rendered images, and the slate as it was before
+// its first style (styleOriginal: it may hold notes its author deleted since; a copy's original is the
+// copy as made, kept when the copy first wears a style).
 export const sourceOnlyOptions = ['url_name', 'accessKey', 'allowCollaboration', 'isSharing', 'searchName', 'searchDescription', 'searchText',
-  'welcomeAid', 'uploadedFiles', 'lastSavedGoogleDocUrl', 'staticImage', 'staticImageTimestamp', 'staticFrameImage']
+  'welcomeAid', 'uploadedFiles', 'lastSavedGoogleDocUrl', 'staticImage', 'staticImageTimestamp', 'staticFrameImage', 'styleOriginal']
 
 // A copy is an ordinary slate: none of the retired template, community or featured flags, whatever its source had.
 const templateOptions = ['isTemplate', 'templateApproved', 'templateMarkdown', 'templateTags', 'tags', 'basedOnTemplate', 'templateName', 'isCommunity', 'isFeatured']

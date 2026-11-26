@@ -6,7 +6,6 @@ import CONSTANTS from '../../imports/api/common/constants'
 import {
   Claims,
   CachedImages,
-  CachedImageTiming,
   SlateSnapshots,
   Collaboration,
   Slates,
@@ -156,11 +155,6 @@ if (!proCon) {
 
 if ((await CachedImages.find().countAsync()) === 0) {
   CachedImages.rawCollection().createIndex({ url: 1, created: 1 })
-  CachedImageTiming.rawCollection().createIndex({
-    provider: 1,
-    filter: 1,
-    lastSearched: 1,
-  })
   // CachedImages.rawCollection().createIndex( { created: 1 }, { expireAfterSeconds: 60 * 60 * 24 } );
 }
 

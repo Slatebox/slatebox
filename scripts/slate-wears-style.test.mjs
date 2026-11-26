@@ -61,7 +61,7 @@ test('each step frames what it lights and reveals; a worn deck has one geometry 
   }
 })
 
-test('every style wears onto a slate: background, record, skin on the notes, idempotent, A then B keeps every word of A', () => {
+test('every style wears onto a slate: background, record, skin on the notes, idempotent, A then B keeps every word of the slate and leaves none of A\'s own art behind', () => {
   const plain = slateOfLayout(whatIsSlatebox(), 'What is Slatebox')
   const words = (doc) => doc.nodes.map((node) => wordsOf(node.options.text)).filter(Boolean)
   for (const id of STYLE_IDS) {
@@ -82,12 +82,15 @@ test('every style wears onto a slate: background, record, skin on the notes, ide
     const fresh = new Set(wearStyle(plain, { id: other }).slate.nodes.map((node) => node.options.id))
     assert.deepEqual(over.nodes.filter((node) => decorOfA.includes(node.options.id) && !fresh.has(node.options.id)).map((node) => node.options.id), [], `${id} → ${other}: none of ${id}'s decoration left`)
     const after = words(over)
-    for (const said of words(slate)) assert.ok(after.includes(said), `${id} → ${other}: "${said}" kept`)
-    // Removing it takes off the decoration and the record; every note with words stays, as a plain note.
+    for (const said of words(plain)) assert.ok(after.includes(said), `${id} → ${other}: "${said}" kept`)
+    // A's titles and captions (words it wrote, nobody touched) are A's: restyled where B has the same art, else
+    // gone, so B over A holds as many notes as B over the plain slate (nothing piles up).
+    assert.equal(over.nodes.length, wearStyle(plain, { id: other }).slate.nodes.length, `${id} → ${other}: nothing of ${id} piles up`)
+    // Removing it takes off the decoration, the words it wrote and the record; every note of the slate's own stays.
     const off = takeOffStyle(slate)
     assert.equal(off.nodes.filter(isStyleArt).length, 0)
     assert.equal(off.options.style, undefined)
-    assert.deepEqual(words(off).sort(), words(slate).sort())
+    assert.deepEqual(words(off).sort(), words(plain).sort())
     for (const source of plain.nodes) assert.ok(off.nodes.some((node) => node.options.id === source.options.id))
   }
 })

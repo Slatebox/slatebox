@@ -23,8 +23,9 @@ export const REFINE_PILLS = [
 /**
  * The style sheet: one click and the slate wears a style ("Wear this style": its background, its
  * notes' look and the style's title cards, captions and art become real notes on the canvas, the
- * same steps remixed for it, no agent call; nothing on the slate is lost), "Revert to original" brings
- * the slate back exactly as it was before it first wore a style (`onRevert`, offered while the slate
+ * same steps remixed for it, no agent call; no note or word of the slate's own is removed), "Revert
+ * to original" brings back the notes, layout and background from before the first style, keeping
+ * notes and words added since (`onRevert`, offered while the slate
  * keeps an original: `canRevert`), and the chat refines the deck with Slatebox (`onRefine`, the
  * planner's conversation). Present plays exactly what the slate wears.
  */
@@ -48,7 +49,7 @@ export default function StyleSheet({ anchorEl, onClose, current, onPick, onRever
       <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '4px 12px', mb: 1.25, mx: 0.5 }}>
         <Typography variant="overline" sx={{ letterSpacing: '.12em', opacity: 0.75, lineHeight: 1.6 }}>Wear this style</Typography>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 12px' }}>
-          <Typography variant="caption" sx={{ opacity: 0.7 }}>Your slate wears it, so the canvas and Present match · nothing on it is lost · no agent call</Typography>
+          <Typography variant="caption" sx={{ opacity: 0.7 }}>Your slate wears it, so the canvas and Present match · your notes and words stay · no agent call</Typography>
           {onRevert && (
             <Chip
               size="small"

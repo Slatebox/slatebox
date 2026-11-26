@@ -175,6 +175,9 @@ export async function getSlatesForUser(opts, user) {
       if (!accessLevel) return null
     }
     if (slate) {
+      // The slate as it was before its first style is for those who may edit it (Revert to original):
+      // it may hold notes its author deleted since.
+      if (accessLevel !== 'EDIT' && slate.options) delete slate.options.styleOriginal
       return { isMU: user?.isMasterUser, accessLevel, slateBase: slate }
     } else if (user && !/^[a-zA-Z0-9]{8}$/.test(opts.shareId)) {
       // Retired 8-character invitations must never become new boards on reload.

@@ -10,13 +10,11 @@ import { Box, Button, ButtonBase, ButtonGroup, Dialog, Divider, IconButton, Inpu
 import MenuIcon from '@mui/icons-material/Menu'
 import PlayArrow from '@mui/icons-material/PlayArrow'
 import ArrowDropDown from '@mui/icons-material/ArrowDropDown'
-import ExpandMore from '@mui/icons-material/ExpandMore'
 import AutoAwesome from '@mui/icons-material/AutoAwesome'
 import Lock from '@mui/icons-material/Lock'
 import LinkIcon from '@mui/icons-material/Link'
 import Public from '@mui/icons-material/Public'
 import Edit from '@mui/icons-material/Edit'
-import Sliders from '@mui/icons-material/Tune'
 import Brush from '@mui/icons-material/Brush'
 import History from '@mui/icons-material/History'
 import Download from '@mui/icons-material/Download'
@@ -177,7 +175,7 @@ export default function CanvasToolbar({ slate, title, privacy, user, manage, bus
   const closeSlateMenu = () => setSlateMenu(null)
   const slateItems = [
     manage && { key: 'rename', label: 'Rename', icon: <Edit />, run: () => { afterSlateMenu.current = startRename } },
-    manage && { key: 'settings', label: 'Slate settings', icon: <Sliders />, run: () => onSettings('settingsPanel'), disabled: busy },
+    manage && { key: 'settings', label: 'Slate settings', icon: <SettingsOutlined />, run: () => onSettings('settingsPanel'), disabled: busy },
     manage && { key: 'colors', label: 'Slate style', icon: <Brush />, run: () => onSettings('colorPanel'), disabled: busy },
     manage && !onWorkshop && { key: 'history', label: 'Version history', icon: <History />, run: onHistory, disabled: busy },
     'divider',
@@ -260,15 +258,18 @@ export default function CanvasToolbar({ slate, title, privacy, user, manage, bus
               if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelRename() }
             }}
             onBlur={e => commitRename(e.currentTarget.value)} />
-        : <ButtonBase ref={titleButton} className="sb-board-title" aria-label={`${name}${narrow && presence ? `, ${presence}` : ''}, slate menu`} aria-haspopup="menu"
+        // The name opens the slate menu (its one tab stop, where the keyboard comes back to); the cog
+        // beside it is the visible way in, so the name carries no chevron.
+        : <ButtonBase ref={titleButton} className="sb-board-title" aria-label={`${name}${narrow && presence ? `, ${presence}` : ''}, slate menu`} aria-haspopup={narrow ? 'dialog' : 'menu'}
             aria-expanded={Boolean(slateMenu)} onClick={e => setSlateMenu(e.currentTarget)} disabled={!slate}>
-            {slateLabel}<ExpandMore fontSize="small" aria-hidden="true" />
+            {slateLabel}
           </ButtonBase>}
-      {/* The cog beside the name opens the same slate menu (settings, style, history and the rest): easier
-          to find than knowing the name is a button. On a phone too, where the menu is a sheet. */}
+      {/* The cog beside the name opens the slate menu (settings, style, history and the rest): easier
+          to find than knowing the name is a button. On a phone too, where the menu is a sheet (a dialog).
+          For the pointer only: the name is the same control's one tab stop, so a keyboard meets it once. */}
       {!renaming && <Tooltip title="Slate settings and actions">
         <span className="sb-board-cog-wrap">
-          <IconButton className="sb-board-cog" color="inherit" size="small" aria-label="Slate settings and actions" aria-haspopup="menu"
+          <IconButton className="sb-board-cog" color="inherit" size="small" tabIndex={-1} aria-label="Slate settings and actions" aria-haspopup={narrow ? 'dialog' : 'menu'}
             aria-expanded={Boolean(slateMenu)} data-slate-cog onClick={() => setSlateMenu(titleButton.current)} disabled={!slate}>
             <SettingsOutlined fontSize="small" />
           </IconButton>

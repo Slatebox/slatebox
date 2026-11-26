@@ -56,7 +56,7 @@ import {
 import { completeDeck, isTrivialLayout, planFailureReason } from './presentations/presentationPlan.mjs'
 import { planArrival } from './presentations/presentationSteps.mjs'
 import { carryImages, composeDeck, deckRecord, pictureSlots, remixDirection } from './presentations/presentationCompose.mjs'
-import { cameraDeck, hasStyleOriginal, isBakedDeck, ownNotesOf, revertToOriginal, wearStyle, wornStyle } from './presentations/presentationBake.mjs'
+import { hasStyleOriginal, ownNotesOf, revertToOriginal, revertedPresentation, wearStyle } from './presentations/presentationBake.mjs'
 import { layoutOfNodes } from '../../api/common/slate-layout-core.mjs'
 import StyleSheet from './presentations/StyleSheet'
 import PayNotice from './PayNotice'
@@ -143,6 +143,9 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
   const [refinementAnchorEl, setRefinementAnchorEl] = useState(null)
   // The style sheet: one-click styles and the chat that refines the deck.
   const [styleAnchorEl, setStyleAnchorEl] = useState(null)
+  // Whether the slate keeps an original (Revert to original): read once when the style sheet opens
+  // and after each change of style there, not on every render (it exports the whole slate).
+  const [styleCanRevert, setStyleCanRevert] = useState(false)
   // A styled deck's "More" sheet: versions, settings, publishing and sharing.
   const [moreAnchorEl, setMoreAnchorEl] = useState(null)
   const [settingsAnchorEl, setSettingsAnchorEl] = useState(null)
@@ -639,6 +642,10 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
     }
   }
 
+  useEffect(() => {
+    setStyleCanRevert(Boolean(styleAnchorEl) && hasStyleOriginal(slateCopy(slate)))
+  }, [styleAnchorEl, curPresentation.slateJSON])
+
   // Wear a style: the slate itself takes it (its background, its notes' look, the style's title
   // cards, captions and art as real notes), as one step of this person's undo; the deck is the
   // camera over it. Present never draws a look the slate does not have. → the worn { slate, deck }.
@@ -670,9 +677,12 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
       await engine.ownStep(() => engine.invoker.onSlateReplaced({ type: 'onSlateReplaced', data: { snapshot } }))
       engine.broadcast?.('onSlateReplaced', { action: 'style-revert', snapshot })
       const look = curPresentation.deckLook
-      const deck = isBakedDeck(presentation?.deck) ? presentation.deck : cameraDeck(back, look?.deck?.steps || curPresentation.viewpoints || [])
-      const direction = presentation?.direction || look?.direction || null
-      const style = presentation ? presentation.style ?? null : wornStyle(back)
+      // The deck kept with the original, else the camera over the steps played before the first
+      // style, then the saved row's steps, then the styled deck's (its style art is gone now).
+      const row = slatePresentations.find((item) => item._id === presentationId)
+      const reverted = revertedPresentation(back, presentation, row?.viewpoints, curPresentation.viewpoints, look?.deck?.steps)
+      const { deck, style } = reverted
+      const direction = reverted.direction || look?.direction || null
       setCurPresentation((prev) => ({ ...prev, slateJSON: snapshot, deckLook: { deck, direction, style: style || deck.style }, viewpoints: deck.steps }))
       if (presentationId) await Meteor.callAsync(CONSTANTS.methods.presentations.update, { presentationId, revert: { deck, direction, style } })
     } catch (err) {
@@ -1936,7 +1946,7 @@ export default function PresentSlate({ slate, canAuthor = false, workshop = null
         current={curPresentation.deckLook?.deck?.style?.id}
         onPick={handleStylePick}
         onRevert={handleStyleRevert}
-        canRevert={Boolean(styleAnchorEl) && hasStyleOriginal(slateCopy(slate))}
+        canRevert={styleCanRevert}
         onRefine={handleStyleRefine}
         onRemix={handleRemix}
         busy={planning || Boolean(curPresentation.isAnalyzing) || pictureBusy}

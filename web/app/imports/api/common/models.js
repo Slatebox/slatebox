@@ -31,7 +31,6 @@ const ArchivedSlates = new Mongo.Collection('archivedSlates')
 const ApprovalRequests = new Mongo.Collection('approvalRequests')
 
 const CachedImages = new Mongo.Collection('cachedImages')
-const CachedImageTiming = new Mongo.Collection('cachedImageTiming')
 const IconPacks = new Mongo.Collection('iconPacks')
 const AIContent = new Mongo.Collection('aiContent')
 const AIAudit = new Mongo.Collection('aiAudit')
@@ -82,7 +81,6 @@ export {
   SlateSnapshots,
   StripeEvents,
   CachedImages,
-  CachedImageTiming,
   IconPacks,
   AIContent,
   AIAudit,

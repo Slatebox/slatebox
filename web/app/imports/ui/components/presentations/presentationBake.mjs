@@ -11,15 +11,18 @@
 // the same slate wears the same style the same way everywhere.
 //
 // A style never loses anything (owner, 2026-11-25). Wearing, switching or removing a style may add
-// the style's art and restyle notes, but it never deletes a note that carries content: a note with
-// words, a note somebody made or changed, a note with a line. Switching removes only the previous
-// style's own decoration that nobody touched (its seal, options.styleSeal, still matches); art that
-// carries words is restyled in the new style or kept as a plain note with its words. And the first
-// time a slate wears a style, the slate as it was is kept (options.styleOriginal), so "Revert to
-// original" always gives it back exactly (revertToOriginal).
+// the style's art and restyle notes, but it never deletes a note that carries content: a note
+// somebody made, a note somebody changed (its words, picture, outline, colors, size, place or lock),
+// a note with a line. What a style made and nobody touched (its seal, options.styleSeal, and what it
+// made, options.styleMade, still hold) is the style's own: the next style restyles it in place where
+// it has the same art, and otherwise takes it away (so its words do not pile up over the slate).
+// Art somebody changed keeps every change: restyled in place with their words, picture and outline
+// where only those changed, else kept as their own note. And the first time a slate wears a style,
+// the slate as it was is kept (options.styleOriginal), so "Revert to original" brings it back
+// (revertToOriginal).
 import * as shapes from 'slateboxjs/shapes'
 import { composeDeck, engineTextHeight, fitNoteFont, frameBox, localDirection, normalizeDirection, showsOn } from './presentationCompose.mjs'
-import { PRESENTATION_STYLES_MARKER, STYLES, cleanStyleRef, resolveStyle, textOn } from './presentationStyles.mjs'
+import { PRESENTATION_STYLES_MARKER, STYLES, cleanStyleRef, darkText, resolveStyle, textOn } from './presentationStyles.mjs'
 import { layoutOfNodes } from '../../../api/common/slate-layout-core.mjs'
 
 /** The version of the deck a worn style plays: steps over the slate's own notes. */
@@ -46,7 +49,7 @@ const DECOR = new Set(DECOR_ROLES)
 // A searched picture's credit is the deck's (the player names it where the picture shows), never a note option.
 const STAGE_ONLY = new Set(['kind', 'steps', 'p', 'deco', 'detail', 'behind', 'why', 'art', 'w', 'h', 'caption', 'x', 'y', 'credit'])
 // What a style's art note is marked with; a note that is no longer the style's loses them all.
-const ART_MARKS = ['styleRole', 'styleSeal']
+const ART_MARKS = ['styleRole', 'styleSeal', 'styleMade']
 
 const clone = (value) => JSON.parse(JSON.stringify(value))
 const num = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0)
@@ -91,11 +94,56 @@ export const sealOf = (options = {}) => hashOf(JSON.stringify([
   typeof options.image === 'string' ? options.image : '', typeof options.vectorPath === 'string' ? options.vectorPath : '',
 ]))
 
+const low = (value) => (typeof value === 'string' ? value.trim().toLowerCase() : value ?? null)
+const boxOf = (options) => [num(options.xPos ?? options.x), num(options.yPos ?? options.y), num(options.width), num(options.height)].map((v) => Math.round(v * 10) / 10)
+/**
+ * What the style made of an art note beyond its seal: its words, picture and outline (as seals, to
+ * tell which of them somebody changed), its fill, ink and lock, and its box. A box that wordless art
+ * kept within a few units is the one the style made (the engine may round it on load); art with words
+ * keeps only its left edge and width (the engine grows it to fit its words).
+ */
+export function madeOf(options = {}) {
+  return {
+    w: hashOf(wordsOf(options.text)),
+    i: hashOf(typeof options.image === 'string' ? options.image : ''),
+    p: hashOf(typeof options.vectorPath === 'string' ? options.vectorPath : ''),
+    bg: low(options.backgroundColor),
+    fc: low(options.fontColor ?? options.foregroundColor),
+    lock: options.isLocked === true,
+    box: boxOf(options),
+  }
+}
+const NEAR = 4
+/** What somebody changed on a style's art note since the style made it (all false: nothing). */
+export function changesOf(options = {}) {
+  const made = options.styleMade
+  if (!made || typeof made !== 'object') {
+    // Art made before styleMade was written: its seal alone says whether it was changed.
+    const changed = options.styleSeal !== undefined && options.styleSeal !== sealOf(options)
+    return { words: changed, image: changed, path: changed, look: false, unknown: changed }
+  }
+  const now = madeOf(options)
+  const box = Array.isArray(made.box) ? made.box : []
+  const worded = Boolean(wordsOf(options.text))
+  const moved = box.length === 4 && [0, 1, 2, 3].some((at) => (!worded || at === 0 || at === 2) && Math.abs(now.box[at] - box[at]) > NEAR)
+  const recolored = (made.bg !== undefined && now.bg !== made.bg) || (made.fc !== undefined && made.fc !== null && now.fc !== made.fc)
+  return {
+    words: now.w !== made.w,
+    image: now.i !== made.i,
+    path: now.p !== made.p,
+    look: moved || recolored || now.lock !== Boolean(made.lock),
+    unknown: false,
+  }
+}
 /** Whether a note on the slate is the style's own art, exactly as the style made it. */
-export const isUntouchedArt = (node) => isStyleArt(node) && (node.options.styleSeal === undefined
+export const isUntouchedArt = (node) => {
+  if (!isStyleArt(node)) return false
   // Art worn before seals were written: only its wordless decoration is the style's.
-  ? !wordsOf(node.options.text)
-  : node.options.styleSeal === sealOf(node.options))
+  if (node.options.styleSeal === undefined) return !wordsOf(node.options.text)
+  if (node.options.styleSeal !== sealOf(node.options)) return false
+  const change = changesOf(node.options)
+  return !change.look
+}
 
 // Every note id a line touches (lines are kept on either end's note).
 function linkedIds(nodes) {
@@ -111,14 +159,34 @@ function linkedIds(nodes) {
   return out
 }
 
+// The ids of the notes the slate had before it first wore a style here (its original; a slate that
+// keeps none has worn nothing here, so everything on it is as it came: a library copy's art too).
+function originalIds(doc) {
+  const original = doc?.options?.styleOriginal
+  if (!original || original.v !== STYLE_ORIGINAL_VERSION || !Array.isArray(original.nodes)) return null
+  return new Set(original.nodes.map(idOf))
+}
 /**
- * What a style may take away from the slate: its own art that nobody changed, that holds no words
- * and has no line. Everything else on the slate is content and stays.
+ * Whether a style may take an art note away: its own art exactly as it made it (nobody changed its
+ * words, picture, outline, colors, size, place or lock), with no line to it, and either wordless
+ * or words a style wrote on this slate since its original (a title or caption made from the slate's
+ * notes, made again by the next style). Words the slate came with (a library copy's quotes and
+ * numbers) are content, whoever drew them.
+ */
+function mayTake(node, linked, original) {
+  if (!isUntouchedArt(node) || linked.has(idOf(node))) return false
+  if (!wordsOf(node.options.text)) return true
+  return Boolean(original) && !original.has(idOf(node))
+}
+/**
+ * What a style may take away from the slate (mayTake). Everything else on the slate is content
+ * and stays; Revert to original still has the slate from before its first style.
  */
 export function replaceableArt(slateJSON) {
   const doc = typeof slateJSON === 'string' ? JSON.parse(slateJSON) : slateJSON || {}
   const linked = linkedIds(doc.nodes)
-  return new Set((doc.nodes || []).filter((node) => isUntouchedArt(node) && !wordsOf(node.options.text) && !linked.has(idOf(node))).map(idOf))
+  const original = originalIds(doc)
+  return new Set((doc.nodes || []).filter((node) => mayTake(node, linked, original)).map(idOf))
 }
 
 /** Whether the slate keeps an original to go back to (options.styleOriginal). */
@@ -180,17 +248,29 @@ function plainOptions(options) {
   for (const key of ART_MARKS) delete out[key]
   return out
 }
-// A note that was the style's, kept with its words in another style: the style's faces and colors
-// on it, its words, picture, place and size its own. Untouched, it stays the style's art (sealed as it
-// was: the seal holds no colors or faces); changed by somebody, it is a plain note of theirs.
+// Art kept in another style with no place in it. Untouched (words the slate came with, or art with
+// a line), it stays the style's art in the new style's faces and colors, its words, picture, place
+// and size its own, and is sealed again as the new style made it. Somebody's (they changed it), it
+// stays exactly as they left it, still marked as a style's art (so it is never laid out or restyled
+// as one of the slate's notes, and what the style made still shows what they changed): only words
+// that would no longer read on the new background (no fill of their own) take the ink that reads.
 function keptInStyle(node, style) {
-  const out = isUntouchedArt(node) ? { ...node.options } : plainOptions(node.options)
-  const fill = typeof out.backgroundColor === 'string' && out.backgroundColor !== 'transparent' && !out.image
-  if (fill) out.backgroundColor = String(style.palette[0])
-  const ink = textOn(fill ? out.backgroundColor : style.bg)
-  out.fontColor = ink
-  out.foregroundColor = ink
-  out.fontFamily = style.fonts?.display || out.fontFamily
+  if (isUntouchedArt(node) && node.options.styleSeal !== undefined) {
+    const out = { ...node.options }
+    const fill = typeof out.backgroundColor === 'string' && out.backgroundColor !== 'transparent' && !out.image
+    if (fill) out.backgroundColor = String(style.palette[0])
+    const ink = textOn(fill ? out.backgroundColor : style.bg)
+    out.fontColor = ink
+    out.foregroundColor = ink
+    out.fontFamily = style.fonts?.display || out.fontFamily
+    return sealed(out)
+  }
+  const out = { ...node.options }
+  const now = out.fontColor ?? out.foregroundColor
+  if (wordsOf(out.text) && drawsOnBackground(out) && !(hex6(now) && darkText(now) !== darkText(style.bg))) {
+    out.fontColor = textOn(style.bg)
+    out.foregroundColor = out.fontColor
+  }
   return out
 }
 
@@ -222,13 +302,17 @@ export function revertToOriginal(slateJSON) {
   const original = clone(doc.options.styleOriginal)
   const ids = new Set(original.nodes.map(idOf))
   const now = new Map((doc.nodes || []).map((node) => [idOf(node), node]))
-  // The original's notes as they were, with any words written since and any line drawn since to a
-  // note made since.
+  // Every line the original had (a line restyled since is the same line: its two ends).
+  const lineKey = (a) => `${a.parentId}->${a.childId}`
+  const had = new Set(original.nodes.flatMap((node) => (node.relationships?.associations || []).map(lineKey)))
+  // The original's notes as they were, with any words written since and any line drawn since (to
+  // a note made since or between two of the original's notes).
   const nodes = original.nodes.map((node) => {
     const current = now.get(idOf(node))
     if (!current) return node
-    const newer = wordsOf(current.options?.text) && wordsOf(current.options?.text) !== wordsOf(node.options?.text)
-    const lines = (current.relationships?.associations || []).filter((a) => !ids.has(String(a.parentId)) || !ids.has(String(a.childId)))
+    // Words somebody wrote (a style's own words on art it made since are not theirs).
+    const newer = !isUntouchedArt(current) && wordsOf(current.options?.text) && wordsOf(current.options?.text) !== wordsOf(node.options?.text)
+    const lines = (current.relationships?.associations || []).filter((a) => !had.has(lineKey(a)))
     if (!newer && !lines.length) return node
     return {
       ...node,
@@ -252,19 +336,38 @@ export function revertToOriginal(slateJSON) {
   return { slate: doc, presentation: original.presentation || null }
 }
 
+// Whether a note draws no fill of its own behind its words (they sit on the canvas background).
+const NO_FILL = /^(|transparent|none|rgba\([^)]*,\s*0(\.0+)?\s*\))$/i
+export const drawsOnBackground = (options = {}) => !options.image && !options.backgroundImage
+  && typeof options.backgroundColor === 'string' && NO_FILL.test(options.backgroundColor.trim())
+const hex6 = (color) => /^#[0-9a-f]{6}$/i.test(String(color || '').trim())
+
 /**
  * The slate's background set by hand (a hex color), as part of its style: the background the
  * style wears from now on (its record's overrides.bg), so wearing it again keeps it and "Revert to
- * original" takes it back. The original is kept first.
+ * original" takes it back. Words drawn straight on the background (a note with no fill) that would
+ * no longer read on it (light on light, dark on dark) take the ink that reads. The original is kept first.
  */
 export function setSlateBackground(slateJSON, color) {
-  if (typeof color !== 'string' || !/^#[0-9a-f]{6}$/i.test(color.trim())) throw new Error('Choose a color like #1a2b3c.')
+  if (typeof color !== 'string' || !hex6(color)) throw new Error('Use a color like #1a2b3c.')
   const bg = color.trim().toLowerCase()
   const doc = keepOriginal(parse(slateJSON))
   const cs = { ...(doc.options.containerStyle || {}), backgroundColor: bg, backgroundColorAsGradient: false }
   delete cs.backgroundImage
   delete cs.backgroundEffect
   doc.options.containerStyle = cs
+  const ink = textOn(bg)
+  doc.nodes = (doc.nodes || []).map((node) => {
+    const o = node?.options || {}
+    if (!wordsOf(o.text) || !drawsOnBackground(o)) return node
+    const now = o.fontColor ?? o.foregroundColor
+    if (hex6(now) && darkText(now) !== darkText(bg)) return node
+    const untouched = isUntouchedArt(node)
+    const options = { ...o, fontColor: ink, foregroundColor: ink }
+    // The style's own art, re-inked by the style: still exactly what the style made.
+    if (untouched && options.styleMade) options.styleMade = { ...options.styleMade, fc: low(ink) }
+    return { ...node, options }
+  })
   const worn = wornStyle(doc)
   if (worn) doc.options.style = styleRecord({ id: worn.id, overrides: { ...(worn.overrides || {}), bg } })
   return doc
@@ -371,22 +474,31 @@ function artNote(note, origin) {
   if (options.shape === 'custom') options.shapeHint = 'custom'
   else if (options.shape) options.shapeHint = options.shape
   if (DECOR.has(role)) options.isLocked = true
-  options.styleSeal = sealOf(options)
-  return { options, relationships: { associations: [] } }
+  return { options: sealed(options), relationships: { associations: [] } }
+}
+// Art options sealed as the style makes them: its seal and what it made.
+function sealed(options) {
+  const out = { ...options }
+  delete out.styleMade
+  out.styleSeal = sealOf(out)
+  out.styleMade = madeOf(out)
+  return out
 }
 
 /**
- * The art the slate holds that a new style must keep (it holds words, somebody changed it, or a
- * line meets it), matched to the new style's art: the same note (same id) or the same words. A
- * match is restyled in place (the new style's look, the note's own id, words and lines); the rest
- * stay as plain notes in the new style. → { matched: Map(stageId → old node), plain: [node] }
+ * The art the slate holds, matched to the new style's art. Art exactly as the style made it matches
+ * the same note (same id) or the same words, and is restyled in place. Art somebody changed only in
+ * its words, picture or outline matches only its own id, and is restyled in place with those kept.
+ * → { matched: Map(stageId → old node), rest: [node] } (rest: art with no match, or changed in its
+ * colors, size, place or lock, which is never restyled).
  */
-function matchKeptArt(kept, stageNotes) {
+function matchKeptArt(art, stageNotes) {
   const matched = new Map()
   const taken = new Set()
+  const restylable = (old) => isUntouchedArt(old) || (!changesOf(old.options).look && !changesOf(old.options).unknown)
   const pass = (test) => {
-    for (const old of kept) {
-      if (taken.has(old)) continue
+    for (const old of art) {
+      if (taken.has(old) || !restylable(old)) continue
       const hit = stageNotes.find((note) => !matched.has(note.id) && test(old, note))
       if (hit) {
         matched.set(hit.id, old)
@@ -395,8 +507,32 @@ function matchKeptArt(kept, stageNotes) {
     }
   }
   pass((old, note) => idOf(old) === note.id)
-  pass((old, note) => wordsOf(old.options.text) !== '' && wordsOf(old.options.text) === wordsOf(note.text))
-  return { matched, plain: kept.filter((old) => !taken.has(old)) }
+  pass((old, note) => isUntouchedArt(old) && wordsOf(old.options.text) !== '' && wordsOf(old.options.text) === wordsOf(note.text))
+  return { matched, rest: art.filter((old) => !taken.has(old)) }
+}
+
+// Art restyled in place: the new style's note, with the old note's id, lines and words. Untouched,
+// it stays exactly the style's (sealed again); changed by somebody, their words, picture and outline
+// are laid over it and it stays theirs (what the style made is kept, so the change still shows).
+function restyledArt(node, old) {
+  const out = { ...node.options, text: old.options.text }
+  const relationships = { ...(old.relationships || {}), associations: [...(old.relationships?.associations || [])] }
+  if (isUntouchedArt(old)) return { options: sealed(out), relationships }
+  const change = changesOf(old.options)
+  const made = sealed(change.words ? { ...out, text: node.options.text } : out)
+  const theirs = { ...made }
+  if (change.words) theirs.text = old.options.text
+  if (change.image) {
+    for (const key of ['image', 'imageOrigWidth', 'imageOrigHeight', 'imageFit', 'styleImage']) {
+      if (old.options[key] === undefined) delete theirs[key]
+      else theirs[key] = old.options[key]
+    }
+  }
+  if (change.path) {
+    if (old.options.vectorPath === undefined) delete theirs.vectorPath
+    else theirs.vectorPath = old.options.vectorPath
+  }
+  return { options: theirs, relationships }
 }
 
 /**
@@ -411,10 +547,10 @@ function matchKeptArt(kept, stageNotes) {
 export function wearStyle(slateJSON, styleRef, { direction = null, name = '', ambient = false, presentation = null } = {}) {
   const doc = keepOriginal(parse(slateJSON), { presentation })
   const title = name || doc.options.name || ''
-  // What the slate holds now: its own notes, the style's art it may replace, and the art it keeps.
-  const gone = replaceableArt(doc)
+  // What the slate holds now: its own notes and the art an earlier style added.
   const own = (doc.nodes || []).filter((node) => !isStyleArt(node)).map((node) => ({ ...node, options: unworn(node.options || {}) }))
-  const kept = (doc.nodes || []).filter((node) => isStyleArt(node) && !gone.has(idOf(node)))
+  const oldArt = (doc.nodes || []).filter(isStyleArt)
+  const linked = linkedIds(doc.nodes)
   const { layout, origin } = layoutOfNodes(own)
   if (!layout.nodes.length) throw new Error('The slate has no notes to wear a style on.')
   // The same style worn again (another picture, the same chip) keeps what was set on it by hand.
@@ -425,6 +561,14 @@ export function wearStyle(slateJSON, styleRef, { direction = null, name = '', am
   const composed = composeDeck(layout, { ...dir, style: ref }, { style: ref, bake: true })
   const style = resolveStyle(ref)
 
+  // The earlier style's art: restyled in place where the new style has the same art; else taken
+  // away if the style may take it (mayTake: its own decoration, or words a style wrote here, made
+  // again by the new style), so they never pile up; else kept (content, or somebody's).
+  const { matched, rest } = matchKeptArt(oldArt, composed.stageNotes)
+  const original = originalIds(doc)
+  const gone = new Set(rest.filter((node) => mayTake(node, linked, original)).map(idOf))
+  const keptArt = rest.filter((node) => !gone.has(idOf(node)))
+
   // 1. The slate's own notes in the style (same ids, same words; outlines, fills, fonts, places).
   const nodes = own.map((node) => {
     const id = idOf(node)
@@ -433,10 +577,8 @@ export function wearStyle(slateJSON, styleRef, { direction = null, name = '', am
       .map((assoc) => ({ ...assoc, ...(composed.lines[`${assoc.parentId}->${assoc.childId}`] || {}) }))
     return { ...node, options: look ? skinNote(node.options, look, origin) : { ...node.options }, relationships: { ...(node.relationships || {}), associations } }
   })
-  // 2. The art the slate keeps: restyled in place where the new style has the same art, else a
-  // plain note in the new style. Its id, its words and its lines are its own.
-  const { matched, plain } = matchKeptArt(kept, composed.stageNotes)
-  const keptPlain = plain.map((node) => ({ ...node, options: keptInStyle(node, style) }))
+  // 2. Art that is somebody's and has no place in the new style: their own note now, as they left it.
+  const keptPlain = keptArt.map((node) => ({ ...node, options: keptInStyle(node, style) }))
   // Ids the slate holds, so a new note of the style never takes one.
   const taken = new Set([...nodes, ...keptPlain].map(idOf))
   const rename = new Map()
@@ -453,15 +595,8 @@ export function wearStyle(slateJSON, styleRef, { direction = null, name = '', am
   // comes, and the art the slate keeps: no title card or caption is invented for words nobody wrote.
   const art = composed.stageNotes.filter((note) => !ambient || note.deco || matched.has(note.id)).map((note) => {
     const old = matched.get(note.id)
-    const node = artNote({ ...note, id: finalId(note.id) }, origin)
-    if (old) {
-      node.options.text = old.options.text
-      // Art somebody changed stays theirs in the new style: its seal never matches again.
-      node.options.styleSeal = isUntouchedArt(old) ? sealOf(node.options) : 'changed'
-      if (!isUntouchedArt(old) && old.options.isLocked !== true) delete node.options.isLocked
-      node.relationships = { ...(old.relationships || {}), associations: [...(old.relationships?.associations || [])] }
-    }
-    return { note, node }
+    const made = artNote({ ...note, id: finalId(note.id) }, origin)
+    return { note, node: old ? restyledArt(made, old) : made }
   })
   const behind = art.filter(({ note }) => note.behind || note.deco).map(({ node }) => node)
   const front = art.filter(({ note }) => !(note.behind || note.deco)).map(({ node }) => node)
@@ -536,6 +671,23 @@ export function cameraDeck(slateJSON, viewpoints = []) {
 
 /** Whether a saved deck plays a worn style (version 5). */
 export const isBakedDeck = (deck) => deck?.version === BAKED_DECK_VERSION && Array.isArray(deck.steps)
+
+/**
+ * What a saved presentation plays once its slate is back at its original (revertToOriginal): the
+ * deck kept with the original if it was a worn style's deck (its art is back too), else the camera
+ * over the slate as it is again, framing the steps played before the first style (`kept`), else
+ * the steps given (`fallbackSteps`, in order of preference: a step whose notes are gone frames the
+ * whole slate). → { deck, direction, style } for presentations.update { revert }.
+ */
+export function revertedPresentation(back, kept = null, ...fallbackSteps) {
+  if (isBakedDeck(kept?.deck)) return { deck: kept.deck, direction: kept.direction ?? null, style: kept.style ?? kept.deck.style ?? null }
+  const steps = [kept?.deck?.steps, ...fallbackSteps].find((list) => Array.isArray(list) && list.length) || []
+  const deck = cameraDeck(back, steps)
+  return { deck, direction: kept ? kept.direction ?? null : null, style: kept ? kept.style ?? null : wornStyle(back) }
+}
+
+/** Whether a saved presentation row plays a worn style's deck (so a revert of its slate must put it back). */
+export const playsWornStyle = (row) => isBakedDeck(row?.deck) && Boolean(row.deck.style || row.style)
 
 /**
  * The deck the player plays for a presentation as it is saved: a worn style's deck as is; any

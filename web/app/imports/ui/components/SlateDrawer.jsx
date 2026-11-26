@@ -101,7 +101,7 @@ export default function SlateDrawer({
           </Typography>
         </AccordionSummary>
         <AccordionDetails sx={{ margin: (theme) => theme.spacing(1) }}>
-          <SlateSettings slate={slate} onChange={updateSlate} />
+          <SlateSettings onChange={updateSlate} />
         </AccordionDetails>
       </Accordion>
       <Accordion

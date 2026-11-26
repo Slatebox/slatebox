@@ -48,6 +48,13 @@ export const SELECTION_INPUT = {
 const list = (value) => (value === undefined ? undefined : value.split(',').map((item) => item.trim()))
 
 /** The engine's selection from the HTTP input; `comments` is the app's own note field. */
+/** The slate without the original it keeps from before its first style (options.styleOriginal). */
+export function withoutStyleOriginal(slate) {
+  if (!slate?.options || slate.options.styleOriginal === undefined) return slate
+  const { styleOriginal: _kept, ...options } = slate.options
+  return { ...slate, options }
+}
+
 export function selectionFrom(input) {
   const fields = list(input.fields)
   const within = input.within === undefined ? undefined : input.within.split(',').map(Number)
@@ -107,7 +114,10 @@ export function createSlateReader({ listComments, findPresentation, appOrigin, e
    * slate: the stored row. access: {role, canEdit, isOwner, linkRole, grantKey} from the token
    * service (role null for a visitor's read of a public slate reads as READ).
    */
-  return async function readSlate(slate, access, input = {}) {
+  return async function readSlate(stored, access, input = {}) {
+    // The slate as it was before its first style (options.styleOriginal) is the author's to go back
+    // to in the browser, never read: it may hold notes deleted since, and is a second copy of each note.
+    const slate = withoutStyleOriginal(stored)
     const { selection, wantComments } = selectionFrom(input)
     const workshop = isWorkshop(slate)
     // A workshop's lanes and cards are drawn as notes beside the slate's own; read them where

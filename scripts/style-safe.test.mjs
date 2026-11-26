@@ -5,14 +5,19 @@
 // Proved over the pure code every surface shares (presentationBake: Present's style picker, Slate settings → Slate
 // style, the agent's style_presentation, the library seed and the migration): all 8 styles, worn, switched and
 // removed, on the six library presentations as a person's copy holds them and on a plain slate of a person's own.
-// Content is every note a style may not take away: anything but its own untouched, wordless, unlinked decoration.
+// Content is every note a style may not take away: anything but its own untouched, unlinked art that is
+// either wordless or holds words a style wrote on this slate since its original (made again by the next style,
+// so they never pile up). Words the slate came with (a library copy's quotes, numbers) and words anyone wrote are content.
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import {
-  hasStyleOriginal, isStyleArt, keepOriginal, ownNotesOf, replaceableArt, revertToOriginal, sealOf, setSlateBackground,
-  takeOffStyle, wearStyle, wordsOf, wornStyle,
+  cameraDeck, hasStyleOriginal, isStyleArt, keepOriginal, ownNotesOf, playsWornStyle, replaceableArt, revertToOriginal, revertedPresentation,
+  sealOf, setSlateBackground, takeOffStyle, wearStyle, wordsOf, wornStyle,
 } from '../web/app/imports/ui/components/presentations/presentationBake.mjs'
+import { darkText } from '../web/app/imports/ui/components/presentations/presentationStyles.mjs'
+import { copyDocument, sourceOnlyOptions } from '../web/app/server/actions/slate-copy.mjs'
+import { withoutStyleOriginal } from '../web/app/server/slate-read.mjs'
 import { STYLES, STYLE_IDS } from '../web/app/imports/ui/components/presentations/presentationStyles.mjs'
 import { playerSlateCopy, wearDeckOnSlate, wornSlateSet } from '../web/app/server/methods/presentationDeck.mjs'
 import { showcaseContent } from '../web/app/server/library/showcase.mjs'
@@ -34,7 +39,11 @@ const content = (doc) => {
   const gone = replaceableArt(doc)
   return new Map(doc.nodes.filter((node) => !gone.has(String(node.options.id))).map((node) => [String(node.options.id), wordsOf(node.options.text)]))
 }
-const words = (doc) => doc.nodes.map((node) => wordsOf(node.options.text)).filter(Boolean).sort()
+// The words that are content (a style's own words, made again by the next style, aside).
+const words = (doc) => {
+  const gone = replaceableArt(doc)
+  return doc.nodes.filter((node) => !gone.has(String(node.options.id))).map((node) => wordsOf(node.options.text)).filter(Boolean).sort()
+}
 // Every content note before is a note after, with the same words; every word before is a word after.
 function nothingLost(before, after, label) {
   const was = content(before)
@@ -248,7 +257,10 @@ test('both style pickers offer Revert to original (enabled while the slate keeps
   const panel = ui('components/slate/SlateStyle.jsx')
   assert.match(panel, /data-slate-style-revert/)
   assert.match(panel, /disabled=\{busy \|\| !original\}/)
-  assert.match(panel, /revertToOriginal\(json\)\.slate, 'style-revert'/)
+  // The panel's Revert puts the saved presentations' decks back too (as Present's does), with the same routine.
+  assert.match(panel, /onClick=\{\(\) => act\(\(\) => revertSlateAndPresentations\(slate\)\)\}/)
+  assert.match(panel, /replaceSlateAsOwnStep\(slate, back, 'style-revert'\)/)
+  assert.match(panel, /if \(!playsWornStyle\(row\)\) continue\s+const revert = revertedPresentation\(back, presentation, row\.viewpoints\)\s+await call\(CONSTANTS\.methods\.presentations\.update, \{ presentationId: row\._id, revert \}\)/)
   assert.match(panel, />\s*Revert to original\s*</)
   assert.match(panel, />\s*Remove style\s*</)
   assert.doesNotMatch(panel, /Take off style/)
@@ -258,17 +270,176 @@ test('both style pickers offer Revert to original (enabled while the slate keeps
   assert.doesNotMatch(sheet, /Undo takes it off/)
   const present = ui('components/PresentSlate.jsx')
   assert.match(present, /onRevert=\{handleStyleRevert\}/)
-  assert.match(present, /canRevert=\{Boolean\(styleAnchorEl\) && hasStyleOriginal\(slateCopy\(slate\)\)\}/)
+  // Read once when the sheet opens (and after a change there), not on every render.
+  assert.match(present, /canRevert=\{styleCanRevert\}/)
+  assert.match(present, /setStyleCanRevert\(Boolean\(styleAnchorEl\) && hasStyleOriginal\(slateCopy\(slate\)\)\)\s+\}, \[styleAnchorEl, curPresentation\.slateJSON\]\)/)
+  assert.match(present, /revertedPresentation\(back, presentation, row\?\.viewpoints, curPresentation\.viewpoints, look\?\.deck\?\.steps\)/)
   assert.match(present, /presentations\.update, \{ presentationId, revert: \{ deck, direction, style \} \}/)
+  // The copy promises what Revert does.
+  assert.doesNotMatch(panel, /exactly as it was|Nothing on your slate is lost/)
+  assert.match(panel, /Revert to original brings back the notes, layout and background from before the first style\. Notes and words added since are kept\./)
+  assert.doesNotMatch(sheet, /nothing on it is lost/)
   assert.doesNotMatch(present, /takeOffStyle/)
 })
 
 test('a cog beside the slate name opens the same slate menu as the name, on a phone too', () => {
   const header = ui('components/CanvasToolbar.jsx')
   assert.match(header, /aria-label="Slate settings and actions"/)
+  // No chevron on the name (the cog is the way in), one icon for settings, one tab stop for one menu, and a
+  // sheet (dialog) on a phone is announced as one.
+  assert.doesNotMatch(header, /ExpandMore|Sliders|icons-material\/Tune/)
+  assert.match(header, /label: 'Slate settings', icon: <SettingsOutlined \/>/)
+  assert.match(header, /className="sb-board-cog" color="inherit" size="small" tabIndex=\{-1\}/)
+  assert.equal((header.match(/aria-haspopup=\{narrow \? 'dialog' : 'menu'\}/g) || []).length, 2)
   assert.match(header, /onClick=\{\(\) => setSlateMenu\(titleButton\.current\)\}/)
   // The cog is drawn whatever the width (only renaming hides it), inside the name's box.
   const name = header.slice(header.indexOf('<div className="sb-board-name">'), header.indexOf('<div ref={setBuilderSlot}'))
   assert.match(name, /\{!renaming && <Tooltip title="Slate settings and actions">/)
   assert.match(ui('common/main.css'), /\.sb-board-cog-wrap\{display:inline-flex;flex:none/)
+})
+
+// ---- review findings (2026-11-25, second pass) ----------------------------------------------------------------------
+
+test('Revert to original keeps a line drawn after the first style between two notes the original already had', () => {
+  const s = slateOfLayout(whatIsSlatebox(), 'What is Slatebox')
+  const had = new Set(s.nodes.flatMap((n) => n.relationships.associations.map((a) => `${a.parentId}->${a.childId}`)))
+  assert.ok(!had.has('n0->l1') && !had.has('l1->n0'))
+  const w = wearStyle(s, { id: 'voyage' }).slate
+  for (const node of w.nodes) if (['n0', 'l1'].includes(node.options.id)) node.relationships.associations.push({ parentId: 'n0', childId: 'l1' })
+  const back = revertToOriginal(w).slate
+  for (const id of ['n0', 'l1']) assert.ok(back.nodes.find((n) => n.options.id === id).relationships.associations.some((a) => a.parentId === 'n0' && a.childId === 'l1'), `${id} keeps the new line`)
+  // The original's own lines are there once each (a restyled line is the same line).
+  const n0 = back.nodes.find((n) => n.options.id === 'n0')
+  same(n0.relationships.associations.filter((a) => !(a.parentId === 'n0' && a.childId === 'l1')), s.nodes.find((n) => n.options.id === 'n0').relationships.associations)
+})
+
+test('a picture someone put on a style\'s image art survives every switch, on a plain slate and a library copy', () => {
+  const MINE = 'https://example.com/mine.png'
+  const w = wearStyle(slateOfLayout(whatIsSlatebox(), 'What is Slatebox'), { id: 'voyage' }).slate
+  const art = w.nodes.find((n) => n.options.id === 'sb-stage-4-image')
+  assert.ok(art?.options.image, 'voyage draws a picture there')
+  art.options.image = MINE
+  for (const id of STYLE_IDS.filter((x) => x !== 'voyage')) {
+    for (const opts of [{}, { ambient: true }]) {
+      const next = wearStyle(w, { id }, opts).slate
+      assert.equal(next.nodes.filter((n) => n.options.image === MINE).length, 1, `voyage → ${id} ${opts.ambient ? '(settings)' : '(present)'}: the picture is kept once`)
+      assert.ok(next.nodes.some((n) => n.options.id === 'sb-stage-4-image' && n.options.image === MINE), `voyage → ${id}: on the same note`)
+    }
+  }
+  const entry = showcasePresentations.find((item) => item.slug === 'roadmap-bets')
+  const copy = libraryCopy(entry)
+  const pic = copy.nodes.find((n) => isStyleArt(n) && n.options.image)
+  pic.options.image = MINE
+  let doc = copy
+  for (const id of ['editorial', 'neon', 'calm', 'stage']) {
+    doc = wearDeckOnSlate(doc, showcaseContent(entry).deck, { id }).slate
+    assert.ok(doc.nodes.some((n) => n.options.id === pic.options.id && n.options.image === MINE), `roadmap-bets → ${id}: the picture is kept`)
+  }
+})
+
+test('wordless decoration someone recolored, resized, moved or unlocked is theirs: kept through every switch and removal', () => {
+  for (const slug of ['launch-war-room', 'checkout-postmortem', 'roadmap-bets']) {
+    const entry = showcasePresentations.find((item) => item.slug === slug)
+    const copy = libraryCopy(entry)
+    const decor = copy.nodes.filter((n) => n.options.styleRole === 'decor' && !wordsOf(n.options.text))
+    assert.ok(decor.length >= 4, `${slug} has decoration`)
+    decor[0].options.backgroundColor = '#ff00ff'
+    decor[1].options.width = Number(decor[1].options.width) + 77
+    decor[2].options.xPos = Number(decor[2].options.xPos) + 120
+    decor[3].options.isLocked = false
+    const mine = decor.slice(0, 4).map((n) => n.options.id)
+    assert.ok(mine.every((id) => !replaceableArt(copy).has(id)), `${slug}: changed decoration is content`)
+    let doc = copy
+    for (const id of ['calm', 'stage', 'editorial', 'neon']) {
+      doc = wearDeckOnSlate(doc, showcaseContent(entry).deck, { id }).slate
+      for (const keep of mine) assert.ok(doc.nodes.some((n) => n.options.id === keep), `${slug} → ${id}: ${keep} kept`)
+    }
+    assert.equal(doc.nodes.find((n) => n.options.id === decor[0].options.id).options.backgroundColor, '#ff00ff')
+    const off = takeOffStyle(doc)
+    for (const keep of mine) assert.ok(off.nodes.some((n) => n.options.id === keep), `${slug} removed: ${keep} kept`)
+  }
+})
+
+test('a style\'s own words do not pile up: switching settles, Remove style takes them off, the slate\'s words stay', () => {
+  let doc = slateOfLayout(whatIsSlatebox(), 'What is Slatebox')
+  const own = words(doc)
+  const counts = []
+  for (let pass = 0; pass < 3; pass += 1) {
+    for (const id of STYLE_IDS) doc = wearStyle(doc, { id }).slate
+    counts.push(doc.nodes.length)
+  }
+  assert.equal(new Set(counts).size, 1, `the same notes after each pass over the styles (${counts})`)
+  // Every word the slate had is still there; words a style wrote are the style's (made again by each).
+  for (const said of own) assert.ok(doc.nodes.some((n) => wordsOf(n.options.text) === said), `"${said}" kept`)
+  const off = takeOffStyle(doc)
+  assert.equal(off.nodes.length, slateOfLayout(whatIsSlatebox(), 'What is Slatebox').nodes.length, 'removed: only the slate\'s own notes')
+  same(revertToOriginal(doc).slate, slateOfLayout(whatIsSlatebox(), 'What is Slatebox'))
+  // A library copy's words (its quotes and numbers) are content: never taken, however often it is switched.
+  for (const entry of showcasePresentations) {
+    const copy = libraryCopy(entry)
+    let cur = copy
+    for (let pass = 0; pass < 2; pass += 1) for (const id of STYLE_IDS) cur = wearStyle(cur, { id }, { direction: entry.look.direction && { ...entry.look.direction, style: { id } }, name: entry.title }).slate
+    const left = words(cur)
+    for (const said of words(copy)) assert.ok(left.includes(said), `${entry.slug}: "${said}" kept`)
+    same(revertToOriginal(cur).slate, copy)
+  }
+})
+
+test('a background picked by hand never leaves words unreadable on it', () => {
+  for (const id of STYLE_IDS) {
+    for (const color of ['#ffffff', '#0b1030', '#fbf7ef']) {
+      const worn = setSlateBackground(wearStyle(slateOfLayout(whatIsSlatebox(), 'What is Slatebox'), { id }).slate, color)
+      const bad = worn.nodes.filter((n) => {
+        const o = n.options
+        const bare = !o.image && !o.backgroundImage && typeof o.backgroundColor === 'string' && /^(|transparent|none)$/i.test(o.backgroundColor.trim())
+        const ink = o.fontColor ?? o.foregroundColor
+        return wordsOf(o.text) && bare && /^#[0-9a-f]{6}$/i.test(ink || '') && darkText(ink) === darkText(color)
+      })
+      assert.deepEqual(bad.map((n) => n.options.id), [], `${id} on ${color}`)
+      // Re-inked art is still the style's own (its next switch replaces it as before).
+      for (const node of worn.nodes.filter(isStyleArt)) assert.equal(node.options.styleSeal, sealOf(node.options))
+    }
+  }
+})
+
+test('the original a slate keeps never leaves with a copy, a fork, an agent\'s read or a reader\'s load', () => {
+  assert.ok(sourceOnlyOptions.includes('styleOriginal'))
+  const worn = wearStyle(ownSlate(), { id: 'neon' }).slate
+  const copy = copyDocument(worn, { id: 'x', shareId: 'y', user: { _id: 'u' }, now: 1, name: 'Copy' })
+  assert.equal(copy.options.styleOriginal, undefined)
+  assert.equal(withoutStyleOriginal(worn).options.styleOriginal, undefined)
+  assert.ok(worn.options.styleOriginal, 'the stored slate keeps it')
+  const loader = readFileSync(new URL('../web/app/server/methods/slates.js', import.meta.url), 'utf8')
+  assert.match(loader, /if \(accessLevel !== 'EDIT' && slate\.options\) delete slate\.options\.styleOriginal/)
+})
+
+test('a saved presentation goes back with its slate: the deck kept with the original, else the camera over the steps played before', () => {
+  const entry = showcasePresentations[0]
+  const copy = libraryCopy(entry)
+  const row = showcaseContent(entry).deck
+  const worn = wearDeckOnSlate(copy, row, { id: STYLE_IDS.find((id) => id !== entry.look.style) })
+  const { slate: back, presentation } = revertToOriginal(worn.slate)
+  assert.ok(playsWornStyle({ deck: worn.deck }))
+  same(revertedPresentation(back, presentation, worn.deck.steps).deck, row.deck)
+  // No deck kept (styled from Slate settings first): the steps played before, then the row's, framed on the slate as it is.
+  const plain = ownSlate()
+  const styled = wearStyle(plain, { id: 'stage' }).slate
+  const before = [{ nodeIds: ['n0', 'mine'], narrative: 'Start', duration: 3000 }]
+  const r1 = revertedPresentation(revertToOriginal(styled).slate, { style: null, direction: null, deck: { steps: before } }, [{ nodeIds: ['sb-stage-2-title'] }])
+  assert.deepEqual(r1.deck.steps.map((s) => s.nodeIds), [['n0', 'mine']])
+  const r2 = revertedPresentation(revertToOriginal(styled).slate, null, [{ nodeIds: ['l1'] }])
+  assert.deepEqual(r2.deck.steps.map((s) => s.nodeIds), [['l1']])
+  assert.equal(r2.style, null)
+  same(r2.deck, cameraDeck(revertToOriginal(styled).slate, [{ nodeIds: ['l1'] }]))
+})
+
+test('the Background swatches are one radio group with arrow keys, visible names and a check, and the hex field says what is wrong', () => {
+  const panel = ui('components/slate/SlateStyle.jsx')
+  assert.match(panel, /tabIndex=\{index === swatchIndex \? 0 : -1\}/)
+  assert.match(panel, /ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1/)
+  assert.match(panel, /<Box component="span">\{swatch\.name\}<\/Box>/)
+  assert.match(panel, /\{on && <CheckIcon/)
+  assert.match(panel, /setHexProblem\(value \? HEX_HINT : ''\)/)
+  assert.match(panel, /const HEX_HINT = 'Use a color like #1a2b3c\.'/)
+  assert.match(panel, /'aria-invalid': Boolean\(hexProblem\)/)
 })

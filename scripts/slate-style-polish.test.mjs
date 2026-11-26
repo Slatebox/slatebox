@@ -115,7 +115,7 @@ test('the slate\'s background is one small control under its style: swatches fro
   const panel = read('imports/ui/components/slate/SlateStyle.jsx')
   assert.match(panel, /aria-label="Background color"/)
   assert.match(panel, /'aria-label': 'Background color \(hex\)'/)
-  assert.match(panel, /setSlateBackground\(json, color\)/)
+  assert.match(panel, /setSlateBackground\(json, value\)/)
   assert.doesNotMatch(panel, /cloneElement|styleVersion|As Gradient|Complementary|Shades|>Repeat|>Stretch|pixabay/i)
   const drawer = read('imports/ui/components/SlateDrawer.jsx')
   assert.doesNotMatch(drawer, /SlateColors|SlateBackgrounds|GenerateNodeColors|SlateLayout|Generate Node Colors|>\s*Layout\s*</)

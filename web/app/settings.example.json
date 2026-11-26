@@ -110,7 +110,6 @@
     "wsUrl": "ws://localhost:1122",
     "dailyBaseUrl": "",
     "heapIOKey": "",
-    "pixabayAPIKey": "",
     "stripe": {
       "//": "Slatebox Cloud only. In-app payments (Stripe Payment Element). Set the publishable key (pk_...) that pairs with stripePrivateKey; without one, payments use the hosted Stripe page. inApp: false turns the in-app sheet off. At startup the app checks the pair and sets inApp itself.",
       "publishableKey": "",
