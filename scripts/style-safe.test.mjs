@@ -351,6 +351,48 @@ test('Revert to original gives a note and a line made since their own look back 
   }
 })
 
+// Review (2026-11-25, third pass): two lines between the same two notes are two lines. Their look was kept by their
+// ends, so Revert gave the second the first's look and its id: two lines with one id, colliding in the engine.
+test('Revert to original gives each of two lines between the same notes its own look and id (every style pair, revert and Remove style then revert)', () => {
+  const ids = STYLE_IDS
+  for (const first of ids) for (const second of ids) {
+    if (first === second) continue
+    const plain = ownSlate()
+    const root = String(plain.nodes[0].options.id)
+    const worn = wearStyle(plain, { id: first }, { ambient: true }).slate
+    const note = (id, yPos) => ({ options: { id, text: id, xPos: 1400, yPos, width: 180, height: 80, backgroundColor: '#ffffff', fontColor: '#111111' }, relationships: { associations: [] } })
+    const n = note('N', 0)
+    const m = note('M', 300)
+    // Parallel lines made since: two with ids, two with none, between two notes made since.
+    const made = [
+      { id: 'N->M', parentId: 'N', childId: 'M', lineColor: '#111111' },
+      { id: 'N->M~2', parentId: 'N', childId: 'M', lineColor: '#ff0000', lineWidth: 7 },
+      { parentId: 'N', childId: 'M', lineColor: '#00aa00', lineWidth: 2 },
+      { parentId: 'N', childId: 'M', lineColor: '#0000aa', lineWidth: 5, lineDash: 'solid' },
+    ]
+    n.relationships.associations.push(...clone(made))
+    worn.nodes.push(n, m)
+    // A second line between two of the original's notes (root -> mine, which the original already joins once).
+    const twin = { id: 'root-mine-2', parentId: root, childId: 'mine', lineColor: '#abcdef', lineWidth: 9 }
+    worn.nodes.find((x) => x.options.id === root).relationships.associations.push(clone(twin))
+    let doc = wearStyle(worn, { id: second }, { ambient: true }).slate
+    doc = wearStyle(doc, { id: first }, { ambient: true }).slate
+    for (const label of ['revert', 'remove then revert']) {
+      const tag = `${first}/${second} ${label}`
+      const back = revertToOriginal(label === 'revert' ? doc : takeOffStyle(doc)).slate
+      const at = (id) => back.nodes.find((x) => x.options.id === id)
+      same(at('N').relationships.associations, made)
+      const rootLines = at(root).relationships.associations
+      same(rootLines.filter((a) => a.id !== 'root-mine-2'), plain.nodes[0].relationships.associations)
+      same(rootLines.filter((a) => a.id === 'root-mine-2'), [twin])
+      // No two lines share an id anywhere.
+      const lineIds = back.nodes.flatMap((x) => x.relationships.associations.map((a) => a.id)).filter((id) => id !== undefined)
+      assert.equal(new Set(lineIds).size, lineIds.length, `${tag}: every line keeps its own id`)
+      for (const node of back.nodes) assert.equal(node.options.styleWas, undefined, `${tag}: ${node.options.id} keeps no record`)
+    }
+  }
+})
+
 // The first style worn on a slate writes no record on the original's notes (Revert gives them back from the original),
 // so a slate's first style (and the library's seeded presentations) is drawn exactly as before.
 test('the original\'s notes carry no record of their own look; a note made since keeps the first look it had', () => {
