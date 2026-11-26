@@ -20,6 +20,34 @@ shipped early. The next release is 2.0.0, which is above both lines.
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-26
+
+### Added
+
+- **style:** no data loss when a style is worn, switched or removed; Revert to original; modern Slate settings; cog by the slate name ([f4cc9254](https://github.com/Slatebox/slatebox/commit/f4cc925446d007dbaf703e778e9eb68e67500b69))
+- **integrations:** Existing and Custom tabs; suggest a custom MCP server for the library ([3ad11f12](https://github.com/Slatebox/slatebox/commit/3ad11f12a139852ff8baee920cad9c8695168358))
+- **selfhost:** header Upgrade on self-hosted installs: unlock enterprise here, or move the team to Slatebox Cloud ([ddb971c3](https://github.com/Slatebox/slatebox/commit/ddb971c3b3a601b26081c586ee10bd3f3647163c))
+- **agents:** add an already-connected agent to a slate in one click ([3f155ccb](https://github.com/Slatebox/slatebox/commit/3f155ccb82179c7671023825d2c33c4e38af3c7a))
+- **builder:** printable pages are grid sheets: drafted, started, printed and saved as a PDF ([86cc5290](https://github.com/Slatebox/slatebox/commit/86cc52905ee689a1f90f06acec414584c7dd36c1))
+- **selfhost:** automatic updates from signed GitHub releases ([934281d9](https://github.com/Slatebox/slatebox/commit/934281d97af9cd2e721fe4ed23d64f65dc038d67))
+- **updates:** trust the 2026-11 release key ([04a26a00](https://github.com/Slatebox/slatebox/commit/04a26a007f6f028cca31cc9df97e31cf8a403db5))
+
+### Fixed
+
+- **server:** stop on SIGTERM so a rollout's old pod does not linger and drop sessions ([5c6de8dc](https://github.com/Slatebox/slatebox/commit/5c6de8dc494df3b24281c9744bcfa9fd2c738468))
+- **my-slates:** draw a card on the background its canvas opens on ([369b11fe](https://github.com/Slatebox/slatebox/commit/369b11fefe44e83b008e442ba102f9a0c96c906e))
+- **style:** review fixes: keep lines, pictures and edited decoration; settle style words; settings Revert puts decks back ([121a3c0e](https://github.com/Slatebox/slatebox/commit/121a3c0efa6d5532b24c294f0033da2bdd3eca9c))
+- **integrations:** no path secrets in the library, honest consent, Cloud cards age out ([34f67689](https://github.com/Slatebox/slatebox/commit/34f676895d310c5e7f47fe21ad32570acaf81cfa))
+- **builder:** a described smart component builds a board; agent plans repair themselves and fail in plain words ([32e1c745](https://github.com/Slatebox/slatebox/commit/32e1c745ce27dede02144f95498a59a99e687ebe))
+- **builder:** smart components drafted as working tools, held to a quality gate; agent wording ([d946620d](https://github.com/Slatebox/slatebox/commit/d946620db0026293d387b8872bbedad3a0e5a597))
+- **selfhost:** trials need a proven public host, no grace, Cloud-decided offer; clearer Upgrade panel and header ([0c437e37](https://github.com/Slatebox/slatebox/commit/0c437e3789281900f632f90223ec65e114187ccc))
+- **builder:** a usefulness judge in the live eval, a harder quality gate, no cap on the finished lane, guest starters with real domain cards ([51f38413](https://github.com/Slatebox/slatebox/commit/51f384133ec4bc743e9862d93304f444b7bf57c7))
+- **builder:** starter kits match whole words, finished lanes by name and place, an independent and calibrated eval judge ([7a82b8b2](https://github.com/Slatebox/slatebox/commit/7a82b8b2dcedad07b8e6459d1707cf808b5a5546))
+- **style:** Revert to original gives notes made since their own look back ([c2a545a1](https://github.com/Slatebox/slatebox/commit/c2a545a19b3c3c837b92ef44fd80871dfa6c61ab))
+- **style:** two lines between the same notes keep their own look and id on Revert ([8f643056](https://github.com/Slatebox/slatebox/commit/8f6430560c6e316f2af90292c000ea5d651163d3))
+- **builder:** grid sheets print their own words; honest evals; Print docked on phones, hidden in Present ([315e905e](https://github.com/Slatebox/slatebox/commit/315e905e571f6367fcd1e06312bcb68e9883eadf))
+- **updates:** host updater trusts only its own feed, version and sequence; recovers cut-off updates; restores before the older version starts ([e7924769](https://github.com/Slatebox/slatebox/commit/e792476976c8b382090d6222e1273e048a4858d4))
+
 ## [2.0.0] - 2026-11-25
 
 ### Highlights
@@ -1385,7 +1413,8 @@ Self-host image preview `ghcr.io/slatebox/slatebox:0.1.0` (index `sha256:94f761b
 
 - Removed unused imports and fixed import naming conflict in `Main.jsx`.
 
-[Unreleased]: https://github.com/Slatebox/slatebox/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/Slatebox/slatebox/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/Slatebox/slatebox/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/Slatebox/slatebox/compare/v0.2.2...v2.0.0
 [0.2.2]: https://github.com/Slatebox/slatebox/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/Slatebox/slatebox/compare/v0.2.0...v0.2.1

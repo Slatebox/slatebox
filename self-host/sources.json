@@ -1,0 +1,10 @@
+{
+  "engine": {
+    "repo": "https://github.com/Slatebox/slateboxjs",
+    "commit": "d22e7b6757808c02bee55edf65e72e0e1578dedb"
+  },
+  "relay": {
+    "repo": "https://github.com/Slatebox/y-websocket",
+    "commit": "4e17643453dc82d89996189483d69841e9324768"
+  }
+}
