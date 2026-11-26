@@ -14,7 +14,12 @@ it prints the address and a one-time setup link: nobody can sign up until the
 first admin exists, and the person who opens the link creates that account (the
 server administrator and the owner of the first team). The link works once and
 expires in 24 hours; `slatebox setup-link` prints a new one at a terminal and
-ends the last. `npx slatebox --dry-run` asks the same questions and
+ends the last. At a terminal the installer then offers to create that admin
+account right there (name, email, team, password), through the same one-time
+link, or keeps the link, with a QR code, and waits until it is used. Over SSH,
+or anywhere no browser can open, it says so and shows links (the sign-in page and
+the setup link) to open on any device instead of asking to open a browser.
+`npx slatebox --dry-run` asks the same questions and
 prints the plan without changing anything. You need Node.js 22.13 or newer, and
 Docker (Docker Desktop, OrbStack, Colima, Docker Engine, or Podman with its Docker
 compatibility on) on whatever runs Slatebox. Docker Compose is not needed: Slatebox

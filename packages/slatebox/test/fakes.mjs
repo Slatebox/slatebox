@@ -203,6 +203,8 @@ export async function cli(argv, { run, env = {}, home, fetch, tty = false, input
     env: { HOME: home, PATH: process.env.PATH, ...env, SLATEBOX_INSTALL_HOME: home },
     stdin, stdout, stderr, run, platform, cwd,
     fetch: fetch || (async () => ({ ok: true, status: 200, json: async () => ({ ok: true }) })),
+    // Whether a browser can open is decided from env and platform alone, never from this machine.
+    inContainer: () => false,
     ...io,
   })
   const events = out.split('\n').filter(Boolean).map(line => {

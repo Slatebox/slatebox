@@ -13,11 +13,11 @@
 //
 // The base URL is https://app.slatebox.com unless SLATEBOX_CLOUD_URL or --cloud-url says
 // otherwise (a local claim service for tests). Plain http:// is accepted only for loopback.
-import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { hostname } from 'node:os'
 import { join } from 'node:path'
+import { offerToOpen } from './browser.mjs'
 import { EXIT, InstallError } from './errors.mjs'
 import { installDir } from './record.mjs'
 
@@ -152,15 +152,8 @@ export function deviceLabel() {
   return hostname().replace(/[^\x20-\x7e]/g, '').slice(0, 64) || 'this computer'
 }
 
-/** Open a URL in the person's browser. Failure is fine: the code and link are printed anyway. */
-export function openBrowser(url, platform = process.platform) {
-  const [cmd, args] = platform === 'darwin' ? ['open', [url]] : platform === 'win32' ? ['cmd', ['/c', 'start', '""', url]] : ['xdg-open', [url]]
-  try {
-    const child = spawn(cmd, args, { stdio: 'ignore', detached: true })
-    child.on('error', () => {})
-    child.unref()
-  } catch { /* printed anyway */ }
-}
+// Opening the page (or, where no browser can open, showing it to open on any device): browser.mjs.
+export { openBrowser } from './browser.mjs'
 
 /**
  * Sign in to Slatebox Cloud for one scope (team-addresses by default; a move asks for
@@ -183,18 +176,16 @@ export async function signIn(ctx, cloud, { purpose = 'claim a team address', sco
   const lines = ['', `Sign in to Slatebox to ${purpose}.`, `  Open:  ${page}`, `  Code:  ${grant.user_code}`]
   const rich = ctx.interactive && ctx.prompt?.rich
   if (rich) {
-    // The wizard: the code and page in a box, then a countdown while the browser approves.
+    // The wizard: the code and page in a box, then a countdown while the browser approves. With no
+    // browser here (SSH, no display, a container, CI) the page is shown with a QR code instead of
+    // the question.
     ctx.prompt.signInBox({ purpose, page, code: grant.user_code })
-    if (ctx.yes) (ctx.openBrowser || openBrowser)(complete || page, ctx.platform)
-    else if (await ctx.prompt.confirm('Open it in your browser now?', { default: true, label: 'Browser' })) (ctx.openBrowser || openBrowser)(complete || page, ctx.platform)
+    await offerToOpen(ctx, complete || page)
   } else if (ctx.interactive) {
     lines.push(`  (The code expires in ${minutes} minutes.)`)
     ctx.stderr.write(`${lines.join('\n')}\n`)
     // --yes asks nothing: the page is opened for the person, as Enter at the question would.
-    if (ctx.yes) {
-      ctx.stderr.write('  Opening it in your browser.\n')
-      ;(ctx.openBrowser || openBrowser)(complete || page, ctx.platform)
-    } else if (await ctx.prompt.confirm('Open it in your browser now?', { default: true })) (ctx.openBrowser || openBrowser)(complete || page, ctx.platform)
+    await offerToOpen(ctx, complete || page)
   } else {
     lines.push(`  (The code expires in ${minutes} minutes. Approve it in a browser where you are signed in to Slatebox.)`)
     ctx.stderr.write(`${lines.join('\n')}\n`)

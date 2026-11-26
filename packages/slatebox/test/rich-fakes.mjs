@@ -51,6 +51,8 @@ export async function richCli(argv, { run, fetch, home, env = {}, columns = 100,
     stdin: t.stdin, stdout: t.stdout, stderr: t.stderr, run, platform,
     fetch: fetch || (async () => ({ ok: true, status: 200, json: async () => ({ ok: true }) })),
     statfs: () => ({ bavail: 1e9, bsize: 4096 }),
+    // Whether a browser can open is decided from env and platform alone, never from this machine.
+    inContainer: () => false,
     ...io,
   })
   let failure = null

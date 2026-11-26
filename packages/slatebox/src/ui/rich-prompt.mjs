@@ -16,6 +16,7 @@ import { Writable } from 'node:stream'
 import { SIZES as SIZE_NAMES } from '../answers.mjs'
 import { EXIT, InstallError } from '../errors.mjs'
 import { terminalGuard } from './keys.mjs'
+import { qrLines } from './qr.mjs'
 import { columns, link, makePaint, pad, strip, truncate, width, wrap } from './term.mjs'
 
 const CANCELED = 'Canceled. Nothing was changed.'
@@ -653,38 +654,54 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
 
   /**
    * The end: where Slatebox runs, the one-time setup link (never wrapped: in a box only when it
-   * fits, else on its own line), and what to do next. writeLink writes past the redactor.
+   * fits, else on its own line), and what to do next. writeLink writes past the redactor. The
+   * wizard draws it in two parts around the first admin (outroHeadline, then outroTail).
    */
   function outro({ headline, link: setup, pending, lines: extra = [], next }) {
+    outroHeadline(headline)
+    if (setup) setupLinkBox(setup)
+    outroTail({ pending: setup ? null : pending, lines: extra, next })
+  }
+
+  function outroHeadline(headline) {
+    // What follows (the first admin) is not one of the six sections.
+    sectionTag = ''
+    pendingSection = null
     line('')
     const took = `set up in ${duration(now() - started)}`
     if (width(headline) + 6 + took.length <= lineW()) line(` ${paint('accent', g.star)} ${paint('title', headline)}   ${paint('dim', took)}`)
     else { line(` ${paint('accent', g.star)} ${paint('title', headline)}`); line(`   ${paint('dim', took)}`) }
-    if (setup) {
-      const url = setup.url
-      const shown = paint('link', link(term, url))
-      const b = g.box
-      line('')
-      // Drawn in a box only when the whole URL fits in it; it is never wrapped or cut.
-      if (W() >= url.length + 8) {
-        const inner = Math.min(W() - 6, Math.max(url.length + 23, 72))
-        const titleText = truncate('Create the first account (the server administrator)', inner - 2, g.ellipsis)
-        const only = '(this terminal only)'
-        const sameLine = inner >= url.length + 3 + only.length
-        line(` ${paint('dim', `${b.tl}${b.h} `)}${paint('title', titleText)}${paint('dim', ` ${b.h.repeat(Math.max(0, inner - width(titleText) - 1))}${b.tr}`)}`)
-        // The link line goes straight to the terminal, past the redactor (as setupLines does).
-        clearDrawn()
-        rawWrite(` ${paint('dim', b.v)} ${shown}${sameLine ? `${' '.repeat(inner - url.length - only.length)}${paint('dim', only)}` : ' '.repeat(inner - url.length)} ${paint('dim', b.v)}\n`)
-        const rest = `${sameLine ? '' : 'This terminal only. '}Works once, expires in 24 hours. Lost it? slatebox setup-link`
-        for (const piece of wrapR(rest, inner)) line(` ${paint('dim', b.v)} ${pad(piece, inner)} ${paint('dim', b.v)}`)
-        line(` ${paint('dim', `${b.bl}${b.h.repeat(inner + 2)}${b.br}`)}`)
-      } else {
-        line(` ${paint('title', 'Create the first account (the server administrator):')}`)
-        clearDrawn()
-        rawWrite(`${shown}\n`)
-        for (const piece of wrapR('This terminal only. Works once, expires in 24 hours. Lost it? slatebox setup-link', lineW() - 2)) line(` ${paint('dim', piece)}`)
-      }
-    } else if (pending) {
+  }
+
+  /** The one-time setup link in a box (or on its own line when the box would not fit it). */
+  function setupLinkBox(setup) {
+    const url = setup.url
+    const shown = paint('link', link(term, url))
+    const b = g.box
+    line('')
+    // Drawn in a box only when the whole URL fits in it; it is never wrapped or cut.
+    if (W() >= url.length + 8) {
+      const inner = Math.min(W() - 6, Math.max(url.length + 23, 72))
+      const titleText = truncate('Create the first account (the server administrator)', inner - 2, g.ellipsis)
+      const only = '(this terminal only)'
+      const sameLine = inner >= url.length + 3 + only.length
+      line(` ${paint('dim', `${b.tl}${b.h} `)}${paint('title', titleText)}${paint('dim', ` ${b.h.repeat(Math.max(0, inner - width(titleText) - 1))}${b.tr}`)}`)
+      // The link line goes straight to the terminal, past the redactor (as setupLines does).
+      clearDrawn()
+      rawWrite(` ${paint('dim', b.v)} ${shown}${sameLine ? `${' '.repeat(inner - url.length - only.length)}${paint('dim', only)}` : ' '.repeat(inner - url.length)} ${paint('dim', b.v)}\n`)
+      const rest = `${sameLine ? '' : 'This terminal only. '}Works once, expires in 24 hours. Lost it? slatebox setup-link`
+      for (const piece of wrapR(rest, inner)) line(` ${paint('dim', b.v)} ${pad(piece, inner)} ${paint('dim', b.v)}`)
+      line(` ${paint('dim', `${b.bl}${b.h.repeat(inner + 2)}${b.br}`)}`)
+    } else {
+      line(` ${paint('title', 'Create the first account (the server administrator):')}`)
+      clearDrawn()
+      rawWrite(`${shown}\n`)
+      for (const piece of wrapR('This terminal only. Works once, expires in 24 hours. Lost it? slatebox setup-link', lineW() - 2)) line(` ${paint('dim', piece)}`)
+    }
+  }
+
+  function outroTail({ pending, lines: extra = [], next }) {
+    if (pending) {
       line('')
       for (const text of pending) line(` ${text}`)
     }
@@ -711,6 +728,60 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
     }
   }
 
+  /**
+   * A QR code for url, with a caption, when the terminal is wide enough for it: black on white
+   * where there is color (it scans on light and dark terminals), half blocks or ASCII as the
+   * terminal allows. It holds no text, so it is written as it is.
+   */
+  function qr(url, caption = 'Scan it with a phone') {
+    const rows = qrLines(url, { unicode: term.unicode, color: term.depth > 0 })
+    if (width(rows[0]) + 4 > W()) { note('info', 'The terminal is too narrow for a QR code; widen it to see one.'); return }
+    line('')
+    line(`   ${paint('dim', caption)}`)
+    clearDrawn()
+    for (const text of rows) rawWrite(`   ${text}\n`)
+  }
+
+  /**
+   * A link that has to be opened on another device: the sentence (no browser here, or the
+   * browser did not open), the link (past the redactor when it is the setup link), and a QR code.
+   */
+  function elsewhere({ sentence, url, secret = false }) {
+    line('')
+    for (const [i, piece] of wrapR(sentence, lineW() - 4).entries()) line(i ? `   ${piece}` : ` ${paint('accent', g.pointer)} ${piece}`)
+    const shown = `   ${paint('link', link(term, url))}`
+    if (secret) { clearDrawn(); rawWrite(`${shown}\n`) } else line(shown)
+    qr(url)
+  }
+
+  /**
+   * Single keys while no question is open (waiting on the setup link): resolves 'enter' for Enter,
+   * q or Esc, and 'stop' for Ctrl-C (which here only ends the wait: Slatebox is installed).
+   * stop() puts the terminal back.
+   */
+  function watchKeys() {
+    if (!input?.isTTY || typeof input.setRawMode !== 'function') return { pressed: new Promise(() => {}), stop() {} }
+    let resolveKey
+    const pressed = new Promise(resolve => { resolveKey = resolve })
+    const onData = chunk => {
+      const text = String(chunk)
+      if (text.includes('\x03')) resolveKey('stop')
+      else if (/[\r\nq]/.test(text) || text === '\x1b') resolveKey('enter')
+    }
+    guard.arm()
+    try { input.setRawMode(true) } catch { /* closed */ }
+    input.on('data', onData)
+    input.resume?.()
+    return {
+      pressed,
+      stop() {
+        input.off('data', onData)
+        guard.restore()
+        input.pause?.()
+      },
+    }
+  }
+
   /** The run stopped: one plain sentence, and the exit code. */
   function fatal(error) {
     const running = tasks.at(-1)
@@ -731,6 +802,7 @@ export function createRichPrompt({ input, output, term, redactor, version = '', 
     text, choose, confirm, secret,
     section(name, i, n) { if (name !== lastSection) { pendingSection = { name, i, n }; lastSection = name } },
     note, task, during, probe, listener, intro, heading, review, planBox, details, signInBox, waitForApproval, outro, fatal,
+    outroHeadline, setupLinkBox, outroTail, qr, elsewhere, watchKeys,
     line,
     /** Steps (by id) whose start and ok rows are not shown until the review is answered. */
     quiet(ids) { for (const id of ids) quiet.add(id) },

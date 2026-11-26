@@ -27,7 +27,9 @@ function drive(cmd, steps, { cols = 100, rows = 40, env = {} } = {}) {
   const home = mkdtempSync(join(tmpdir(), 'sbx-pty-'))
   const spec = {
     cmd, cols, rows, cwd: home, timeout: 30, steps,
-    env: { ...Object.fromEntries(AGENTS.map(name => [name, null])), HOME: home, SLATEBOX_INSTALL_HOME: home, TERM: 'xterm-256color', LANG: 'en_US.UTF-8', ...env },
+    // A desktop session whatever runs the tests (an SSH session on a build box included): the
+    // browser question is asked. test/browser.test.mjs holds the no-browser cases.
+    env: { ...Object.fromEntries([...AGENTS, 'SSH_CONNECTION', 'SSH_TTY', 'SSH_CLIENT'].map(name => [name, null])), DISPLAY: ':0', HOME: home, SLATEBOX_INSTALL_HOME: home, TERM: 'xterm-256color', LANG: 'en_US.UTF-8', ...env },
   }
   const result = spawnSync(PYTHON, [DRIVE], { input: JSON.stringify(spec), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
   assert.equal(result.status, 0, result.stderr)
@@ -88,6 +90,10 @@ test('pty: the whole local install with a team address against the stand-ins (Do
     { wait: 'usual settings' }, { send: '\r' },
     { wait: 'Change a section' }, { sleep: 50 }, { send: '\r' },
     { wait: 'Open it in your browser' }, { send: 'n' },
+    // 0.3.1: the first admin. Keep the link, then Enter ends the wait for it.
+    { wait: 'Create the admin account now' }, { send: DOWN }, { sleep: 50 }, { send: '\r' },
+    { wait: 'Open it in your browser' }, { send: 'n' },
+    { wait: 'Enter stops waiting' }, { sleep: 50 }, { send: '\r' },
     { wait: 'Next' },
   ])
   assert.equal(run.failedStep, null, run.text.slice(-2500))
@@ -96,6 +102,8 @@ test('pty: the whole local install with a team address against the stand-ins (Do
   assert.match(run.text, /✦ Slatebox is running at https:\/\/support-team\.slatebox\.team/)
   // The setup link, whole, on one line.
   assert.match(run.text, /https:\/\/box\.example\/setup\/SetupToken\S{20,}/)
+  // The link kept: Enter ended the wait, and the terminal is back to normal.
+  assert.match(run.text, /Stopped waiting\. The setup link works for 24 hours\./)
   assert.ok(run.icanon && run.echo)
 })
 

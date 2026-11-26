@@ -167,7 +167,8 @@ test('3: --team-address acme --yes at a terminal asks no question: defaults for 
   const opened = []
   const { go, home, cloud } = fresh()
   // Nothing typed: any question would read end-of-input and cancel (exit 7).
-  const result = await go(['install', '--team-address', 'acme', '--yes'], { tty: true, input: '', openBrowser: url => opened.push(url) })
+  // A Linux desktop (a display): the page is opened. Without one, see test/browser.test.mjs.
+  const result = await go(['install', '--team-address', 'acme', '--yes'], { tty: true, input: '', env: { DISPLAY: ':0' }, openBrowser: url => opened.push(url) })
   assert.equal(result.code, 0, result.stderr)
   assert.doesNotMatch(result.stderr, /^\? /m, 'no question was asked')
   assert.deepEqual(opened, [`${cloud.base}/device?code=WDJB-MJHT`])

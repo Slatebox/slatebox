@@ -36,6 +36,6 @@ const fetch = async (url, init) => {
 process.exitCode = await main(process.argv.slice(2), {
   env: { ...process.env, SLATEBOX_CLOUD_URL: cloud.base },
   run, fetch, platform: process.env.SBX_FAKE_PLATFORM || 'linux',
-  sleep: async () => { if (delay) await wait(delay) }, deviceLabel: 'test-box', openBrowser: () => {},
+  sleep: async () => { if (delay) await wait(delay) }, deviceLabel: 'test-box', openBrowser: () => {}, inContainer: () => false,
   teamHealthDelay: 1, teamHealthAttempts: 3, healthPoll: 10, statfs: () => ({ bavail: 212e9 / 4096, bsize: 4096 }),
 })

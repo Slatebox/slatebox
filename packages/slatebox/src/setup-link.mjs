@@ -42,6 +42,9 @@ export async function makeSetupLink(ctx, exec) {
  * needed (ctx.setupLink = { pending: true }). Images without setup links are left alone.
  */
 export async function firstAdmin(ctx, exec) {
+  // Kept for the installer's first-admin step (admin-setup.mjs): it asks the image whether the
+  // admin exists yet while the person uses the link.
+  ctx.setupExec = exec
   const state = await setupState(exec)
   if (!state) return false
   if (state.setUp) return true

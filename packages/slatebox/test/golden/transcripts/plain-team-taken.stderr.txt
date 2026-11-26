@@ -16,3 +16,4 @@ Sign in to Slatebox to claim a team address.
   (The code expires in 10 minutes.)
 ? Open it in your browser now? [Y/n]: ... waiting for approval
   https://box.example/setup/SetupToken0123456789abcdefghijklmnopqrst000   (printed to this terminal only)
+? Create the admin account here in the terminal now? [Y/n]: 

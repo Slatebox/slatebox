@@ -24,6 +24,7 @@ import { applyDocker, backupDocker, defaultLocalPort, machineCheck, preflightTar
 import { exportFiles } from './targets/export.mjs'
 import { applyK8s, backupK8s, execNodeK8s, preflightCluster, readSecretK8s, restoreK8s, setupLinkK8s, statusK8s, uninstallK8s } from './targets/k8s.mjs'
 import { setupLines } from './setup-link.mjs'
+import { offersFirstAdmin, plainFirstAdmin, richFirstAdmin } from './admin-setup.mjs'
 import { resolveUi } from './ui/mode.mjs'
 import { exportTeamFile, importTeamFile, inviteMovedPeople, moveTeam } from './move.mjs'
 import { parse as parseYaml } from './yaml.mjs'
@@ -131,6 +132,8 @@ Global: --yes (after a person approved the plan; asks nothing, takes the default
         --agent auto|yes|no  --debug  --health-timeout <seconds> (default 600)
         --plain (line-by-line questions instead of the wizard; for screen readers and
         simple terminals; also SLATEBOX_PLAIN=1, TERM=dumb, CI, or under 60 columns)
+        --qr (with --plain: a QR code beside a link to open on another device, as the
+        wizard shows when no browser can open here, such as over SSH)
 
 Exit codes: 0 done or nothing to change; 2 bad flags or answers; 3 an answer or a
 confirmation is needed and nobody can be asked; 4 a precondition failed;
@@ -155,7 +158,7 @@ function parse(argv) {
     'cloud-url': { type: 'string' }, 'keep-address': { type: 'boolean' }, follow: { type: 'boolean', short: 'f' },
     service: { type: 'string' }, since: { type: 'string' },
     from: { type: 'string' }, out: { type: 'string' }, invite: { type: 'boolean' }, 'keep-archive': { type: 'boolean' },
-    passphrase: { type: 'string' }, plain: { type: 'boolean' }, 'replace-waiting': { type: 'boolean' }, 'delete-archive': { type: 'boolean' }, email: { type: 'string' },
+    passphrase: { type: 'string' }, plain: { type: 'boolean' }, qr: { type: 'boolean' }, 'replace-waiting': { type: 'boolean' }, 'delete-archive': { type: 'boolean' }, email: { type: 'string' },
   }
   for (const [flag, type] of Object.entries(ANSWER_FLAGS)) {
     options[flag] = type === 'multiple' ? { type: 'string', multiple: true } : { type }
@@ -288,9 +291,9 @@ export async function main(argv, io = {}) {
     home: slateboxHome(io.env, flags.home), redactor, out, run: io.run || makeRunner(out), fetch: io.fetch || globalThis.fetch,
     interactive, tty, agentMode, json, yes: Boolean(flags.yes), healthTimeout: Number(flags['health-timeout'] || 600),
     cliFlags: parsed.values, platform: io.platform, cwd: io.cwd,
-    openBrowser: io.openBrowser, sleep: io.sleep, deviceLabel: io.deviceLabel, spawn: io.spawn,
+    openBrowser: io.openBrowser, inContainer: io.inContainer, sleep: io.sleep, deviceLabel: io.deviceLabel, spawn: io.spawn,
     teamHealthAttempts: io.teamHealthAttempts, teamHealthDelay: io.teamHealthDelay,
-    uid: io.uid, schedulerTimeout: io.schedulerTimeout, statfs: io.statfs, healthPoll: io.healthPoll,
+    uid: io.uid, schedulerTimeout: io.schedulerTimeout, statfs: io.statfs, healthPoll: io.healthPoll, adminPoll: io.adminPoll,
   }
   // The wizard in the terminal is for the install (and its plan); every other command, and every
   // run that is not rich (src/ui/mode.mjs), keeps the plain line prompts.
@@ -464,19 +467,24 @@ function useRich(ctx, io, ui) {
   }
 }
 
-/** The wizard's last screen: where it runs, the setup link, and what to do next. */
-function richClosing(ctx, done, extra = []) {
+/**
+ * The wizard's last screen: where it runs, then the first admin (created here, or the setup link
+ * kept and waited on: admin-setup.mjs), and what to do next.
+ */
+async function richClosing(ctx, done, extra = []) {
   const p = ctx.prompt
   const next = ['slatebox status', 'slatebox logs', 'slatebox ai add', 'slatebox upgrade']
   if (done.target === 'export') return p.outro({ headline: `Wrote ${done.files.length} files to ${done.dir}. Nothing was applied.`, lines: extra })
   const link = ctx.setupLink?.url ? ctx.setupLink : null
-  const pending = ctx.setupLink?.pending ? setupLines(ctx, done.name).filter(line => typeof line === 'string' && line) : null
   const lines = []
   if (done.teamAddress) lines.push(`On this computer it also answers at ${done.localAddress}.`, `Keep a copy of ${installDir(ctx.home, done.name)}/ (keys and the team-address credential).`)
   if (done.keyGenerated) lines.push({ warn: `Save ${done.secretsFile} in your password manager now. It holds the key that unlocks saved agent keys, and backups do not include it: without it, those keys cannot be read after a restore.` })
   lines.push(`Install record: ${done.installRecord}`, ...extra)
   const headline = done.nothingToChange ? `Nothing to change: ${done.name} is running at ${done.address}` : `Slatebox is running at ${done.address}`
-  p.outro({ headline, link, pending, lines, next: done.name === 'slatebox' ? next : [...next.map(item => `${item} --name ${done.name}`)] })
+  p.outroHeadline(headline)
+  if (link) await richFirstAdmin(ctx, done)
+  const pending = ctx.setupLink?.pending ? setupLines(ctx, done.name).filter(line => typeof line === 'string' && line) : null
+  p.outroTail({ pending, lines, next: done.name === 'slatebox' ? next : [...next.map(item => `${item} --name ${done.name}`)] })
   return 0
 }
 
@@ -584,8 +592,12 @@ async function dispatch(ctx, positionals, flags) {
         else if (!ctx.json) ctx.out.say(`Nothing was changed. To apply: slatebox install ${flags.answers ? `--answers ${flags.answers} ` : ''}... (the same answers)${ctx.interactive ? '' : ' --yes'}`)
         return 0
       }
-      if (ctx.rich) richClosing(ctx, done, flags.from === 'cloud' ? fromCloudLines(done) : [])
-      else finish(ctx, done, [...closing(ctx, done), ...(flags.from === 'cloud' ? fromCloudLines(done) : [])])
+      if (ctx.rich) await richClosing(ctx, done, flags.from === 'cloud' ? fromCloudLines(done) : [])
+      else {
+        finish(ctx, done, [...closing(ctx, done), ...(flags.from === 'cloud' ? fromCloudLines(done) : [])])
+        // A person at the terminal may create the first admin right here (one optional question).
+        if (offersFirstAdmin(ctx)) await plainFirstAdmin(ctx, done)
+      }
       if (flags['show-secrets'] && done.keyGenerated) await showSecretOnce(ctx, ctx.record, 'SLATEBOX_KEY_ENCRYPTION_KEY')
       return 0
     }

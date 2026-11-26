@@ -147,6 +147,8 @@ test('a whole install with the keys: arrows, defaults, a validation error, the r
       ['Admin email', ['tim@', KEY.left]], ['An email address, like you@example.com', [KEY.ctrlU, 'ops@example.com', KEY.enter]],
       ['Agents for drafts', KEY.enter], ['Single sign-on with', KEY.enter], ['usual settings', KEY.enter],
       [/Install +Change a section… +Cancel/, KEY.enter],
+      // 0.3.1: the first admin. Keep the link (shown below), then Enter ends the wait.
+      ['Create the admin account now', [KEY.down, KEY.enter]], ['Enter stops waiting', KEY.enter],
     ],
   })
   assert.equal(result.code, 0, result.text)
@@ -240,6 +242,7 @@ test('review: "Change a section" asks that section again and nothing else, then 
       [/Install +Change a section… +Cancel/, [KEY.right, KEY.enter]], ['Which section?', ['3', KEY.enter]],
       ['Admin email', ['second@example.com', KEY.enter]],
       [/Install +Change a section… +Cancel/, KEY.enter],
+      ['Create the admin account now', [KEY.down, KEY.enter]], ['Enter stops waiting', KEY.enter],
     ],
   })
   assert.equal(result.code, 0, result.text)

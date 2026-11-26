@@ -57,7 +57,9 @@ export const SCENARIOS = {
     const home = sandbox()
     const flags = ['--target', 'local', '--admin-email', 'ops@example.com', '--no-sso', '--size', 'small', '--image', IMAGE, '--ai', 'none', '--backups', 'off']
     const result = await cli(['install', ...flags], {
-      run: docker.run, home, fetch: cloud.fetch, tty: true, input: '1\nsupport\nacme\n\n\nn\n', platform: 'linux', env: { SLATEBOX_CLOUD_URL: cloud.base },
+      // A Linux desktop (DISPLAY set), so the browser question is asked; no answer is left for
+      // the first-admin question (0.3.1), which leaves the printed link as it is.
+      run: docker.run, home, fetch: cloud.fetch, tty: true, input: '1\nsupport\nacme\n\n\nn\n', platform: 'linux', env: { SLATEBOX_CLOUD_URL: cloud.base, DISPLAY: ':0' },
       io: { sleep: async () => {}, deviceLabel: 'test-box', openBrowser: () => {}, teamHealthDelay: 1, teamHealthAttempts: 3, statfs: () => lots },
     })
     return { result, home }

@@ -13,6 +13,34 @@ release's highlights.
 
 ## [Unreleased]
 
+### Added
+
+- **installer:** after "Slatebox is running", the wizard continues with the first admin:
+  **Create the admin account now** (recommended) asks name, email (the admin email given
+  earlier), team name and the password twice (hidden, with a strength check) and sends them to
+  the server's own one-time setup endpoint (`POST /setup/<token>`, the form the setup link
+  opens; no new server path), over this computer's port or the link's address. The link is
+  single use and stops working once the admin exists. **I'll use the setup link** shows the
+  link with a QR code and waits up to 10 minutes (polling the setup state) for the admin to be
+  created; Enter stops waiting and keeps the link. With single sign-on only, the link is kept.
+- **installer:** plain prompts (`--plain` and friends) ask one optional question after the
+  closing lines, only at a terminal: "Create the admin account here in the terminal now?".
+  `--yes` and `--json` are unchanged (no question; the JSON events are the same).
+- **installer:** where no browser can open (an SSH session, Linux with no `DISPLAY` or
+  `WAYLAND_DISPLAY`, a container, CI) the device sign-in and the setup link are not offered to a
+  browser: "No browser here (this is an SSH session). Open this on any device:" with the link
+  (an OSC 8 link where the terminal supports one) and, in the wizard, a QR code (half blocks,
+  black on white; ASCII without Unicode). An opener that is missing, exits non-zero or errors
+  says so and shows the same. `--plain --qr` adds the QR code to plain output.
+- **installer:** the QR encoder is vendored (uqr 0.1.3, MIT, pure JavaScript) in
+  `src/vendor/qrcode.mjs`; the package still has two dependencies.
+
+### Changed
+
+- **installer:** golden transcript `plain-team-taken.stderr.txt` gains one line, the optional
+  first-admin question (no answer left in that scenario, so the printed link stays as it is).
+  The scenario sets `DISPLAY` (a Linux desktop), so its browser question is asked as before.
+
 ## [0.3.0] - 2026-11-25
 
 ### Added

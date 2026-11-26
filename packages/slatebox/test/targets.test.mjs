@@ -254,7 +254,7 @@ test('wizard, Kubernetes with a team address: the second review has no "Change a
   const home = sandbox()
   const reviews = []
   const result = await richCli(['install', 'k8s', '--team-address', 'acme', '--ai', 'none', '--admin-email', 'ops@example.com', '--namespace', 'boards', '--no-sso', '--backups', 'off', '--size', 'small', '--mail-url-from', 'env:SMTP_URL'], {
-    run: kube.run, fetch: cloud.fetch, home, env: { SLATEBOX_CLOUD_URL: cloud.base, SMTP_URL: 'smtp://u:p@h:587' },
+    run: kube.run, fetch: cloud.fetch, home, env: { SLATEBOX_CLOUD_URL: cloud.base, SMTP_URL: 'smtp://u:p@h:587', DISPLAY: ':0' },
     io: { sleep: async () => {}, deviceLabel: 'test-box', openBrowser: () => {} },
     script: [
       [/◆ {2}.*Sign in and claim.*Cancel/, () => { reviews.push('claim'); return ['1', KEY.enter] }],
