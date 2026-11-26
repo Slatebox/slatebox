@@ -60,6 +60,8 @@ export function localHost(ctx, { dir, name }) {
     where: 'this computer',
     dir,
     name,
+    // Is a port free on this computer? (tests stand in for the real bind with ctx.portFree)
+    portFree: port => (ctx.portFree ?? portFree)(port),
     docker,
     async readFile(path) {
       return existsSync(path) ? readFileSync(path, 'utf8') : null

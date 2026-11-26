@@ -296,7 +296,7 @@ export async function main(argv, io = {}) {
     cliFlags: parsed.values, platform: io.platform, cwd: io.cwd,
     openBrowser: io.openBrowser, inContainer: io.inContainer, sleep: io.sleep, deviceLabel: io.deviceLabel, spawn: io.spawn,
     teamHealthAttempts: io.teamHealthAttempts, teamHealthDelay: io.teamHealthDelay,
-    uid: io.uid, schedulerTimeout: io.schedulerTimeout, statfs: io.statfs, localPort: io.localPort, healthPoll: io.healthPoll, adminPoll: io.adminPoll,
+    uid: io.uid, schedulerTimeout: io.schedulerTimeout, statfs: io.statfs, localPort: io.localPort, portFree: io.portFree, healthPoll: io.healthPoll, adminPoll: io.adminPoll,
   }
   // The wizard in the terminal is for the install (and its plan); every other command, and every
   // run that is not rich (src/ui/mode.mjs), keeps the plain line prompts.

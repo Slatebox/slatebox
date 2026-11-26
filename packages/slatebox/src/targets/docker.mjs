@@ -168,7 +168,7 @@ export async function machineCheck(ctx) {
     const facts = await preflightLocal(ctx, localHost(ctx, { dir: installDir(ctx.home, 'slatebox'), name: 'slatebox' }), probe)
     if (probe && ctx.freePort) {
       const chosen = ctx.freePort
-      await probe('Port', async () => ({ port: chosen, free: await portFree(chosen) }), {
+      await probe('Port', async () => ({ port: chosen, free: await (ctx.portFree ?? portFree)(chosen) }), {
         done: ({ port, free }) => (!free ? `${port} is taken (choose another with --port)` : port === 7070 || ctx.portGiven ? `${port} is free` : `7070 is taken; ${port} is free`),
       })
     }
@@ -226,7 +226,7 @@ async function checkPorts(host, answers, facts, existing) {
   let taken
   if (host.kind === 'local') {
     taken = []
-    for (const port of publish) if (!(await portFree(port))) taken.push(port)
+    for (const port of publish) if (!(await (host.portFree ?? portFree)(port))) taken.push(port)
   } else {
     const listening = new Set((facts.listening || '').split(/\s+/).filter(Boolean).map(Number))
     taken = publish.filter(port => listening.has(port))
