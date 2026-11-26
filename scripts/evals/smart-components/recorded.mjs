@@ -36,7 +36,7 @@ export const GOOD_GRID = {
     { type: 'word-bank', label: 'Word bank', words: ['root', 'stem', 'leaf'] }],
   pages: [{ label: 'Page 1', tiles: [
     { type: 'heading', label: 'Parts of a plant', row: 1, col: 1, cols: 2 },
-    { type: 'image', label: 'A sunflower', alt: 'A sunflower with its parts labeled', row: 2, col: 1, rows: 2 },
+    { type: 'panel', label: 'A sunflower', body: 'Draw a sunflower and label its root, stem and leaf.', row: 2, col: 1, rows: 2 },
     { type: 'question', label: 'Roots', body: 'What do roots take in from the soil?', row: 2, col: 2 },
     { type: 'answer-lines', label: 'Your answer', body: '3', row: 3, col: 2 },
     { type: 'word-bank', label: 'Words to use', words: ['root', 'stem', 'leaf', 'flower'], row: 4, col: 1 },

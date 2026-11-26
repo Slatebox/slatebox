@@ -18,6 +18,7 @@
 // and the summary with fixtures, and never calls a model.
 import 'slateboxjs/workshops/behaviour'
 import { rulebook, validateWorkshop } from 'slateboxjs/workshops/model'
+import { gridCardText, gridPrintProblems } from 'slateboxjs/workshops/rules'
 import { surface as surfaceById } from '../../../web/app/server/ai-control/catalogue.mjs'
 import { buildSnapshot } from '../../../web/app/server/ai-control/snapshot.mjs'
 import { resolveModel } from '../../../web/app/server/ai-control/resolve.mjs'
@@ -32,7 +33,7 @@ Score how useful the board is for the person's request, from 1 to 5, by this fix
 2. Variety: every card is a distinct thing, not one phrase repeated with a changing number, letter or adjective.
 3. Sensible behavior: the lanes come in a sensible order, and the rules fit the request without blocking normal use (for example, a capacity on the lane finished cards go to stops the board once it fills).
 4. Use today: a real person would use this board today, with at most small edits.
-A grid sheet (a page of cells, a tray of tiles to drag onto it, printed): would a teacher or maker print this page today?
+A grid sheet (a page of cells, a tray of tiles to drag onto it, printed): would a teacher or maker print this page today? Judge it by its page as printed: the quoted words of each cell are exactly what prints there and nothing else (a tile's name does not print), where each sits in its cell is said, an empty picture frame prints as a gray box, and what the app warns would print badly is listed. Words that read like a name for the tile rather than the material, missing parts the material needs (a bingo card's letter row, a worksheet's questions), or empty frames are faults.
 
 5 = ready to use as it is. 4 = useful, needs small edits. 3 = the right idea, but needs real rework. 2 = mostly generic, or rules that get in the way. 1 = not useful: placeholders, the wrong domain, or nothing to work with.
 
@@ -54,15 +55,43 @@ export function boardText(workshop, rules = []) {
   ].join('\n')
 }
 
-/** A grid sheet as the judge reads it: its page and cells, the tray's tiles, each page's tiles by row and column, its rules. */
+/** How a tile of each kind sits in its cell when printed (tileLook, slateboxjs boards/grid). */
+const LOOK = {
+  heading: 'heading, large bold, centered', text: 'text block, left-aligned at the top of its cell', question: 'question, left-aligned at the top of its cell',
+  'answer-lines': 'answer lines under these words', 'word-bank': 'word bank, boxed and centered', image: 'picture', diagram: 'diagram',
+  qr: 'QR code', panel: 'framed panel, words at its foot', speech: 'speech bubble, centered', term: 'term, centered', sticker: 'sticker badge, centered',
+}
+
+/**
+ * A grid sheet as the judge reads it: its page and cells; each page as it prints, cell by cell, with the words that
+ * print there (gridCardText: never a tile's name over its words) and how they sit; the cells left empty; what would
+ * print badly (gridPrintProblems); the tray's tiles as they would print; its rules.
+ */
 function gridText(workshop, rules) {
   const { page, cells } = workshop.grid
-  const tileWords = (card) => `${card.label} (${card.tile.type}${card.tile.body ? ': ' + card.tile.body.replace(/\s+/g, ' ') : ''}${card.tile.words ? ': ' + card.tile.words.join(', ') : ''}${card.tile.image ? '; picture: ' + card.tile.image.alt : ''})`
+  const tray = workshop.cards.filter((card) => card.laneId === workshop.lanes[0].id)
+  const quoted = (text) => JSON.stringify(String(text).replace(/\s*\n\s*/g, ' / '))
+  const printed = (card) => {
+    const tile = card.tile
+    if ((tile.type === 'image' || tile.type === 'diagram') && !tile.image?.src) return `${LOOK[tile.type]} with no picture: an empty gray dashed frame with the words ${quoted(gridCardText(workshop, card))}`
+    if (tile.type === 'qr') return tile.link ? `QR code for ${tile.link}, captioned ${quoted(card.label)}` : `a QR code with no web address: an empty frame`
+    if (tile.type === 'answer-lines') return `${Number.parseInt(tile.body ?? '', 10) || 3} answer lines under ${quoted(card.label)}`
+    const words = gridCardText(workshop, card)
+    return `${LOOK[tile.type]}${tile.image?.src ? ', with a picture' : ''}: ${words ? quoted(words) : 'no words'}`
+  }
+  const where = (cell) => `row ${cell.row + 1}, ${cell.cols > 1 ? `columns ${cell.col + 1}–${cell.col + cell.cols}` : `column ${cell.col + 1}`}${cell.rows > 1 ? ` (${cell.rows} rows tall)` : ''}`
+  const pageLines = workshop.lanes.slice(1).map((lane) => {
+    const here = workshop.cards.filter((card) => card.laneId === lane.id && card.cell).sort((a, b) => a.cell.row - b.cell.row || a.cell.col - b.cell.col)
+    const used = here.reduce((n, card) => n + (card.cell.rows ?? 1) * (card.cell.cols ?? 1), 0)
+    return [`${lane.label} as printed (${used} of ${cells.rows * cells.cols} cells filled):`, ...(here.length ? here.map((card) => `  ${where(card.cell)}: ${printed(card)}`) : ['  empty'])].join('\n')
+  })
+  const problems = gridPrintProblems(workshop)
   return [
     `Title: ${workshop.title}`,
     `A grid sheet: ${page.size === 'a4' ? 'A4' : 'Letter'} ${page.orientation}, ${cells.rows} rows by ${cells.cols} columns of cells`,
-    `Tray (${workshop.cards.filter((card) => card.laneId === workshop.lanes[0].id).length} tiles to drag): ${workshop.cards.filter((card) => card.laneId === workshop.lanes[0].id).map(tileWords).join('; ')}`,
-    ...workshop.lanes.slice(1).map((lane) => `${lane.label}: ${workshop.cards.filter((card) => card.laneId === lane.id).map((card) => `row ${card.cell.row + 1}, column ${card.cell.col + 1}${card.cell.rows || card.cell.cols ? ` (${card.cell.rows ?? 1} by ${card.cell.cols ?? 1})` : ''}: ${tileWords(card)}`).join('; ') || 'empty'}`),
+    ...pageLines,
+    `Printing warns: ${problems.length ? problems.join(' ') : 'nothing'}`,
+    `Tray (${tray.length} tiles to drag), as each would print: ${tray.map(printed).join('; ')}`,
     `Rules: ${rules.length ? rules.join(' ') : 'none'}`,
   ].join('\n')
 }
@@ -152,6 +181,15 @@ export const CALIBRATION = Object.freeze([
       cards: [{ id: 'q', label: 'Question', laneId: 'tray', tile: { type: 'question', stamp: true } },
         ...[1, 2, 3, 4, 5, 6].map((n, i) => ({ id: 'q' + n, label: 'Question ' + n, laneId: 'page-1', tile: { type: 'question' }, cell: { row: i, col: 0 } }))],
       behaviour: { version: 1, rev: 1, rules: [rule({ id: 'max-q', kind: 'tileMax', type: 'question', max: 6, per: 'page' })] } } },
+  // A page that is mostly picture frames with no picture: it prints as gray boxes. Only the page as printed shows it.
+  { id: 'grid-empty-frames', prompt: OWNER, why: 'most of the printed page is empty gray frames', max: 2,
+    board: { version: 1, kind: 'grid', title: 'Plant parts', grid: { page: { size: 'letter', orientation: 'portrait', margin: 0.5 }, cells: { rows: 4, cols: 2, gutter: 0.125 } },
+      lanes: [{ id: 'tray', label: 'Tiles' }, { id: 'page-1', label: 'Page 1' }],
+      cards: [{ id: 'p', label: 'Picture', laneId: 'tray', tile: { type: 'image', stamp: true, image: { alt: 'A plant part' } } },
+        { id: 'h', label: 'Plant parts', laneId: 'page-1', tile: { type: 'heading', body: 'Parts of a plant' }, cell: { row: 0, col: 0, cols: 2 } },
+        ...[['Root', 'The roots of a carrot'], ['Stem', 'A sunflower stem'], ['Leaf', 'An oak leaf'], ['Flower', 'A daisy'], ['Seed', 'A bean seed'], ['Fruit', 'An apple cut in half']]
+          .map(([label, alt], i) => ({ id: 'f' + i, label, laneId: 'page-1', tile: { type: 'image', image: { alt } }, cell: { row: 1 + Math.floor(i / 2), col: i % 2 } }))],
+      behaviour: { version: 1, rev: 1, rules: [rule({ id: 'max-h', kind: 'tileMax', type: 'heading', max: 1, per: 'page' })] } } },
 ])
 
 /** The controls as boards the judge reads: validated, with the rulebook's sentences. → [{ id, prompt, why, max, workshop, rules }] */

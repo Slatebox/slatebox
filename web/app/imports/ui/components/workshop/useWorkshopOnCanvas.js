@@ -538,10 +538,12 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
     // The box of what the canvas shows: the workshop, or a proposal that may have more lanes.
     // On a phone the toolbar's own floating buttons sit over the top of the canvas; the board starts below them.
     // The board's title row and legend (and, in focus, its frame) are part of what is fitted (board.frame).
-    const bounds = () => {
+    // `zoom`: the zoom it is about to be shown at. Zoomed out the title row and legend are drawn larger and reach further
+    // above the board (board.frameAt); fitted to their size at 100% a tall board's title ends up under the toolbar.
+    const bounds = zoom => {
       const { width: w, height: h } = kit ? board.bounds : workshopLanePlaces(shown.current ?? board.value, { layout: board.layout })
       const clear = measure() < 600 ? 52 : 0
-      const chrome = board.frame ?? board.bounds
+      const chrome = (zoom && board.frameAt?.(zoom)) || board.frame || board.bounds
       const left = Math.min(board.origin.x, chrome.x), top = Math.min(board.origin.y, chrome.y) - clear
       const right = Math.max(board.origin.x + w, chrome.x + chrome.width), bottom = Math.max(board.origin.y + h, chrome.y + chrome.height)
       return { x: left, y: top, width: right - left, height: bottom - top }
@@ -553,8 +555,8 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
         box.x + box.width <= seen.x + seen.width + 1 && box.y + box.height <= seen.y + seen.height + 1
     }
     // The workshop together with the notes the slate holds beside it.
-    const everything = () => {
-      const box = bounds()
+    const everything = zoom => {
+      const box = bounds(zoom)
       let left = box.x, top = box.y, right = box.x + box.width, bottom = box.y + box.height
       for (const { options: note } of engine.freeNodes()) {
         if (![note.x, note.y].every(Number.isFinite)) continue
@@ -572,15 +574,24 @@ export default function useWorkshopOnCanvas({ engine, shareId, enabled, embedded
       if (live.current !== board) return
       // A phone shows the board at its full width: in focus its frame (8 outside it) takes 8 of the margin, so the board
       // is shown at the size it always was and its grips stay a finger's size.
-      if (measure() < 600) engine.fitToWidth(bounds(), only && focusRef.current ? 16 : 24, 1)
-      else {
+      if (measure() < 600) {
+        const pad = only && focusRef.current ? 16 : 24
+        // fitToWidth's zoom (its padding is in world units): never past 100%; the chrome at that zoom is fitted.
+        const zoomFor = box => Math.min(1, element.clientWidth / (box.width + pad * 2))
+        engine.fitToWidth(bounds(zoomFor(bounds(zoomFor(bounds())))), pad, 1)
+      } else {
         // A wide canvas shows all of it, in the middle of what a person can see: the canvas is
         // the area beside an open conversation and below the toolbar, less the row at its foot
         // that the zoom control (and a cookie notice not yet answered) lies over. Never past 100%.
-        const box = only ? bounds() : everything()
         const w = element.clientWidth, h = element.clientHeight
         // A board in focus has room round its frame: its neighbours show, dimmed, at the edges.
         const room = only ? Math.min(120, Math.max(margin, Math.floor(Math.min(w, h) / 10))) : margin
+        // The box at the zoom it will be shown at: the chrome grows as the zoom falls, which lowers the zoom a little
+        // more; two rounds settle it (chromeScaleAt moves in steps of 0.05).
+        const boxAt = zoom => only ? bounds(zoom) : everything(zoom)
+        const zoomOf = (box, foot) => Math.min(1, (w - room * 2) / box.width, (h - room * 2 - foot) / box.height)
+        let box = boxAt()
+        for (let i = 0; i < 2; i++) box = boxAt(zoomOf(box, 28))
         // The canvas-shaped region that has the board in the middle of what is left above `foot`.
         const place = foot => {
           const scale = Math.min(1, (w - room * 2) / box.width, (h - room * 2 - foot) / box.height)

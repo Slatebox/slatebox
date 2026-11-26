@@ -5,17 +5,23 @@
 //   - every tile is a note exactly at its cell's box on the page (measured on the page, as it is drawn);
 //   - a stamp dragged onto a free cell leaves a copy there and stays in the tray; one dragged onto a taken cell, with no
 //     free cell beside it, goes back, and nothing overlaps;
-//   - "make it 3 columns" in chat, kept, reflows the page;
-//   - Print: the print frame holds one SVG a page at 8.5in × 11in;
-//   - Export PDF: the download reads back (pdf-lib) as Letter pages, 612 × 792 points.
+//   - each tile on the page shows its own words, never its name over them (the page as it prints);
+//   - the board's title row is on screen, clear of the toolbar and of Print / Export PDF;
+//   - "make it N columns" in chat, N a count the page does not have (the one the reply suggests), kept, reflows the
+//     page: the caption and the cell guides say N columns, every tile moved to a cell of the new grid, none overlap;
+//   - Print: the print frame holds one SVG a page at 8.5in × 11in, with no "Print anyway?" (an empty frame) asked;
+//   - Export PDF: the download reads back (pdf-lib) as Letter pages, 612 × 792 points;
+//   - Present: Print / Export PDF is not shown while the slate is presented.
 // A fresh browser context for each run (no cookies, no stored login): a new account, made over DDP (the agent drafts),
-// and a guest (the starter from the words). Screenshots of each step go to --shots. Exit 1 on any failed step.
+// and a guest (the starter from the words). Then a phone (iPhone 13, touch): the sheet kept, Print docked under the
+// canvas covering nothing, a stamp dragged onto a free cell by touch. And a board of lanes (a kanban) on the same
+// build: its title on screen, no print control. Screenshots of each step go to --shots. Exit 1 on any failed step.
 //
 //   node scripts/evals/smart-components/grid-e2e.mjs --origin http://127.0.0.1:3780 --shots <dir>
 import { mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
-import { chromium } from 'playwright'
+import { chromium, devices } from 'playwright'
 import { createRequire } from 'node:module'
 import { DDP } from './ddp.mjs'
 
@@ -73,6 +79,68 @@ function cellsOf(view) {
   return { rows, cols, cell, span }
 }
 
+/** The tiles on page 1 as cells of the grid: each at a cell's corner and the size of a span of cells, or an error. */
+function placedOf(view, grid, tol = 1.5) {
+  const placed = []
+  for (const card of view.cards.filter((item) => inside(item.box, view.page))) {
+    const fit = []
+    for (let r = 0; r < grid.rows; r++) for (let c = 0; c < grid.cols; c++) {
+      const a = grid.cell(r, c)
+      if (Math.abs(a.x - card.box.x) <= tol && Math.abs(a.y - card.box.y) <= tol) fit.push([r, c])
+    }
+    if (!fit.length) throw new Error(`${card.id} is not at a cell's corner`)
+    const [r, c] = fit[0]
+    // The span whose box this tile is (1 by 1, or rows by columns with the gutters between them).
+    let found = null
+    for (let rows = 1; rows <= grid.rows - r && !found; rows++) for (let cols = 1; cols <= grid.cols - c && !found; cols++) {
+      const want = grid.span(r, c, rows, cols)
+      if (Math.abs(want.width - card.box.width) <= tol * 2 && Math.abs(want.height - card.box.height) <= tol * 2) found = { rows, cols }
+    }
+    if (!found) throw new Error(`${card.id} is not a cell's size`)
+    placed.push({ id: card.id, box: card.box, r, c, ...found })
+  }
+  return placed
+}
+/** Two tiles over one cell, or two boxes that cross (more than a pixel): the first such pair, else null. */
+function overlapOf(placed) {
+  const seen = new Map()
+  for (const t of placed) for (let r = t.r; r < t.r + t.rows; r++) for (let c = t.c; c < t.c + t.cols; c++) {
+    const key = r + ':' + c
+    if (seen.has(key)) return [seen.get(key), t.id]
+    seen.set(key, t.id)
+  }
+  for (const a of placed) for (const b of placed) {
+    if (a.id >= b.id) continue
+    const w = Math.min(a.box.x + a.box.width, b.box.x + b.box.width) - Math.max(a.box.x, b.box.x)
+    const h = Math.min(a.box.y + a.box.height, b.box.y + b.box.height) - Math.max(a.box.y, b.box.y)
+    if (w > 1 && h > 1) return [a.id, b.id]
+  }
+  return null
+}
+const crosses = (a, b, pad = 0) => Boolean(a && b) && a.x < b.x + b.width + pad && b.x < a.x + a.width + pad && a.y < b.y + b.height + pad && b.y < a.y + a.height + pad
+
+/** The board model the page holds (its subscription), with what each tile's note shows: the page as it prints. */
+const modelAndWords = (page) => page.evaluate(() => {
+  const store = window.Meteor?.connection?._stores?.creativeSlateStates
+  const docs = store?._getCollection?.().find({}).fetch() ?? []
+  const model = docs.map((doc) => doc.model?.workshop ?? doc.model).find((m) => m?.kind === 'grid') ?? null
+  const words = {}
+  for (const el of document.querySelectorAll('#slateCanvas [data-node-id^="card-"]')) words[el.getAttribute('data-node-id').slice(5)] = [...el.querySelectorAll('text, tspan')].filter((t) => !t.querySelector('tspan')).map((t) => t.textContent).join(' ').replace(/\s+/g, ' ').trim()
+  return { model, words }
+})
+const plain = (text) => String(text ?? '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+
+/** The board's title row and legend as drawn (the chrome layer), and the toolbar's foot, on screen. */
+const chromeOf = (page) => page.evaluate(() => {
+  const box = (el) => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height } }
+  const title = document.querySelector('[data-board-layer="board-title"]')
+  const legend = [...document.querySelectorAll('[data-board-layer="legend"], [data-board-layer="legend-box"]')].map(box)
+  const canvas = document.querySelector('#slateCanvas')?.getBoundingClientRect()
+  const bar = document.querySelector('header, .MuiAppBar-root')?.getBoundingClientRect()
+  const control = document.querySelector('[data-grid-print-control]')
+  return { title: title && box(title), titleText: title?.textContent ?? null, legend, canvasTop: canvas?.top ?? 0, barBottom: bar?.bottom ?? 0, control: control && box(control) }
+})
+
 async function run(name, login) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true })
   if (login) await context.addInitScript(({ token, userId }) => {
@@ -122,26 +190,28 @@ async function run(name, login) {
     let grid = cellsOf(view)
     const tol = 1.5
     const onPage = view.cards.filter((card) => inside(card.box, view.page))
-    const placed = []
-    for (const card of onPage) {
-      const fit = []
-      for (let r = 0; r < grid.rows; r++) for (let c = 0; c < grid.cols; c++) {
-        const a = grid.cell(r, c)
-        if (Math.abs(a.x - card.box.x) <= tol && Math.abs(a.y - card.box.y) <= tol) fit.push([r, c])
-      }
-      if (!fit.length) throw new Error(`${card.id} is not at a cell's corner`)
-      const [r, c] = fit[0]
-      // The span whose box this tile is (1 by 1, or rows by columns with the gutters between them).
-      let found = null
-      for (let rows = 1; rows <= grid.rows - r && !found; rows++) for (let cols = 1; cols <= grid.cols - c && !found; cols++) {
-        const want = grid.span(r, c, rows, cols)
-        if (Math.abs(want.width - card.box.width) <= tol * 2 && Math.abs(want.height - card.box.height) <= tol * 2) found = { rows, cols }
-      }
-      if (!found) throw new Error(`${card.id} is not a cell's size`)
-      placed.push({ id: card.id, r, c, ...found })
-    }
+    const placed = placedOf(view, grid, tol)
     out.tilesAtCells = placed.length
     out.steps.push('tiles at cells')
+    // The page as it prints: each tile's note shows its own words; a name over them ("B Column Number Square" above
+    // "7") is not printed. Read against the board the page holds.
+    const { model, words } = await modelAndWords(page)
+    if (!model) throw new Error('the page holds no grid model to read the tiles against')
+    const named = model.cards.filter((card) => card.laneId !== model.lanes[0].id && card.tile?.body?.trim() && !['answer-lines', 'qr'].includes(card.tile.type)
+      && !plain(card.tile.body).includes(plain(card.label)) && plain(words[card.id]).includes(plain(card.label)))
+    out.namesPrinted = named.map((card) => card.label)
+    if (named.length) throw new Error('tiles show their names over their words: ' + out.namesPrinted.slice(0, 3).join(', '))
+    out.steps.push('tiles show their own words')
+    // The title row on screen: below the toolbar, inside the canvas, clear of Print / Export PDF and of its own chips.
+    const chrome = await chromeOf(page)
+    out.title = chrome.title
+    if (!chrome.title) throw new Error('no board title drawn')
+    if (chrome.title.y < Math.max(chrome.canvasTop, chrome.barBottom) - 1) throw new Error(`the board title is cut off under the toolbar (title top ${chrome.title.y}, canvas top ${chrome.canvasTop})`)
+    if (crosses(chrome.title, chrome.control)) throw new Error('Print / Export PDF covers the board title')
+    const chipOver = chrome.legend.find((chip) => crosses(chip, chrome.title, -1))
+    if (chipOver) throw new Error('a rule chip sits over the board title')
+    if (chrome.legend.some((chip) => crosses(chip, chrome.control))) throw new Error('Print / Export PDF covers a rule chip')
+    out.steps.push('title on screen and clear')
     const taken = (list) => { const set = new Set(); for (const t of list) for (let r = t.r; r < t.r + t.rows; r++) for (let c = t.c; c < t.c + t.cols; c++) set.add(r + ':' + c); return set }
     let held = taken(placed)
     const free = []
@@ -200,20 +270,37 @@ async function run(name, login) {
     }
     await shot(page, `${name}-4-refused`)
 
-    // "make it 3 columns": the chat's proposal, kept, reflows the page.
+    // "make it N columns", N a count the page does not have (the one the reply suggested): the chat's proposal, kept,
+    // reflows the page. The caption and the cell guides say N; every tile moved to a cell of the new grid; none overlap.
+    const fromCols = grid.cols
+    const suggested = /make it (\d+) columns/.exec(out.said ?? '')
+    const toCols = suggested ? Number(suggested[1]) : (fromCols === 3 ? 2 : 3)
+    if (toCols === fromCols) throw new Error(`the reply suggests ${toCols} columns, which the page already has`)
+    const beforeReflow = Object.fromEntries((await drawn(page)).cards.map((card) => [card.id, card.box]))
+    const tilesBefore = Object.keys(beforeReflow).length
     const ask = panel(page).getByRole('textbox', { name: 'Message Slatebox' })
-    await ask.fill('make it 3 columns')
+    await ask.fill(`make it ${toCols} columns`)
     await ask.press('Enter')
     await until('the reflow proposal', () => panel(page).getByRole('button', { name: 'Keep changes' }).isVisible(), 60000)
-    await shot(page, `${name}-5-three-columns-preview`)
+    await shot(page, `${name}-5-columns-preview`)
     await panel(page).getByRole('button', { name: 'Keep changes' }).click()
-    await until('three columns', async () => /×\s*3\b/.test((await drawn(page)).caption), 30000)
+    await until(`${toCols} columns`, async () => cellsOf(await drawn(page)).cols === toCols, 30000)
     await page.waitForTimeout(1200)
     view = await drawn(page)
     grid = cellsOf(view)
     out.caption = view.caption
-    out.steps.push('3 columns')
-    await shot(page, `${name}-6-three-columns`)
+    out.reflow = { from: fromCols, to: grid.cols }
+    if (grid.cols !== toCols || grid.cols === fromCols) throw new Error(`the page has ${grid.cols} columns after "make it ${toCols} columns" (was ${fromCols})`)
+    // The guides are the new grid: N to a row, each row's first guide at the same x.
+    if (Math.abs(grid.cell(0, toCols - 1).y - grid.cell(0, 0).y) > tol || (grid.rows > 1 && Math.abs(grid.cell(1, 0).x - grid.cell(0, 0).x) > tol)) throw new Error('the cell guides are not drawn as the new grid')
+    const reflowed = placedOf(view, grid, tol)
+    const clash = overlapOf(reflowed)
+    if (clash) throw new Error('tiles overlap after the reflow: ' + clash.join(' and '))
+    if (view.cards.length !== tilesBefore) throw new Error(`the reflow lost or made tiles (${tilesBefore} → ${view.cards.length})`)
+    out.movedTiles = reflowed.filter((t) => { const was = beforeReflow[t.id]; return !was || Math.abs(was.x - t.box.x) > tol || Math.abs(was.width - t.box.width) > tol }).length
+    if (!out.movedTiles) throw new Error('no tile moved: the page did not reflow')
+    out.steps.push(`${fromCols} → ${toCols} columns`)
+    await shot(page, `${name}-6-columns`)
 
     // Print: one SVG a page at 8.5in × 11in in the print frame.
     await page.locator('[data-grid-print-control] [data-grid-print]').click()
@@ -227,6 +314,8 @@ async function run(name, login) {
         guides: frame.contentDocument.querySelectorAll('[data-export-never]').length, notes: svgs[0]?.querySelectorAll('[data-node-id]').length }
     })
     out.dialogs = [...dialogs]
+    // The page the words made prints as it is: no "has no picture yet … Print anyway?" (an empty gray frame) to answer.
+    if (dialogs.some((text) => /no picture yet|prints as an empty frame/.test(text))) throw new Error('printing asks about an empty picture frame: ' + dialogs.find((text) => /no picture/.test(text)))
     if (out.print.width !== '8.5in' || out.print.height !== '11in') throw new Error('the printed page is ' + out.print.width + ' × ' + out.print.height)
     if (out.print.guides) throw new Error('the cell guides were printed')
     out.steps.push('print 8.5in × 11in')
@@ -241,12 +330,171 @@ async function run(name, login) {
     if (Math.round(out.pdf.size.width) !== 612 || Math.round(out.pdf.size.height) !== 792) throw new Error('the PDF page is ' + JSON.stringify(out.pdf.size))
     out.steps.push('PDF 612 × 792')
     await shot(page, `${name}-8-pdf`)
+    // Present: the presenter covers the canvas; Print / Export PDF is not shown in it. Back on the canvas, it is.
+    await page.getByRole('button', { name: 'Present', exact: true }).first().click()
+    await until('the presenter', () => page.getByRole('button', { name: 'Exit presentation' }).first().isVisible(), 30000)
+    await page.waitForTimeout(800)
+    out.printInPresent = await page.locator('[data-grid-print-control]').isVisible().catch(() => false)
+    await shot(page, `${name}-9-present`)
+    if (out.printInPresent) throw new Error('Print / Export PDF shows while the slate is presented')
+    await page.keyboard.press('Escape')
+    await until('the canvas again', async () => !(await page.getByRole('button', { name: 'Exit presentation' }).first().isVisible().catch(() => false)), 15000)
+    await until('Print / Export PDF back on the canvas', () => page.locator('[data-grid-print-control]').isVisible(), 15000)
+    out.steps.push('no print control in Present')
     if (errors.length) throw new Error('page errors: ' + errors.slice(0, 2).join(' | '))
     out.ok = true
   } catch (error) {
     out.ok = false
     out.error = error.message
     await shot(page, `${name}-x-failed`).catch(() => {})
+  } finally {
+    out.errors = errors.slice(0, 5)
+    await context.close()
+  }
+  return out
+}
+
+/** A fresh guest context on /new#build: the words typed in Ask Slatebox, the preview kept, the panel closed. */
+async function keptAsGuest(context, message, name) {
+  const page = await context.newPage()
+  const errors = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  page.on('dialog', (dialog) => dialog.accept())
+  await page.goto(args.origin + '/new#build', { waitUntil: 'domcontentloaded', timeout: 120000 })
+  await page.waitForURL(/\/canvas\/[A-Za-z0-9]+$/, { timeout: 120000 })
+  await page.getByRole('button', { name: 'Got it' }).click({ timeout: 4000 }).catch(() => {})
+  if (!(await panel(page).isVisible().catch(() => false))) await page.locator('[data-conversation-toggle]').first().click()
+  await until('the Ask Slatebox panel', () => panel(page).isVisible())
+  const box = panel(page).getByRole('textbox', { name: 'Message Slatebox' })
+  await box.fill(message)
+  await box.press('Enter')
+  await until('the preview (Keep changes)', () => panel(page).getByRole('button', { name: 'Keep changes' }).isVisible(), 150000)
+  await panel(page).getByRole('button', { name: 'Keep changes' }).click()
+  await until('the kept board', async () => (await page.locator('#slateCanvas [data-board-layer="draft-tag"]').count()) === 0 && (await page.locator('[data-board-layer="board-title"]').count()) > 0, 60000)
+  // The panel closed (on a phone it lies over the canvas), and the board fitted again.
+  const close = panel(page).getByRole('button', { name: /close/i }).first()
+  if (await close.isVisible().catch(() => false)) await close.click()
+  await page.waitForTimeout(2500)
+  await shot(page, `${name}-1-kept`)
+  return { page, errors }
+}
+
+/** Every visible control on the page that is not inside `within`, with its box. */
+const controlsOf = (page, within) => page.evaluate((selector) => [...document.querySelectorAll('button, [role=button], a[href], input, textarea')]
+  .filter((el) => !el.closest(selector) && !el.closest('#slateCanvas'))
+  .map((el) => { const r = el.getBoundingClientRect(); return { label: (el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 40), x: r.x, y: r.y, width: r.width, height: r.height, shown: r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden' } })
+  .filter((item) => item.shown), within)
+
+/**
+ * A phone (iPhone 13, touch): the owner's words kept as a sheet; Print / Export PDF in a row of its own under the
+ * canvas, covering no control and no part of the canvas; the board's title on screen; a tile moved to a free cell by a
+ * touch drag, snapped there, nothing overlapping.
+ */
+async function phone() {
+  const context = await browser.newContext({ ...devices['iPhone 13'], acceptDownloads: true })
+  const out = { steps: [] }
+  let page = null, errors = []
+  try {
+    ;({ page, errors } = await keptAsGuest(context, args.message, 'phone'))
+    const control = page.locator('[data-grid-print-control]')
+    await until('Print / Export PDF', () => control.isVisible(), 15000)
+    out.docked = await control.getAttribute('data-docked') !== null
+    const box = await control.boundingBox()
+    const canvas = await page.locator('#slateCanvas').boundingBox()
+    out.control = box
+    if (!out.docked) throw new Error('Print / Export PDF floats over the canvas on a phone')
+    if (box.y < canvas.y + canvas.height - 1) throw new Error('Print / Export PDF lies over the canvas')
+    const covered = (await controlsOf(page, '[data-grid-print-control]')).filter((item) => crosses(item, box, -1))
+    if (covered.length) throw new Error('Print / Export PDF covers ' + covered.map((item) => item.label).join(', '))
+    if (box.x < 0 || box.x + box.width > page.viewportSize().width + 1) throw new Error('Print / Export PDF runs off the screen')
+    out.steps.push('print control docked, covering nothing')
+    const chrome = await chromeOf(page)
+    if (!chrome.title || chrome.title.y < Math.max(chrome.canvasTop, chrome.barBottom) - 1) throw new Error('the board title is cut off on a phone')
+    out.steps.push('title on screen')
+    // A touch drag: a 1 by 1 tile on the page moved onto a free cell (Chrome's touch events, as a finger sends them).
+    // The page is shown at the screen's width; a finger on empty canvas (left of the page) pans down to the free cell.
+    const cdp = await context.newCDPSession(page)
+    const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x: Math.round(x), y: Math.round(y) }] })
+    const swipe = async (a, b, steps = 16) => {
+      await touch('touchStart', a.x, a.y)
+      for (let i = 1; i <= steps; i++) { await touch('touchMove', a.x + (b.x - a.x) * i / steps, a.y + (b.y - a.y) * i / steps); await page.waitForTimeout(16) }
+      await page.waitForTimeout(150)
+      await touch('touchEnd', b.x, b.y)
+      await page.waitForTimeout(1500)
+    }
+    let view = await drawn(page)
+    let grid = cellsOf(view)
+    const freeOf = (list) => {
+      const held = new Set(list.flatMap((t) => { const keys = []; for (let r = t.r; r < t.r + t.rows; r++) for (let c = t.c; c < t.c + t.cols; c++) keys.push(r + ':' + c); return keys }))
+      const out = []
+      for (let r = 0; r < grid.rows; r++) for (let c = 0; c < grid.cols; c++) if (!held.has(r + ':' + c)) out.push([r, c])
+      return out
+    }
+    let placed = placedOf(view, grid)
+    let spot = freeOf(placed)[0]
+    if (!spot) throw new Error('page 1 has no free cell to drag to')
+    for (let i = 0; i < 4 && grid.cell(spot[0], spot[1]).y + grid.cell(spot[0], spot[1]).height > canvas.y + canvas.height - 8; i++) {
+      const need = Math.min(220, grid.cell(spot[0], spot[1]).y + grid.cell(spot[0], spot[1]).height - (canvas.y + canvas.height) + 24)
+      const x = Math.max(6, view.page.x / 2)
+      await swipe({ x, y: canvas.y + 120 + need }, { x, y: canvas.y + 120 })
+      view = await drawn(page)
+      grid = cellsOf(view)
+    }
+    await shot(page, 'phone-2-panned')
+    placed = placedOf(view, grid)
+    const screen = page.viewportSize()
+    const seen = (b) => b.y > canvas.y && b.y + b.height < Math.min(screen.height, canvas.y + canvas.height)
+    if (!seen(grid.cell(spot[0], spot[1]))) throw new Error('a touch pan did not bring the free cell on screen')
+    out.touchPan = true
+    const mover = placed.filter((t) => t.rows === 1 && t.cols === 1 && seen(t.box)).sort((a, b) => Math.hypot(a.r - spot[0], a.c - spot[1]) - Math.hypot(b.r - spot[0], b.c - spot[1]))[0]
+    if (!mover) throw new Error('no 1 by 1 tile on screen to drag')
+    const from = { x: mover.box.x + mover.box.width / 2, y: mover.box.y + mover.box.height / 2 }
+    const target = grid.cell(spot[0], spot[1])
+    await swipe(from, { x: target.x + target.width / 2, y: target.y + target.height / 2 }, 20)
+    view = await drawn(page)
+    const after = placedOf(view, cellsOf(view))
+    const moved = after.find((t) => t.id === mover.id)
+    out.touchDrag = { tile: mover.id, from: [mover.r, mover.c], to: moved && [moved.r, moved.c], want: spot }
+    if (!moved || moved.r !== spot[0] || moved.c !== spot[1]) throw new Error('the touch drag did not move the tile to the free cell: ' + JSON.stringify(out.touchDrag))
+    const clash = overlapOf(after)
+    if (clash) throw new Error('tiles overlap after the touch drag: ' + clash.join(' and '))
+    out.steps.push('touch drag snapped to a free cell')
+    await shot(page, 'phone-3-touch-dragged')
+    if (errors.length) throw new Error('page errors: ' + errors.slice(0, 2).join(' | '))
+    out.ok = true
+  } catch (error) {
+    out.ok = false
+    out.error = error.message
+    if (page) await shot(page, 'phone-x-failed').catch(() => {})
+  } finally {
+    out.errors = errors.slice(0, 5)
+    await context.close()
+  }
+  return out
+}
+
+/** A board of lanes on the same build (the fit, the chrome and the note drop it shares): its title on screen, no print control. */
+async function lanes() {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+  const out = { steps: [] }
+  let page = null, errors = []
+  try {
+    ;({ page, errors } = await keptAsGuest(context, "a kanban board for my team's weekly work", 'lanes'))
+    const chrome = await chromeOf(page)
+    out.title = chrome.titleText
+    if (!chrome.title || chrome.title.y < Math.max(chrome.canvasTop, chrome.barBottom) - 1) throw new Error('the lanes board title is cut off')
+    if (chrome.legend.some((chip) => crosses(chip, chrome.title, -1))) throw new Error('a rule chip sits over the lanes board title')
+    if (await page.locator('[data-grid-print-control]').count()) throw new Error('a lanes board shows Print / Export PDF')
+    const lanesDrawn = await page.locator('#slateCanvas [data-node-id^="lane-"]').count()
+    out.lanes = lanesDrawn
+    if (lanesDrawn < 2) throw new Error('the lanes are not drawn')
+    out.steps.push('lanes board drawn, title on screen, no print control')
+    if (errors.length) throw new Error('page errors: ' + errors.slice(0, 2).join(' | '))
+    out.ok = true
+  } catch (error) {
+    out.ok = false
+    out.error = error.message
+    if (page) await shot(page, 'lanes-x-failed').catch(() => {})
   } finally {
     out.errors = errors.slice(0, 5)
     await context.close()
@@ -263,6 +511,8 @@ if (!args.only || args.only === 'signed-in') {
   ddp.close()
 }
 if (!args.only || args.only === 'guest') report.guest = await run('guest', null)
+if (!args.only || args.only === 'phone') report.phone = await phone()
+if (!args.only || args.only === 'lanes') report.lanes = await lanes()
 await browser.close()
 console.log(JSON.stringify(report, null, 2))
 process.exit(Object.values(report).every((item) => item.ok) ? 0 : 1)

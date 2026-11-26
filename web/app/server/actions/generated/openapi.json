@@ -18670,7 +18670,7 @@
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 600,
-                            "description": "Its words: a text block’s text, a question’s question, how many answer lines. Line breaks are kept."
+                            "description": "Its words, which are all a page prints of it: a heading’s title, a text block’s text, a question’s question, a term and its meaning on two lines, how many answer lines. Line breaks are kept."
                           },
                           "image": {
                             "anyOf": [
@@ -21876,13 +21876,13 @@
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 80,
-                            "description": "What the tile is called (a heading’s words, a question’s name). Left out, its kind: “Heading”."
+                            "description": "What the tile is called in the tray and in chat (“Adding fractions”). It prints only on a tile with no words of its own. Left out, its kind: “Heading”."
                           },
                           "body": {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 600,
-                            "description": "Its words: a text block’s text, a question’s question, how many answer lines. Line breaks are kept."
+                            "description": "Its words, which are all a page prints of it: a heading’s title, a text block’s text, a question’s question, a term and its meaning on two lines, how many answer lines. Line breaks are kept."
                           },
                           "words": {
                             "type": "array",
@@ -22122,7 +22122,7 @@
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 600,
-                            "description": "Its words: a text block’s text, a question’s question, how many answer lines. Line breaks are kept."
+                            "description": "Its words, which are all a page prints of it: a heading’s title, a text block’s text, a question’s question, a term and its meaning on two lines, how many answer lines. Line breaks are kept."
                           },
                           "words": {
                             "type": "array",

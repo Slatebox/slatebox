@@ -292,6 +292,23 @@ test('the judge: one fixed rubric, the board as it reads, a score from 1 to 5 wi
   for (const bad of ['', 'Four out of five', '{"score": 6}', '{"score": 0, "reason": "x"}', '{"score": 3.5}', '{score: 4}']) assert.throws(() => parseJudgement(bad), undefined, bad)
 })
 
+test('the judge reads a grid sheet as it prints: each cell’s own words (never a tile’s name over them), where they sit, empty frames and print warnings', () => {
+  const set = { by: 'Slatebox agent', at: '2026-11-25T00:00:00.000Z', via: 'chat' }
+  // The live bingo draft's shape: every square named "B Column Number Square" with its number as its words.
+  const bingo = validateWorkshop({ version: 1, kind: 'grid', title: 'Bingo Night', grid: { page: { size: 'letter', orientation: 'portrait', margin: 0.5 }, cells: { rows: 6, cols: 5, gutter: 0.125 } },
+    lanes: [{ id: 'tray', label: 'Tiles' }, { id: 'page-1', label: 'Page 1' }],
+    cards: [{ id: 's', label: 'Number square', laneId: 'tray', tile: { type: 'term', stamp: true, body: '12' } },
+      { id: 'h', label: 'Bingo Night Title', laneId: 'page-1', tile: { type: 'heading', body: 'BINGO Night!' }, cell: { row: 0, col: 0, cols: 5 } },
+      { id: 'b1', label: 'B Column Number Square', laneId: 'page-1', tile: { type: 'term', body: '7' }, cell: { row: 1, col: 0 } },
+      { id: 'free', label: 'Free space', laneId: 'page-1', tile: { type: 'text', body: 'FREE' }, cell: { row: 3, col: 2 } }],
+    behaviour: { version: 1, rev: 1, rules: [{ id: 'r', kind: 'tileMax', type: 'heading', max: 1, per: 'page', on: true, severity: 'refuse', set }] } })
+  const text = boardText(bingo, rulebook().lines(bingo))
+  assert.match(text, /\nPage 1 as printed \(7 of 30 cells filled\):\n  row 1, columns 1–5: heading, large bold, centered: "BINGO Night!"\n  row 2, column 1: term, centered: "7"\n  row 4, column 3: text block, left-aligned at the top of its cell: "FREE"\n/)
+  assert.doesNotMatch(text, /B Column Number Square|Bingo Night Title/)
+  assert.match(text, /\nPrinting warns: nothing\n/)
+  assert.match(RUBRIC, /Judge it by its page as printed/)
+})
+
 test('the judge fails a run on a mean under 4, more than 10% at 2 or less, or boards it could not judge', () => {
   const of = (scores) => scores.map((score) => (typeof score === 'number' ? { score } : { error: 'x' }))
   const good = judgeSummary(of([5, 5, 4, 4, 4, 5, 4, 3, 5, 4]))
@@ -330,7 +347,7 @@ test('the judge asks the configured route, by its protocol, and never names a mo
 
 test('the judge is calibrated on every run: known-bad control boards, each expected at 2 or less', async () => {
   const cases = calibrationCases()
-  assert.deepEqual(cases.map((item) => item.id), ['counted-pieces', 'one-word', 'wrong-domain', 'capped-done', 'echoed-words', 'grid-numbered-questions'])
+  assert.deepEqual(cases.map((item) => item.id), ['counted-pieces', 'one-word', 'wrong-domain', 'capped-done', 'echoed-words', 'grid-numbered-questions', 'grid-empty-frames'])
   for (const item of cases) {
     assert.equal(item.max, 2, item.id)
     assert.ok(item.workshop.cards.length >= 5, item.id)
@@ -340,7 +357,9 @@ test('the judge is calibrated on every run: known-bad control boards, each expec
   // rule that gets in the way (Done holds 1).
   // A grid sheet is held to its own gate (gridQuality): numbered questions with no words are refused there too.
   const gated = Object.fromEntries(cases.map((item) => [item.id, (item.workshop.kind === 'grid' ? gridQuality : componentQuality)(item.workshop, { message: item.prompt }).length > 0]))
-  assert.deepEqual(gated, { 'counted-pieces': true, 'one-word': true, 'wrong-domain': false, 'capped-done': true, 'echoed-words': false, 'grid-numbered-questions': true })
+  assert.deepEqual(gated, { 'counted-pieces': true, 'one-word': true, 'wrong-domain': false, 'capped-done': true, 'echoed-words': false, 'grid-numbered-questions': true, 'grid-empty-frames': true })
+  assert.match(boardText(cases[6].workshop, cases[6].rules), /row 2, column 1: picture with no picture: an empty gray dashed frame with the words "The roots of a carrot"/)
+  assert.match(boardText(cases[6].workshop, cases[6].rules), /Printing warns: “Root” on Page 1 has no picture yet: it prints as an empty frame\./)
   assert.match(boardText(cases[5].workshop, cases[5].rules), /^Title: Worksheet\nA grid sheet: Letter portrait, 6 rows by 2 columns of cells\n/)
   assert.match(boardText(cases[3].workshop, cases[3].rules), /Done \(holds 1\)/)
   // Every control scored 2 or less: calibrated. One at 3, or one the judge could not score: the run fails.

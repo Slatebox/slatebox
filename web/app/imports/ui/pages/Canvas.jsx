@@ -1426,10 +1426,13 @@ export default function Canvas() {
             {workshopSlate && workshop.active && !phone &&
               <WorkshopStatus board={boards.find(board => board.error || board.saving || board.failure) ?? current} conversationOpen={conversationVisible} onReview={() => setNativeChatOpen(true)} />}
             {/* A grid sheet's Print / Export PDF: this page or all pages, as its notes are drawn (gridPrint.js). */}
-            {workshopSlate && !asEmbed && boards.filter(board => board.model?.kind === 'grid').slice(0, 1).map(board =>
+            {workshopSlate && !asEmbed && !phone && boards.filter(board => board.model?.kind === 'grid').slice(0, 1).map(board =>
               <GridPrintButton key={board.boardId} board={board} engine={slate.current?.v2} />)}
           </div>
           {/* On a phone the strip has a row of its own under the canvas, so it covers no card. */}
+          {/* On a phone Print / Export PDF has a row of its own under the canvas too. */}
+          {workshopSlate && !asEmbed && phone && boards.filter(board => board.model?.kind === 'grid').slice(0, 1).map(board =>
+            <GridPrintButton key={board.boardId} docked board={board} engine={slate.current?.v2} />)}
           {workshopSlate && workshop.active && phone &&
             <WorkshopStatus docked board={boards.find(board => board.error || board.saving || board.failure) ?? current} conversationOpen={conversationVisible} onReview={() => setNativeChatOpen(true)} />}
           {workshopSlate && current.ready && <WorkshopOutcomes workshop={current.visible} />}

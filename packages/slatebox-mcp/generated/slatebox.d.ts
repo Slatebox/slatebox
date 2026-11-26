@@ -3069,7 +3069,7 @@ interface WorkshopEditsPlan {
       source?: string;
       /** The kind of tile: heading, text, image, question, answer-lines, word-bank, diagram, qr, panel, speech, term, sticker. */
       type?: "heading" | "text" | "image" | "question" | "answer-lines" | "word-bank" | "diagram" | "qr" | "panel" | "speech" | "term" | "sticker";
-      /** Its words: a text block’s text, a question’s question, how many answer lines. Line breaks are kept. (1–600 characters) */
+      /** Its words, which are all a page prints of it: a heading’s title, a text block’s text, a question’s question, a term and its meaning on two lines, how many answer lines. Line breaks are kept. (1–600 characters) */
       body?: string;
       /** Grid sheet: the picture a note brought. */
       image?: {
@@ -3722,9 +3722,9 @@ interface WorkshopEditsPlan {
       kind: "add_tile";
       /** The kind of tile: heading, text, image, question, answer-lines, word-bank, diagram, qr, panel, speech, term, sticker. */
       type: "heading" | "text" | "image" | "question" | "answer-lines" | "word-bank" | "diagram" | "qr" | "panel" | "speech" | "term" | "sticker";
-      /** What the tile is called (a heading’s words, a question’s name). Left out, its kind: “Heading”. (1–80 characters) */
+      /** What the tile is called in the tray and in chat (“Adding fractions”). It prints only on a tile with no words of its own. Left out, its kind: “Heading”. (1–80 characters) */
       label?: string;
-      /** Its words: a text block’s text, a question’s question, how many answer lines. Line breaks are kept. (1–600 characters) */
+      /** Its words, which are all a page prints of it: a heading’s title, a text block’s text, a question’s question, a term and its meaning on two lines, how many answer lines. Line breaks are kept. (1–600 characters) */
       body?: string;
       /** A word bank’s words, 3 to 24. (3–24 items) */
       words?: string[];
@@ -3783,7 +3783,7 @@ interface WorkshopEditsPlan {
         /** (1–64 characters) */
         id: string;
       };
-      /** Its words: a text block’s text, a question’s question, how many answer lines. Line breaks are kept. (1–600 characters) */
+      /** Its words, which are all a page prints of it: a heading’s title, a text block’s text, a question’s question, a term and its meaning on two lines, how many answer lines. Line breaks are kept. (1–600 characters) */
       body?: string;
       /** A word bank’s words, 3 to 24. (3–24 items) */
       words?: string[];

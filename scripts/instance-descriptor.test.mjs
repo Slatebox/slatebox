@@ -183,8 +183,8 @@ test("with a token, GET /instance adds build, capabilities, limits, kinds, actio
   });
   assert.deepEqual(body.canvas, JSON.parse(JSON.stringify(describeOperations())));
   assert.deepEqual(body.workshops.edits, JSON.parse(JSON.stringify(describeWorkshopEdits())));
-  // Every kind the engine plays, the launch plan, sales pipeline and budget among them.
-  assert.deepEqual(body.workshops.boards, ["lanes", "release-plan", "customer-interviews", "experiment-budget", "map", "launch-plan", "pipeline", "budget", "hiring-plan", "nest"]);
+  // Every kind the engine plays, the launch plan, sales pipeline, budget and grid sheet among them.
+  assert.deepEqual(body.workshops.boards, ["lanes", "release-plan", "customer-interviews", "experiment-budget", "map", "launch-plan", "pipeline", "budget", "hiring-plan", "nest", "grid"]);
   // The action list is the registry's own routed list, so an instance never advertises a
   // route it does not serve.
   const routed = actions.filter((action) => action.mounts.http);

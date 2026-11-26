@@ -90,7 +90,7 @@ test('repairs put right only what is unambiguous, never inventing content', () =
   const ok = sheet()
   const draft = structuredClone(ok)
   draft.cards.push({ ...draft.cards[1], id: 'dup' })
-  draft.cards.find((card) => card.label === 'Clouds over a hill').tile.image.src = 'https://made.up/clouds.png'
+  draft.cards.find((card) => card.label === 'Picture').tile.image.src = 'https://made.up/clouds.png'
   draft.cards.push({ id: 'qr', label: 'Class site', laneId: 'tray', tile: { type: 'qr', link: 'https://invented.example/x' } })
   draft.cards.push({ id: 'wide', label: 'Wide picture', laneId: 'page-1', tile: { type: 'image', image: { alt: 'A wide picture' } }, cell: { row: 3, col: 1, cols: 3 } })
   draft.cards.push({ id: 'over', label: 'On the heading', laneId: 'page-1', tile: { type: 'text', body: 'Rain' }, cell: { row: 0, col: 0 } })
@@ -98,7 +98,7 @@ test('repairs put right only what is unambiguous, never inventing content', () =
   const { workshop, repairs } = repairGrid(draft, { message: OWNER })
   const read = validateWorkshop(workshop)
   assert.equal(read.cards.filter((card) => card.label === 'Fact').length, 1, 'the repeated tile is left out')
-  assert.equal(read.cards.find((card) => card.label === 'Clouds over a hill').tile.image.src, undefined, 'an invented picture address is taken away')
+  assert.equal(read.cards.find((card) => card.label === 'Picture').tile.image.src, undefined, 'an invented picture address is taken away')
   assert.ok(!read.cards.some((card) => card.tile.type === 'qr'), 'a QR code whose address was invented goes')
   assert.deepEqual(read.cards.find((card) => card.id === 'wide').cell, { row: 3, col: 1 }, 'a span is clamped to the page')
   assert.deepEqual([read.cards.find((card) => card.id === 'over').laneId, read.cards.find((card) => card.id === 'over').cell], ['tray', undefined], 'a tile over another goes to the tray')
@@ -106,8 +106,8 @@ test('repairs put right only what is unambiguous, never inventing content', () =
   assert.ok(repairs.length >= 6, repairs.join('; '))
   // A picture address the person gave is kept.
   const given = structuredClone(ok)
-  given.cards.find((card) => card.label === 'Clouds over a hill').tile.image.src = 'https://example.org/clouds.png'
-  assert.equal(repairGrid(given, { message: OWNER + ' https://example.org/clouds.png' }).workshop.cards.find((card) => card.label === 'Clouds over a hill').tile.image.src, 'https://example.org/clouds.png')
+  given.cards.find((card) => card.label === 'Picture').tile.image.src = 'https://example.org/clouds.png'
+  assert.equal(repairGrid(given, { message: OWNER + ' https://example.org/clouds.png' }).workshop.cards.find((card) => card.label === 'Picture').tile.image.src, 'https://example.org/clouds.png')
 })
 
 test('the draft_grid tool: rows and columns from 1 become cells from 0; a picture or QR address is never taken from the model', () => {
@@ -152,7 +152,11 @@ test('the drafting check: a good page passes; a broken one and a weak one are as
 test('builderBoard and builderSaid for a page: the draft when it holds together, else the starter; the preview says what it made', () => {
   const drafted = builderBoard(parseGridDraft(GOOD_GRID, { message: OWNER }), OWNER, { kind: 'grid' })
   assert.equal(drafted.drafted, true)
-  assert.equal(builderSaid(drafted.workshop, { drafted: true }), 'Drafted “Printable page kit”: a Letter portrait page, 4 by 2 cells, 5 tiles to drag. Say “make it 3 columns”, or print it from the page header.')
+  assert.equal(builderSaid(drafted.workshop, { drafted: true }), 'Drafted “Printable page kit”: a Letter portrait page, 4 by 2 cells, 5 tiles to drag. Say “make it 3 columns”, or use Print at the top right of the canvas.')
+  // A sheet that already has 3 columns is offered a count it does not have; an A4 page is “an A4”.
+  const three = { ...drafted.workshop, grid: { page: { ...drafted.workshop.grid.page, size: 'a4' }, cells: { ...drafted.workshop.grid.cells, cols: 3 } } }
+  assert.equal(builderSaid(three, { drafted: true }), 'Drafted “Printable page kit”: an A4 portrait page, 4 by 3 cells, 5 tiles to drag. Say “make it 2 columns”, or use Print at the top right of the canvas.')
+  assert.doesNotMatch(gridSaid(three, { drafted: false }), /make it 3 columns|page header|a A4/)
   for (const broken of [null, { version: 1, title: 'x' }, { ...parseGridDraft(GOOD_GRID, { message: OWNER }), behaviour: undefined }]) {
     const made = builderBoard(broken, OWNER, { kind: 'grid' })
     assert.equal(made.drafted, false)
@@ -180,8 +184,11 @@ test('the sheet’s own sentences in chat are its edits; print is an action; a w
   assert.deepEqual(gridChat(board, 'add a word bank'), { reply: 'Which words go in the bank? Say them, such as “Add a word bank: sun, rain, cloud”.' })
   assert.deepEqual(edits('add a heading “Fractions quiz”'), [{ kind: 'add_tile', type: 'heading', label: 'Fractions quiz' }])
   assert.deepEqual(edits('add a QR code to https://example.org/class'), [{ kind: 'add_tile', type: 'qr', label: 'Scan me', link: 'https://example.org/class' }])
-  const picture = board.cards.find((card) => card.label === 'Clouds over a hill')
-  assert.deepEqual(edits('make the picture 2 by 2'), [{ kind: 'place_tile', card: { id: picture.id }, page: { id: 'page-1' }, row: 2, col: 2, rows: 2, cols: 2 }])
+  // A picture a person put on the page (the starter's page has none: an empty frame does not print).
+  const pictured = validateWorkshop({ ...board, cards: board.cards.map((card) => card.label === 'Did you know?'
+    ? { id: card.id, label: 'Clouds over a hill', laneId: 'page-1', tile: { type: 'image', image: { alt: 'Clouds over a hill' } }, cell: card.cell } : card) })
+  const picture = pictured.cards.find((card) => card.label === 'Clouds over a hill')
+  assert.deepEqual(gridChat(pictured, 'make the picture 2 by 2')?.edits, [{ kind: 'place_tile', card: { id: picture.id }, page: { id: 'page-1' }, row: 2, col: 2, rows: 2, cols: 2 }])
   const fact = board.cards.find((card) => card.label === 'How water moves')
   assert.deepEqual(edits('span How water moves across'), [{ kind: 'place_tile', card: { id: fact.id }, page: { id: 'page-1' }, row: 2, col: 1, rows: 1, cols: 2 }])
   assert.deepEqual(edits('Put Question on Page 1 at row 4 column 2 spanning 1 by 1'), [{ kind: 'place_tile', card: { id: board.cards.find((card) => card.label === 'Question').id }, page: { id: 'page-1' }, row: 4, col: 2, rows: 1, cols: 1 }])

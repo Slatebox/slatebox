@@ -65,13 +65,13 @@ const KITS = [
     said: 'Say “duplicate page 1 shuffled” for a different card per player.' },
   { id: 'flashcards', test: /\bflash ?cards?\b/, title: ({ text }) => lang(text, { 'spanish|español|espanol': 'Spanish flashcards', 'french|français': 'French flashcards', default: 'Science flashcards' }),
     grid: () => letter(4, 2, 0.25),
-    stamps: ({ text }) => [['Word and meaning', { type: 'term', body: lang(text, { 'spanish|español|espanol': 'English meaning', default: 'What it means' }) }], ['Picture', { type: 'image', image: { alt: 'A picture of the term' } }]],
+    stamps: ({ text }) => [['Word and meaning', { type: 'term', body: lang(text, { 'spanish|español|espanol': 'la palabra\nthe word', 'french|français': 'le mot\nthe word', default: 'Term\nWhat it means' }) }], ['Picture', { type: 'image', image: { alt: 'A picture of the term' } }]],
     page: ({ text }) => lang(text, {
       'spanish|español|espanol': [['hola', 'hello'], ['gracias', 'thank you'], ['la casa', 'house'], ['el perro', 'dog'], ['la biblioteca', 'library'], ['correr', 'to run'], ['mañana', 'tomorrow'], ['el agua', 'water']],
       'french|français': [['bonjour', 'hello'], ['merci', 'thank you'], ['la maison', 'house'], ['le chien', 'dog'], ['la bibliothèque', 'library'], ['courir', 'to run'], ['demain', 'tomorrow'], ["l'eau", 'water']],
       default: [['Photosynthesis', 'How plants make food from light'], ['Mitosis', 'A cell splitting into two'], ['Evaporation', 'Liquid turning into gas'], ['Gravity', 'The pull between masses'],
         ['Habitat', 'Where a living thing lives'], ['Predator', 'An animal that hunts others'], ['Erosion', 'Land worn away by wind or water'], ['Fossil', 'Remains kept in rock']],
-    }).map(([term, meaning], i) => [term, { type: 'term', body: meaning }, { row: Math.floor(i / 2), col: i % 2 }]),
+    }).map(([term, meaning], i) => [term, { type: 'term', body: term + '\n' + meaning }, { row: Math.floor(i / 2), col: i % 2 }]),
     rules: () => [{ kind: 'tileTypes', types: ['term', 'image'] }] },
   { id: 'stickers', test: /\bstickers?\b/, title: 'Classroom reward stickers', grid: ({ text }) => letter(5, across(text) ?? 3),
     stamps: () => [['Reward sticker', { type: 'sticker', body: 'Well done' }]],
@@ -90,18 +90,18 @@ const KITS = [
     page: () => [['Tomato soup', { type: 'heading' }, { row: 0, col: 0, cols: 3 }],
       ['What you need', { type: 'text', body: 'Ingredients\n4 ripe tomatoes\n1 onion\n2 cups vegetable stock\nSalt and pepper' }, { row: 1, col: 0 }],
       ['How to make it', { type: 'text', body: 'Method\nChop the onion and tomatoes.\nSimmer in the stock for 20 minutes.\nBlend until smooth.' }, { row: 1, col: 1 }],
-      ['A bowl of tomato soup', { type: 'image', image: { alt: 'A bowl of tomato soup' } }, { row: 1, col: 2 }]],
+      ['To serve', { type: 'text', body: 'To serve\nA swirl of cream\nFresh basil\nWarm crusty bread' }, { row: 1, col: 2 }]],
     rules: () => [rule.needsHeading] },
   { id: 'jigsaw', test: /\bpuzzles?\b|\bjigsaws?\b/, title: 'Farm jigsaw', grid: () => ({ page: { size: 'letter', orientation: 'landscape', margin: 0.5 }, cells: { rows: 3, cols: 2, gutter: 0 } }),
-    stamps: () => [['Puzzle piece', { type: 'image', image: { alt: 'One piece of the picture' } }], ['Puzzle title', { type: 'heading' }]],
+    stamps: () => [['Puzzle piece', { type: 'panel', body: 'Draw this piece' }], ['Puzzle picture', { type: 'image', image: { alt: 'One piece of the picture' } }], ['Puzzle title', { type: 'heading' }]],
     page: () => [['Farm jigsaw', { type: 'heading' }, { row: 0, col: 0, cols: 2 }],
-      ['Barn roof (top left)', { type: 'image', image: { alt: 'A red barn roof' } }, { row: 1, col: 0 }], ['Blue sky (top right)', { type: 'image', image: { alt: 'Blue sky with a cloud' } }, { row: 1, col: 1 }],
-      ['Green field (bottom left)', { type: 'image', image: { alt: 'A green field with a fence' } }, { row: 2, col: 0 }], ['Duck pond (bottom right)', { type: 'image', image: { alt: 'Ducks on a pond' } }, { row: 2, col: 1 }]],
-    rules: () => [{ kind: 'tileTypes', types: ['heading', 'image'] }, rule.maxHeading] },
+      ['Barn roof', { type: 'panel', body: 'Draw a red barn roof' }, { row: 1, col: 0 }], ['Blue sky', { type: 'panel', body: 'Draw blue sky with a cloud' }, { row: 1, col: 1 }],
+      ['Green field', { type: 'panel', body: 'Draw a green field with a fence' }, { row: 2, col: 0 }], ['Duck pond', { type: 'panel', body: 'Draw ducks on a pond' }, { row: 2, col: 1 }]],
+    rules: () => [{ kind: 'tileTypes', types: ['heading', 'panel', 'image'] }, rule.maxHeading] },
   { id: 'worksheet', test: /\bworksheets?\b|\bmath\b|\bquiz(?:zes)?\b/, title: 'Fractions practice', grid: () => letter(6, 2),
-    stamps: () => [['Worksheet title', { type: 'heading', body: 'Name and date' }], ['Practice question', { type: 'question', body: 'What is 3/4 - 1/4?' }],
+    stamps: () => [['Worksheet title', { type: 'heading', body: 'Practice sheet\nName and date' }], ['Practice question', { type: 'question', body: 'What is 3/4 - 1/4?' }],
       ['Answer lines', { type: 'answer-lines', body: '3' }], ['Fraction bar picture', { type: 'image', image: { alt: 'A fraction bar' } }], ['Word bank', { type: 'word-bank', words: ['numerator', 'denominator', 'equivalent'] }]],
-    page: () => [['Fractions practice', { type: 'heading', body: 'Name and date' }, { row: 0, col: 0, cols: 2 }],
+    page: () => [['Fractions practice', { type: 'heading', body: 'Fractions practice\nName and date' }, { row: 0, col: 0, cols: 2 }],
       ['Adding fractions', { type: 'question', body: 'What is 1/2 + 1/4?' }, { row: 1, col: 0 }], ['Show your work', { type: 'answer-lines', body: '3' }, { row: 1, col: 1 }],
       ['Shade the bar', { type: 'question', body: 'Shade 3/8 of a bar split into 8 equal parts.' }, { row: 2, col: 0 }], ['Your answer', { type: 'answer-lines', body: '2' }, { row: 2, col: 1 }],
       ['Compare', { type: 'question', body: 'Which is larger, 2/3 or 3/5? Explain how you know.' }, { row: 3, col: 0 }],
@@ -113,7 +113,7 @@ const KITS = [
       ['Answer lines', { type: 'answer-lines', body: '3' }], ['Word bank', { type: 'word-bank', words: ['sun', 'cloud', 'rain'] }], ['Diagram', { type: 'diagram', image: { alt: 'A cycle with four arrows' } }]],
     page: () => [['The water cycle', { type: 'heading' }, { row: 0, col: 0, cols: 2 }],
       ['How water moves', { type: 'text', body: 'Water moves from the sea to the sky and back again.' }, { row: 1, col: 0 }],
-      ['Clouds over a hill', { type: 'image', image: { alt: 'Clouds over a hill' } }, { row: 1, col: 1 }],
+      ['Did you know?', { type: 'text', body: 'Did you know?\nThe water in a cloud can stay up for about ten days before it falls as rain.' }, { row: 1, col: 1 }],
       ['Think about it', { type: 'question', body: 'What makes clouds form?' }, { row: 2, col: 0 }], ['Your answer', { type: 'answer-lines', body: '3' }, { row: 2, col: 1 }],
       ['Words to use', { type: 'word-bank', words: ['evaporation', 'condensation', 'precipitation'] }, { row: 3, col: 0 }]],
     rules: () => [rule.maxHeading, rule.needsHeading, { kind: 'tileSpan', type: 'image', rows: 2, cols: 2 }] },
@@ -200,6 +200,10 @@ export function gridQuality(board, { message = '' } = {}) {
   if (first) for (const need of gridNeeds(board, first.id)) problems.push(`${first.label} needs ${need}.`)
   const bank = board.cards.find((card) => card.tile?.type === 'word-bank' && (card.tile.words?.length ?? 0) < 3)
   if (bank) problems.push(`${said(bank.label)} is a word bank with fewer than three words.`)
+  // A picture frame with no picture prints as an empty gray box (nothing here adds one): pages are composed from tiles
+  // that print as they are; a picture tile waits in the tray as a stamp until a person adds the picture.
+  const frame = placed.find((card) => (card.tile?.type === 'image' || card.tile?.type === 'diagram') && !card.tile.image?.src)
+  if (frame) problems.push(`${said(frame.label)} is a picture with no picture on a page: it prints as an empty gray box. Compose the pages from tiles that print as they are, keep picture tiles in the tray, and use a panel for a box to draw in.`)
   const qr = board.cards.find((card) => card.tile?.type === 'qr' && !card.tile.link)
   if (qr) problems.push(`${said(qr.label)} is a QR code with no web address: give it one from the person's words, or leave it out.`)
   const topic = topicOf(message)
@@ -301,16 +305,18 @@ export function repairGrid(input, { message = '' } = {}) {
 
 // ---- What the preview says (spec §6) ----
 
-const pageWords = (board) => `a ${board.grid.page.size === 'a4' ? 'A4' : 'Letter'} ${board.grid.page.orientation} page, ${board.grid.cells.rows} by ${board.grid.cells.cols} cells`
+const pageWords = (board) => `${board.grid.page.size === 'a4' ? 'an A4' : 'a Letter'} ${board.grid.page.orientation} page, ${board.grid.cells.rows} by ${board.grid.cells.cols} cells`
+/** What to say next: a column count the sheet does not have now (it reflows), and where Print is (GridPrintButton, the canvas's top right). */
+const nextWords = (board) => `Say “make it ${board.grid.cells.cols === 3 ? 2 : 3} columns”, or use Print at the top right of the canvas.`
 
 /** What the preview says of a sheet made from a description: drafted by the agent, or started here (a visitor told signing in drafts it). */
 export function gridSaid(board, { drafted, guest = false, message = '' } = {}) {
   const tiles = board.cards.filter((card) => card.laneId === board.lanes[0].id).length
   const made = `“${board.title}”: ${pageWords(board)}, ${tiles} ${tiles === 1 ? 'tile' : 'tiles'} to drag.`
   const more = message && kitOf(message).said ? ' ' + kitOf(message).said : ''
-  if (drafted) return `Drafted ${made} Say “make it 3 columns”, or print it from the page header.`
+  if (drafted) return `Drafted ${made} ${nextWords(board)}`
   if (guest) return `Started ${made} This is a starter from your words: sign in and the agent drafts the whole page for you.`
-  return `Started ${made} Say “make it 3 columns”, or print it from the page header.${more}`
+  return `Started ${made} ${nextWords(board)}${more}`
 }
 
 /**

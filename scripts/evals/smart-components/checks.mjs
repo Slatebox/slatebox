@@ -5,6 +5,7 @@ import 'slateboxjs/workshops/behaviour'
 import { validateWorkshop } from 'slateboxjs/workshops/model'
 import { componentQuality, componentStarter } from '../../../web/app/imports/api/common/builder-freeform.mjs'
 import { gridQuality, gridStarter } from '../../../web/app/imports/api/common/builder-grid.mjs'
+import { gridPrintProblems } from 'slateboxjs/workshops/rules'
 
 /**
  * Checks a preview: [] when it is a valid, drafted, rendered-ready component, else the reasons. `expect.kind` 'grid': a
@@ -41,7 +42,7 @@ export function qualityProblems(preview, prompt) {
   return workshop.kind === 'grid' ? gridQuality(workshop, { message: prompt }) : componentQuality(workshop, { message: prompt })
 }
 
-/** A printable page's preview: a grid sheet that passes validateWorkshop, drafted by the agent (not the starter), with a page 1 composed. */
+/** A printable page's preview: a grid sheet that passes validateWorkshop, drafted by the agent (not the starter), with a page 1 composed that prints as it is. */
 function gridPreviewProblems(preview, prompt) {
   const problems = []
   if (preview.mode !== 'play' || preview.format !== 'grid') problems.push(`not a grid sheet (mode ${preview.mode}, format ${preview.format})`)
@@ -54,6 +55,8 @@ function gridPreviewProblems(preview, prompt) {
     if (valid.kind !== 'grid') problems.push('not a grid sheet')
     if (!valid.cards.some((card) => card.laneId === valid.lanes[1]?.id)) problems.push('page 1 is not composed')
     if (!preview.said || !/^Drafted “/.test(preview.said)) problems.push('the reply does not say what was drafted')
+    // The page as printed: what Print would ask about first (an empty picture frame, a page short of what it needs).
+    if (valid.kind === 'grid') for (const line of gridPrintProblems(valid)) problems.push('it prints badly: ' + line)
   }
   return { problems, workshop: valid }
 }
