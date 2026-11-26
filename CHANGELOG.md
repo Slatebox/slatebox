@@ -20,6 +20,12 @@ shipped early. The next release is 2.0.0, which is above both lines.
 
 ## [Unreleased]
 
+## [2.1.2] - 2026-11-26
+
+### Fixed
+
+- **updates:** the host updater works with Colima, never strands an attempt, and is rewritten by each release ([c47cfded](https://github.com/Slatebox/slatebox/commit/c47cfded526506aa3d99dd10c7f92d3c98bc31b1))
+
 ## [2.1.1] - 2026-11-26
 
 ### Fixed
@@ -1421,7 +1427,8 @@ Self-host image preview `ghcr.io/slatebox/slatebox:0.1.0` (index `sha256:94f761b
 
 - Removed unused imports and fixed import naming conflict in `Main.jsx`.
 
-[Unreleased]: https://github.com/Slatebox/slatebox/compare/v2.1.1...HEAD
+[Unreleased]: https://github.com/Slatebox/slatebox/compare/v2.1.2...HEAD
+[2.1.2]: https://github.com/Slatebox/slatebox/compare/v2.1.1...v2.1.2
 [2.1.1]: https://github.com/Slatebox/slatebox/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/Slatebox/slatebox/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/Slatebox/slatebox/compare/v0.2.2...v2.0.0
