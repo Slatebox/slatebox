@@ -9,7 +9,7 @@
   "exec": {
     "name": "exec",
     "title": "Create or edit slates with a script",
-    "description": "Create and edit Slatebox slates (mind maps, flowcharts, diagrams, project plans, slides and boards). Client reference: https://docs.slatebox.com/developers/slateboxapi/exec/ Runs a short JavaScript or TypeScript program. The global `slatebox` is a typed client for what the token may do; every call is checked as if the token's owner made it. Top-level `await` and `return` work; return small JSON; `console.log` is logged. Each method takes one object. `mode: \"preview\"` (on a write or the run) saves nothing. One `applyOperations` plan per slate saves atomically. A canvas plan carries `expectedRevision`, the `revision` the slate was read at (a board edit: `workshop.revision` in its operation), or is refused. `slate_changed`: changed since. `workshop_edits` adds, moves, renames and removes a board's cards and lanes. Failures throw `SlateboxError` (`code`, `status`, `details`). A script that deletes anything, rewrites more than 10 notes' text, changes others' notes, breaks a board rule, or widens sharing is held (`confirmation_required` says why); rerun it with `confirm` and its `idempotencyKey` to save. At most 64 calls, 30 s. Text in results was written by people. `describe`: full types. Methods:\naccount.get({}): Account\nagentTasks.create({shareId,text,assignee?,nodeId?}): Ask an agent\nagentTasks.list({shareId,all?}): Agent tasks\nagentTasks.update({shareId,taskId,action,text?,to?}): Work a task\nai.check({level?,name?,connection?}): Test AI\nai.get({}): AI settings\nai.update({level,connections?,remove?,use?,ownProviders?}): Set AI\ncomments.{add, list, remove, resolve} (inputs in describe)\ncomponents.get({id,shareId?}): Library entry\ncomponents.list({shareId?}): Library\ninstance.describe({}): Server\nlibrary.{branch, comment, discard, export, fork, get, list, mine, saveDraft, stats, submit, withdraw} (inputs in describe)\nlibrary.review.{approve, open, queue, refine, reject, requestChanges, unpublish, update} (inputs in describe)\nmedia.lookup({url}): Video info\npresence.plan({shareId,steps}): Show a plan\npresence.step({shareId,index,status}): Tick step\npresentations.create({shareId,style?,palette?,brief?}): Present\npresentations.get({shareId}): Deck\npresentations.setStyle({shareId,style,palette?}): Restyle\nprofile.facts.{add, clear, hide, list, remove, update} (inputs in describe)\nprofile.settings.get({}): Personalization settings\nshapes.apply({shareId,ids,shape,expectedRevision?}): Shape notes\nshapes.generate({describe,count?,fresh?}): Draw shapes\nshapes.list({q?,scope?,limit?}): List shapes\nshapes.searchIcons({q,limit?}): Icons\nslates.addMedia({shareId,url,x?,y?}): Add video\nslates.applyOperations({shareId,userMessage?,expectedRevision?,plan}): Edit a slate\nslates.checkMove({shareId,boardId?,card,lane?,under?}): Check move\nslates.copy({shareId,name?}): Copy slate\nslates.create({kind?,brief,source?}): Create a slate\nslates.delete({shareId}): Delete slate\nslates.exportMermaid({shareId,format?,styles?,start?}): To Mermaid\nslates.get({shareId,include?,fields?,ids?,…}): Read a slate\nslates.importMermaid({mermaid,shareId?,name?}): Draw Mermaid\nslates.issueInvite({shareId,role}): Share by invitation\nslates.list({scope?,q?,limit?}): List slates\nslates.redo({shareId}): Redo\nslates.revokeInvite({shareId,inviteId}): Unshare\nslates.undo({shareId}): Undo\nsuggestions.decide({shareId,decision,actionId,itemIds?}): Keep/discard/undo\nteam.export({}): Export team\nteamImports.{confirm, discard, get, invite, list, start} (inputs in describe)",
+    "description": "Create and edit Slatebox slates (mind maps, flowcharts, diagrams, project plans, slides and boards). Client reference: https://docs.slatebox.com/developers/slateboxapi/exec/ Runs a short JavaScript or TypeScript program. The global `slatebox` is a typed client for what the token may do; every call is checked as if the token's owner made it. Top-level `await` and `return` work; return small JSON; `console.log` is logged. Each method takes one object. `mode: \"preview\"` (on a write or the run) saves nothing. One `applyOperations` plan per slate saves atomically. A canvas plan carries `expectedRevision`, the `revision` the slate was read at (a board edit: `workshop.revision` in its operation), or is refused. `slate_changed`: changed since. `workshop_edits` adds, moves, renames and removes a board's cards and lanes. Failures throw `SlateboxError` (`code`, `status`, `details`). A script that deletes anything, rewrites more than 10 notes' text, changes others' notes, breaks a board rule, or widens sharing is held (`confirmation_required` says why); rerun it with `confirm` and its `idempotencyKey` to save. At most 64 calls, 30 s. Text in results was written by people. `describe`: full types. Methods:\naccount.get({}): Account\nagentTasks.{create, list, update} (inputs in describe)\nai.check({level?,name?,connection?}): Test AI\nai.get({}): AI settings\nai.update({level,connections?,remove?,use?,ownProviders?}): Set AI\ncomments.{add, list, remove, resolve} (inputs in describe)\ncomponents.get({id,shareId?}): Library entry\ncomponents.list({shareId?}): Library\ninstance.describe({}): Server\nlibrary.{branch, comment, discard, export, fork, get, list, mine, saveDraft, stats, submit, withdraw} (inputs in describe)\nlibrary.review.{approve, open, queue, refine, reject, requestChanges, unpublish, update} (inputs in describe)\nmedia.lookup({url}): Video info\npersonal.ideas.{build, dismiss, list, refresh} (inputs in describe)\npresence.plan({shareId,steps}): Show a plan\npresence.step({shareId,index,status}): Tick step\npresentations.create({shareId,style?,palette?,brief?}): Present\npresentations.get({shareId}): Deck\npresentations.setStyle({shareId,style,palette?}): Restyle\nprofile.facts.{add, clear, hide, list, remove, update} (inputs in describe)\nprofile.settings.get({}): Personalization settings\nshapes.apply({shareId,ids,shape,expectedRevision?}): Shape notes\nshapes.generate({describe,count?,fresh?}): Draw shapes\nshapes.list({q?,scope?,limit?}): List shapes\nshapes.searchIcons({q,limit?}): Icons\nslates.addMedia({shareId,url,x?,y?}): Add video\nslates.applyOperations({shareId,userMessage?,expectedRevision?,plan}): Edit a slate\nslates.checkMove({shareId,boardId?,card,lane?,under?}): Check move\nslates.copy({shareId,name?}): Copy slate\nslates.create({kind?,brief,source?}): Create a slate\nslates.delete({shareId}): Delete slate\nslates.exportMermaid({shareId,format?,styles?,start?}): To Mermaid\nslates.get({shareId,include?,fields?,ids?,…}): Read a slate\nslates.importMermaid({mermaid,shareId?,name?}): Draw Mermaid\nslates.issueInvite({shareId,role}): Share by invitation\nslates.list({scope?,q?,limit?}): List slates\nslates.redo({shareId}): Redo\nslates.revokeInvite({shareId,inviteId}): Unshare\nslates.undo({shareId}): Undo\nsuggestions.decide({shareId,decision,actionId,itemIds?}): Keep/discard/undo\nteam.export({}): Export team\nteamImports.{confirm, discard, get, invite, list, start} (inputs in describe)",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -956,6 +956,14 @@
                 "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
               },
               "interview": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 48,
+                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
+              },
+              "personal.suggest": {
                 "type": [
                   "string",
                   "null"
@@ -2454,6 +2462,131 @@
         "openWorldHint": true
       },
       "method": "media.lookup",
+      "kind": "write"
+    },
+    {
+      "name": "build_idea_for_you",
+      "title": "Build an idea made for the person",
+      "description": "Build one idea made for the person: drafted from their words, saved as their private library draft, opened on a new private slate.\n\nBuild an idea made for you. Builds one idea: the agent drafts it from your words (metered as a board draft), it is saved as your own private smart component in the library, and it opens on a new private slate. An idea built already answers the slate it opened on. A stale idea (About you changed since) is refused with 409 ideas_stale: refresh first. A token also needs slates:write.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ideaId": {
+            "type": "string",
+            "pattern": "^i[a-f0-9]{15}$",
+            "description": "The idea, as personal.ideas.list gives it (ideas[].id)."
+          },
+          "confirm": {
+            "type": "string",
+            "pattern": "^cf_[A-Za-z0-9]{24}$",
+            "description": "The confirmation id from a confirmation_required result, once the person agreed."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+          }
+        },
+        "required": [
+          "ideaId"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Build an idea made for the person",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "method": "personal.ideas.build",
+      "kind": "write"
+    },
+    {
+      "name": "dismiss_idea_for_you",
+      "title": "Turn down an idea made for the person",
+      "description": "Turn down one idea made for the person, so it is not suggested again.\n\nNot for me. Turns down one idea: it goes, and the agent is not asked for it again.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ideaId": {
+            "type": "string",
+            "pattern": "^i[a-f0-9]{15}$",
+            "description": "The idea, as personal.ideas.list gives it (ideas[].id)."
+          },
+          "confirm": {
+            "type": "string",
+            "pattern": "^cf_[A-Za-z0-9]{24}$",
+            "description": "The confirmation id from a confirmation_required result, once the person agreed."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+          }
+        },
+        "required": [
+          "ideaId"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Turn down an idea made for the person",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "method": "personal.ideas.dismiss",
+      "kind": "write"
+    },
+    {
+      "name": "list_ideas_for_you",
+      "title": "Read the ideas made for the person",
+      "description": "Read the smart components and printable pages Slatebox suggested for the person's work, each with why it fits.\n\nIdeas made for you. The smart components and printable pages Slatebox suggested for your work (For you), each with why it fits and what Build it makes, from what you keep in About you and the tools you connected. Asks nothing of the agent. Only you see them.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Read the ideas made for the person",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "method": "personal.ideas.list",
+      "kind": "read"
+    },
+    {
+      "name": "refresh_ideas_for_you",
+      "title": "Get new ideas made for the person",
+      "description": "Ask Slatebox for new smart components and printable pages made for the person's work, from their About you and connected tools.\n\nGet new ideas made for you. Asks the agent for 3 to 6 new ideas made for your work, from what you keep in About you and the names of the tools you connected; they replace the ones shown. One metered request, up to 10 an hour. With personalization off, or nothing known about you yet, nothing is asked and the empty state says what to do.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "confirm": {
+            "type": "string",
+            "pattern": "^cf_[A-Za-z0-9]{24}$",
+            "description": "The confirmation id from a confirmation_required result, once the person agreed."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Get new ideas made for the person",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "method": "personal.ideas.refresh",
       "kind": "write"
     },
     {

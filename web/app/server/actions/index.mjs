@@ -48,6 +48,7 @@ import libraryRead from './library-read.mjs'
 import libraryAuthor from './library-author.mjs'
 import libraryReview from './library-review.mjs'
 import profileActions from './profile.mjs'
+import personalActions from './personal.mjs'
 
 export const actions = [
   slatesGet,
@@ -99,6 +100,8 @@ export const actions = [
   ...libraryAuthor,
   ...libraryRead,
   ...profileActions,
+  // For you: ideas made for the person, from About you (server/personal)
+  ...personalActions,
 ]
 
 export const components = { ...slateComponents }

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
+import { useNavigate } from 'react-router-dom'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -118,6 +119,7 @@ FactChip.defaultProps = { saving: false }
  * when the person closes the summary or the panel.
  */
 export default function Interview({ onKept, onDone }) {
+  const navigate = useNavigate()
   // [{ id, role: 'assistant' | 'user', content, proposed?: [{ id, kind, text, state, error? }] }]
   const [turns, setTurns] = useState([])
   const [message, setMessage] = useState('')
@@ -315,6 +317,11 @@ export default function Interview({ onKept, onDone }) {
             <Typography sx={{ fontWeight: 600 }}>Done for now</Typography>
             <Typography variant="body2">{keptSummary(kept, { open })}</Typography>
             <FinePrint>Everything you kept is in About you, where you can change, hide or remove it.</FinePrint>
+            {/* For you on My slates, asked afresh so what was just kept shows in the ideas (only once something was kept) */}
+            {kept.length > 0 && (
+              <Button size="small" variant="outlined" color="secondary" sx={{ mt: SPACE.tight }} data-interview-for-you=""
+                onClick={() => navigate('/', { state: { forYou: 'fresh' } })}>See ideas made for you</Button>
+            )}
           </Box>
         )}
         <Box role="status" aria-live="polite" sx={visuallyHidden}>{status}</Box>

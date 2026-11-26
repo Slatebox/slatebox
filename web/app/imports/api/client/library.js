@@ -16,7 +16,7 @@ import createAnonymousUser from './createAnonymousUser'
  *   id: string, slug: string, kind: LibraryKind, origin: 'builtin'|'user', title: string, summary: string,
  *   category?: LibraryCategory, authorName: string, publishedAt?: string,
  *   counts: { copies: number, adds: number, branches: number },
- *   provenance: { branchedFrom?: LibraryLink, forkedFrom?: LibraryLink },
+ *   provenance: { branchedFrom?: LibraryLink, forkedFrom?: LibraryLink, madeFor?: { kind: 'for-you', ideaId: string } },
  *   url: string, preview: { kind: LibraryKind, boardKind?: string, notes: number }
  * }} LibraryItemSummary
  * @typedef {LibraryItemSummary & {

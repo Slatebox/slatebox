@@ -12,6 +12,8 @@ import { conceptMapFromDraft, mapTool } from '../../methods/workshop-map-draft.m
 import { releasePlanFromDraft, releaseTool } from '../../methods/workshop-release-draft.mjs'
 import { toolCallOf, verdict } from './answer.mjs'
 import { MAP } from './workshop.mjs'
+import { grounded, sensitive } from '../../../imports/api/common/interview.mjs'
+import { wrapData } from '../render.mjs'
 
 const KINDS = {
   lanes: { system: 'workshop.draft.system', toolId: 'tool.draft_workshop', tool: authorTool, parse: validateWorkshop },
@@ -29,6 +31,31 @@ const KINDS = {
   } },
   rules: { system: 'workshop.draft.rules', toolId: 'tool.revise_workshop_rules', tool: constraintTool('map'), parse: (args) => prepareConstraintProposal(MAP, args) },
 }
+// For you (workshop.draft.personal): an idea drafted for one person, with their About you facts, the idea's why and the
+// connected tools it uses as data. It passes the same quality gate as any component or page, and it uses the person's own
+// words: its title, a lane or a card shares a word with what they keep in About you.
+const theirWords = (board, s) => {
+  const labels = [board.title, ...board.lanes.map((lane) => lane.label), ...board.cards.map((card) => card.label)].join('\n')
+  if (sensitive(labels)) throw new Error('It holds something sensitive from About you.')
+  if (!grounded({ text: labels }, s.personal.facts.replace(/^\s*-\s*[a-z]+:\s*/gm, ''))) throw new Error('It uses none of the person\'s own words from About you.')
+}
+KINDS['personal-component'] = { ...KINDS.component, system: 'workshop.draft.personal', of: 'component', parse: (args, s) => {
+  KINDS.component.parse(args, s)
+  theirWords(parseComponentDraft(args), s)
+} }
+KINDS['personal-grid'] = { ...KINDS.grid, system: 'workshop.draft.personal', of: 'grid', parse: (args, s) => {
+  KINDS.grid.parse(args, s)
+  theirWords(parseGridDraft(args, { message: s.brief }), s)
+} }
+// The values workshop.draft.personal renders with, as workshops.js personalInstructions gives them.
+const personalValues = (kind, personal) => async (render) => ({
+  instructions: await render(KINDS[kind].system), why: personal.why,
+  hasFacts: Boolean(personal.facts), hasTools: Boolean(personal.tools), ...(personal.facts && { facts: personal.facts }), ...(personal.tools && { tools: personal.tools }),
+})
+const personalSample = (id, title, kind, brief, personal) => ({
+  id, title, kind: 'personal-' + kind, brief, personal,
+  values: { 'workshop.draft.personal': personalValues(kind, personal), 'workshop.draft.repair': async (render) => ({ instructions: await render(KINDS[kind].system), problem: 'Call the requested tool.' }) },
+})
 const sample = (id, title, kind, brief) => ({
   id, title, kind, brief,
   values: {
@@ -51,6 +78,17 @@ export default {
     sample('grid-bingo-card-maker', 'A bingo card maker', 'grid', 'bingo card maker: 5 by 5 squares with a free space in the middle, a title on top, different card for each player'),
     sample('grid-comic-page', 'A comic page', 'grid', 'a comic page with panels I can arrange, some panels big, with speech bubbles, then print it'),
     sample('grid-sticker-sheet', 'A sticker sheet', 'grid', 'a sticker sheet for classroom rewards, A4, 3 across'),
+    // For you: an idea drafted for one person (server/personal/core.mjs build)
+    personalSample('personal-component', 'For you: a component for a product manager who plans sprints in Linear', 'component',
+      'A Monday sprint planning board: a backlog lane for the sprint\'s work, a This sprint lane that holds eight, and a Shipped lane. Cards are the bugs and roadmap items the team triages.',
+      { facts: '- role: Product manager\n- team: Six designers on the mobile app\n- routine: Plans sprints in Linear every Monday\n- work: Triages the bug queue every morning', why: 'You plan sprints in Linear every Monday.', tools: '- Linear' }),
+    personalSample('personal-grid', 'For you: a printable page for a teacher\'s weekly Spanish quiz', 'grid',
+      'A printable weekly Spanish vocabulary quiz for a 4th grade class: a heading, ten term tiles with a word and its meaning, and answer lines, on a letter page.',
+      { facts: '- role: 4th grade teacher\n- routine: Gives a Spanish vocabulary quiz every Friday', why: 'You give a Spanish vocabulary quiz every Friday.', tools: '' }),
+    // About you holds something sensitive (code leaves such a line out first; the prompt's own rule is checked here)
+    personalSample('personal-sensitive', 'For you: a component for a bookkeeper whose About you holds their salary', 'component',
+      'A month-end close board for the dental clinic: lanes for invoices to match, reconciled and closed, with one step at a time.',
+      { facts: '- role: Bookkeeper at a dental clinic\n- other: My salary is 52,000 a year\n- routine: Closes the month on the last Friday', why: 'You close the month on the last Friday.', tools: '' }),
   ],
   toolFor: (s) => (KINDS[s.kind].tool.name),
   request: async (s, render) => {
@@ -58,7 +96,7 @@ export default {
     const tool = { ...kind.tool, description: await render(kind.toolId) }
     return {
       system: await render(kind.system),
-      prompts: [{ role: 'user', content: s.kind === 'rules' ? JSON.stringify({ currentWorkshop: MAP, requestedChange: s.brief }) : s.brief }],
+      prompts: [{ role: 'user', content: s.kind === 'rules' ? JSON.stringify({ currentWorkshop: MAP, requestedChange: s.brief }) : s.personal ? wrapData('brief', s.brief) : s.brief }],
       functions: [tool],
       function_call: { name: tool.name },
     }

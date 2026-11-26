@@ -38,9 +38,10 @@ const ESTIMATES_BEFORE = {
   presentation: 10000, 'image-search': 5000, 'image-generation': 30000, shape: 8000,
 }
 // Surfaces that landed after the catalogue, each with the estimate and ceiling its row names: the interview (S2,
-// 2026-11-26) is a conversation turn, metered as chat's (2,000 and 50,000 µ$).
-const ESTIMATES_ADDED = { interview: 2000 }
-const CEILINGS_ADDED = { interview: 50_000 }
+// 2026-11-26) is a conversation turn, metered as chat's (2,000 and 50,000 µ$); For you's suggestion (S4, 2026-11-26) is
+// one forced call with at most one retry over the person's facts (3,000 and 50,000 µ$).
+const ESTIMATES_ADDED = { interview: 2000, 'personal.suggest': 3000 }
+const CEILINGS_ADDED = { interview: 50_000, 'personal.suggest': 50_000 }
 const CEILINGS_BEFORE = { generation: 200_000, vision: 200_000, presentation: 200_000, shape: 60_000 }
 
 test('every request feature reaches the same choice as before the catalogue', () => {
@@ -55,6 +56,7 @@ test('request features name their own surface; a router step belongs to its feat
     'lane-chat': 'workshop', 'map-chat': 'workshop', workshop: 'workshop.draft', canvas: 'canvas', agent: 'agent.slatebox',
     'library-refine': 'library', connectors: 'connectors', 'generation-route': 'generation', 'canvas-route': 'canvas',
     interview: 'interview', 'interview-route': 'interview',
+    'personal.suggest': 'personal.suggest',
     'image-search': null, call: null, 'not-a-feature-yet': 'chat',
   }
   for (const [feature, at] of Object.entries(expected)) assert.equal(surfaceForRequest(feature), at, feature)
@@ -83,10 +85,13 @@ test('the follows tree: one table, every chain ends at default', () => {
   assert.equal(surface('eval').follows, null)
   assert.equal(surfaceForRequest('eval'), 'eval')
   const roots = { chat: 'chat', 'chat.route': 'chat', workshop: 'chat', 'workshop.draft': 'chat', canvas: 'chat', 'agent.slatebox': 'chat',
-    library: 'library', connectors: 'chat', interview: 'chat', 'generation.notes': 'generation', generation: 'generation', images: 'images', default: 'default' }
+    library: 'library', connectors: 'chat', interview: 'chat', 'personal.suggest': 'chat', 'generation.notes': 'generation', generation: 'generation', images: 'images', default: 'default' }
   // the interview follows the conversation until an administrator binds it
   assert.deepEqual(followChain('interview'), ['interview', 'chat', 'default'])
   assert.equal(choiceFeatureFor('interview'), 'chat')
+  // For you's suggestion follows the conversation too until an administrator binds it
+  assert.deepEqual(followChain('personal.suggest'), ['personal.suggest', 'chat', 'default'])
+  assert.equal(choiceFeatureFor('personal.suggest'), 'chat')
   for (const [id, root] of Object.entries(roots)) assert.equal(rootSurface(id), root, id)
 })
 
@@ -96,7 +101,7 @@ test('library and connectors have landed: both are in this build; connectors run
   assert.equal(surface('connectors').edition, null)
   const inBuild = SURFACES.filter((s) => s.inBuild && s.useKey).map((s) => s.id)
   assert.deepEqual(inBuild, ['default', 'chat', 'chat.route', 'generation', 'generation.notes', 'presentation', 'vision', 'images', 'shape',
-    'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors', 'interview'])
+    'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors', 'interview', 'personal.suggest'])
 })
 
 test('the features people choose first are the catalogue rows that follow default, unchanged, then library (a row of its own that follows chat)', () => {

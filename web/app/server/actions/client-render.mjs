@@ -433,8 +433,10 @@ export function renderDeclarations(manifest) {
 // more than COMPACT_MAX methods is never compacted. Lines that still do not fit collapse into one
 // line that sends the agent to describe.
 export const COMPACT_MAX = 24
-// The canvas methods nearly every script calls keep their full lines longest.
-export const KEEP_WHOLE = Object.freeze(['slates'])
+// The canvas methods nearly every script calls keep their full lines longest, and so do the shapes methods the in-app
+// conversation calls with them ("make these notes rockets": shapes.generate, then shapes.apply on the notes). For you's
+// four methods (2026-11-26) took the last room in the budget, which would otherwise have named the shapes in one line.
+export const KEEP_WHOLE = Object.freeze(['slates', 'shapes'])
 const namespaceOf = (name) => name.slice(0, name.lastIndexOf('.'))
 export const compactLine = (namespace, names) =>
   `${namespace}.{${names.map((name) => name.slice(namespace.length + 1)).join(', ')}} (inputs in describe)`

@@ -18,6 +18,7 @@ import { constraintTool, constraintInstructions } from './workshop-constraint-dr
 import { releasePlanFromDraft, releaseInstructions, releaseDraftTool } from './workshop-release-draft.mjs'
 import { conceptMapFromDraft, mapInstructions, mapDraftTool } from './workshop-map-draft.mjs'
 import { promptText } from '../ai-control/prompts/index.mjs'
+import { wrapData } from '../ai-control/render.mjs'
 import { authorTool, laneDraftCheck, parseLaneDraft } from './workshop-lane-draft.mjs'
 import { componentDraftCheck, componentTool, parseComponentDraft } from './workshop-component-draft.mjs'
 import { gridDraftCheck, gridTool, parseGridDraft } from './workshop-grid-draft.mjs'
@@ -118,7 +119,11 @@ async function chatTurn(input, map) {
   }
 }
 
-async function draftWorkshop(brief, format = 'lanes', currentDraft) {
+// `forYou` (server only, never from a page): a For you idea built for one person (server/personal/core.mjs through
+// draftForYou below): `user`, the account it is for (a call outside a Meteor method has no Meteor.userAsync), and
+// `personal`, what reaches the draft as data: { facts (their About you lines), why (the idea's why), tools (the connected
+// tools it uses, one '- name' line each) }. Only a component or a printable page, never a revision.
+async function draftWorkshop(brief, format = 'lanes', currentDraft, forYou = null) {
   // 'component': a smart component described on a builder slate (builder-freeform.mjs), a board of plain lanes held
   // to the quality gate (workshop-component-draft.mjs)
   // 'grid': a printable page described on a builder slate (builder-grid.mjs), a grid sheet held to its own quality gate
@@ -127,7 +132,8 @@ async function draftWorkshop(brief, format = 'lanes', currentDraft) {
   if (typeof brief !== 'string' || brief.trim().length < 10 || brief.length > 1200) {
     throw new Meteor.Error('invalid-brief', 'Describe the decision in 10 to 1,200 characters.')
   }
-  const user = await Meteor.userAsync()
+  if (forYou && (!['component', 'grid'].includes(format) || currentDraft !== undefined)) throw new Meteor.Error('invalid-format', 'Choose a workshop format.')
+  const user = forYou ? forYou.user : await Meteor.userAsync()
   if (!user || user.isAnonymous) throw new Meteor.Error('sign-in', 'Sign in to use AI.')
   if (!await canGenerate(user)) throw new Meteor.Error('ai-unavailable', 'Ask your administrator to enable workshop generation for this instance.')
   let base
@@ -161,18 +167,21 @@ async function draftWorkshop(brief, format = 'lanes', currentDraft) {
     'release-plan': () => ({ tool: releaseDraftTool(), parse: releasePlanFromDraft, instructions: releaseInstructions(), error: 'invalidReleasePlanDraft' }),
     component: () => {
       const tool = componentTool()
-      return { tool, parse: parseComponentDraft, instructions: promptText('workshop.draft.component'), check: toolCall => componentDraftCheck(toolCall, { tool, message: brief }) }
+      return { tool, parse: parseComponentDraft, instructions: personalInstructions(promptText('workshop.draft.component'), forYou), check: toolCall => componentDraftCheck(toolCall, { tool, message: brief }) }
     },
     grid: () => {
       const tool = gridTool()
-      return { tool, parse: args => parseGridDraft(args, { message: brief }), instructions: promptText('workshop.draft.grid'), check: toolCall => gridDraftCheck(toolCall, { tool, message: brief }) }
+      return { tool, parse: args => parseGridDraft(args, { message: brief }), instructions: personalInstructions(promptText('workshop.draft.grid'), forYou), check: toolCall => gridDraftCheck(toolCall, { tool, message: brief }) }
     },
   }[format]?.()
   const tool = special?.tool || { ...authorTool, description: promptText('tool.draft_workshop') }
   const parse = special?.parse || parseLaneDraft
   const plan = await req({
     feature: 'workshop',
-    prompts: [{ role: 'user', content: base ? JSON.stringify({ currentWorkshop: base, requestedChange: brief.trim() }) : brief.trim() }],
+    // a For you draft names its person: it may run outside any Meteor method (an agent's token), where there is no caller
+    ...(forYou && { userId: user._id }),
+    // a For you brief is the agent's words from the person's facts and tools: it goes in as data (workshop.draft.personal says so)
+    prompts: [{ role: 'user', content: base ? JSON.stringify({ currentWorkshop: base, requestedChange: brief.trim() }) : forYou ? wrapData('brief', brief.trim()) : brief.trim() }],
     system: special?.instructions || promptText('workshop.draft.system'),
     functions: [tool], function_call: { name: tool.name },
     // A lane board or a component drafted with a model that now and then writes its call as text in its own markup
@@ -205,6 +214,30 @@ async function draftWorkshop(brief, format = 'lanes', currentDraft) {
     ? `${plan.chosenLabel} could not return a usable draft. Check the model service and its tool-calling support, or choose another model in your AI settings.`
     : 'The agent could not produce a valid draft. Revise the brief and try again.')
   return parse(plan.toolCall.arguments)
+}
+
+// A For you draft's instructions: the component's or page's own, then what is known about the person and why the
+// idea fits them, as data (workshop.draft.personal). Any other draft: its instructions as they are.
+function personalInstructions(instructions, forYou) {
+  const personal = forYou?.personal
+  if (!personal) return instructions
+  const facts = typeof personal.facts === 'string' ? personal.facts.trim() : ''
+  const tools = typeof personal.tools === 'string' ? personal.tools.trim() : ''
+  return promptText('workshop.draft.personal', {
+    instructions, why: String(personal.why || ''), hasFacts: Boolean(facts), hasTools: Boolean(tools), ...(facts && { facts }), ...(tools && { tools }),
+  })
+}
+
+/**
+ * For you (server/personal): one idea drafted for the person it was suggested to, through the same drafting as
+ * workshops.draft (its switch, its one-draft-a-minute lock, its quality gate and retry), metered as a draft under
+ * 'workshop'. Server only. → the drafted board (parseComponentDraft or parseGridDraft)
+ */
+export function draftForYou({ userId, brief, format, personal }) {
+  return runAIAction({ feature: 'workshop', userId }, async () => {
+    const user = userId ? await Meteor.users.findOneAsync({ _id: userId }) : null
+    return draftWorkshop(brief, format, undefined, { user, personal })
+  })
 }
 
 Meteor.methods({

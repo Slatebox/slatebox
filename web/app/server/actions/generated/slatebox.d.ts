@@ -182,10 +182,10 @@ declare namespace slatebox.ai.bindings {
 declare namespace slatebox.ai.bindings {
   /** Set AI bindings. Sets which model each named part of Slatebox uses: use model (a model id from the Models list, <provider>:<model>), default (the default model), or off (that part answers "turned off by your administrator"). A model that cannot do what the part needs is refused. Only the rows that change are written, each with its own line in the change history; note is optional. Every server picks it up within seconds. Administrators only. @scope ai:admin @confirm @idempotent */
   function set(input: {
-    /** (1–16 items) */
+    /** (1–17 items) */
     changes: Array<{
       /** The part of Slatebox, for example shape or agent.slatebox; default is everything not set. */
-      surface: "default" | "chat" | "chat.route" | "generation" | "presentation" | "vision" | "images" | "shape" | "workshop" | "workshop.draft" | "canvas" | "agent.slatebox" | "library" | "connectors" | "interview" | "eval";
+      surface: "default" | "chat" | "chat.route" | "generation" | "presentation" | "vision" | "images" | "shape" | "workshop" | "workshop.draft" | "canvas" | "agent.slatebox" | "library" | "connectors" | "interview" | "personal.suggest" | "eval";
       use: "default" | "model" | "off";
       /** With use model: <provider>:<model>. (at most 260 characters) */
       model?: string;
@@ -280,9 +280,9 @@ declare namespace slatebox.ai.control {
   function reset(input: {
     target: "binding" | "bindings" | "prompt" | "prompts" | "all";
     /** For target binding: the part of Slatebox. */
-    surface?: "default" | "chat" | "chat.route" | "generation" | "presentation" | "vision" | "images" | "shape" | "workshop" | "workshop.draft" | "canvas" | "agent.slatebox" | "library" | "connectors" | "interview" | "eval";
+    surface?: "default" | "chat" | "chat.route" | "generation" | "presentation" | "vision" | "images" | "shape" | "workshop" | "workshop.draft" | "canvas" | "agent.slatebox" | "library" | "connectors" | "interview" | "personal.suggest" | "eval";
     /** For target prompt: the prompt. */
-    promptId?: "shape.system" | "shape.user" | "shape.retry" | "tool.propose_shapes" | "workshop.map.system" | "workshop.lane.system" | "workshop.chat.retry" | "tool.propose_map_edits" | "tool.propose_workshop_edits" | "workshop.draft.system" | "workshop.draft.component" | "workshop.draft.grid" | "workshop.draft.map" | "workshop.draft.release" | "workshop.draft.rules" | "workshop.draft.retry" | "workshop.draft.repair" | "tool.draft_workshop" | "tool.draft_component" | "tool.draft_grid" | "tool.draft_concept_map" | "tool.draft_release_plan" | "tool.revise_workshop_rules" | "exec.chat.system" | "exec.chat.fix" | "exec.chat.retry" | "agent.request.notes" | "presentation.segments" | "presentation.art" | "presentation.system" | "presentation.system.dynamic" | "presentation.system.slides" | "presentation.system.template" | "presentation.slate" | "presentation.user" | "presentation.brief" | "presentation.refine" | "tool.create-presentation" | "tool.create-presentation.image-query" | "tool.create-presentation.image-prompt" | "tool.create-presentation.image-why" | "library.refine.system" | "library.refine.request" | "library.refine.retry" | "tool.propose_library_refinement" | "connectors.plan.system" | "connectors.plan.writes" | "connectors.plan.next" | "connectors.plan.tool" | "connectors.layout.system" | "connectors.layout.budget" | "connectors.layout.tool" | "connectors.recipe.github" | "connectors.recipe.linear" | "connectors.recipe.huggingface" | "connectors.recipe.deepwiki" | "connectors.recipe.context7" | "connectors.recipe.wolfram" | "connectors.recipe.firecrawl" | "connectors.recipe.exa" | "interview.system" | "interview.opening" | "interview.retry" | "tool.remember";
+    promptId?: "shape.system" | "shape.user" | "shape.retry" | "tool.propose_shapes" | "workshop.map.system" | "workshop.lane.system" | "workshop.chat.retry" | "tool.propose_map_edits" | "tool.propose_workshop_edits" | "workshop.draft.system" | "workshop.draft.component" | "workshop.draft.grid" | "workshop.draft.map" | "workshop.draft.release" | "workshop.draft.rules" | "workshop.draft.retry" | "workshop.draft.repair" | "tool.draft_workshop" | "tool.draft_component" | "tool.draft_grid" | "tool.draft_concept_map" | "tool.draft_release_plan" | "tool.revise_workshop_rules" | "exec.chat.system" | "exec.chat.fix" | "exec.chat.retry" | "agent.request.notes" | "presentation.segments" | "presentation.art" | "presentation.system" | "presentation.system.dynamic" | "presentation.system.slides" | "presentation.system.template" | "presentation.slate" | "presentation.user" | "presentation.brief" | "presentation.refine" | "tool.create-presentation" | "tool.create-presentation.image-query" | "tool.create-presentation.image-prompt" | "tool.create-presentation.image-why" | "library.refine.system" | "library.refine.request" | "library.refine.retry" | "tool.propose_library_refinement" | "connectors.plan.system" | "connectors.plan.writes" | "connectors.plan.next" | "connectors.plan.tool" | "connectors.layout.system" | "connectors.layout.budget" | "connectors.layout.tool" | "connectors.recipe.github" | "connectors.recipe.linear" | "connectors.recipe.huggingface" | "connectors.recipe.deepwiki" | "connectors.recipe.context7" | "connectors.recipe.wolfram" | "connectors.recipe.firecrawl" | "connectors.recipe.exa" | "interview.system" | "interview.opening" | "interview.retry" | "tool.remember" | "personal.suggest.system" | "personal.suggest.ask" | "personal.suggest.retry" | "tool.suggest_ideas" | "workshop.draft.personal";
     /** (1–500 characters) */
     reason: string;
   }): Promise<({
@@ -420,7 +420,7 @@ declare namespace slatebox.ai.prompts {
   /** AI prompt. Returns one prompt: the built-in text (version 0), the text served now and where it comes from, every saved version newest first with its author, note and eval results, the values it may use, and the samples a test run can send. Administrators only. @scope ai:admin:read */
   function get(input: {
     /** The prompt, for example shape.system. */
-    id: "shape.system" | "shape.user" | "shape.retry" | "tool.propose_shapes" | "workshop.map.system" | "workshop.lane.system" | "workshop.chat.retry" | "tool.propose_map_edits" | "tool.propose_workshop_edits" | "workshop.draft.system" | "workshop.draft.component" | "workshop.draft.grid" | "workshop.draft.map" | "workshop.draft.release" | "workshop.draft.rules" | "workshop.draft.retry" | "workshop.draft.repair" | "tool.draft_workshop" | "tool.draft_component" | "tool.draft_grid" | "tool.draft_concept_map" | "tool.draft_release_plan" | "tool.revise_workshop_rules" | "exec.chat.system" | "exec.chat.fix" | "exec.chat.retry" | "agent.request.notes" | "presentation.segments" | "presentation.art" | "presentation.system" | "presentation.system.dynamic" | "presentation.system.slides" | "presentation.system.template" | "presentation.slate" | "presentation.user" | "presentation.brief" | "presentation.refine" | "tool.create-presentation" | "tool.create-presentation.image-query" | "tool.create-presentation.image-prompt" | "tool.create-presentation.image-why" | "library.refine.system" | "library.refine.request" | "library.refine.retry" | "tool.propose_library_refinement" | "connectors.plan.system" | "connectors.plan.writes" | "connectors.plan.next" | "connectors.plan.tool" | "connectors.layout.system" | "connectors.layout.budget" | "connectors.layout.tool" | "connectors.recipe.github" | "connectors.recipe.linear" | "connectors.recipe.huggingface" | "connectors.recipe.deepwiki" | "connectors.recipe.context7" | "connectors.recipe.wolfram" | "connectors.recipe.firecrawl" | "connectors.recipe.exa" | "interview.system" | "interview.opening" | "interview.retry" | "tool.remember";
+    id: "shape.system" | "shape.user" | "shape.retry" | "tool.propose_shapes" | "workshop.map.system" | "workshop.lane.system" | "workshop.chat.retry" | "tool.propose_map_edits" | "tool.propose_workshop_edits" | "workshop.draft.system" | "workshop.draft.component" | "workshop.draft.grid" | "workshop.draft.map" | "workshop.draft.release" | "workshop.draft.rules" | "workshop.draft.retry" | "workshop.draft.repair" | "tool.draft_workshop" | "tool.draft_component" | "tool.draft_grid" | "tool.draft_concept_map" | "tool.draft_release_plan" | "tool.revise_workshop_rules" | "exec.chat.system" | "exec.chat.fix" | "exec.chat.retry" | "agent.request.notes" | "presentation.segments" | "presentation.art" | "presentation.system" | "presentation.system.dynamic" | "presentation.system.slides" | "presentation.system.template" | "presentation.slate" | "presentation.user" | "presentation.brief" | "presentation.refine" | "tool.create-presentation" | "tool.create-presentation.image-query" | "tool.create-presentation.image-prompt" | "tool.create-presentation.image-why" | "library.refine.system" | "library.refine.request" | "library.refine.retry" | "tool.propose_library_refinement" | "connectors.plan.system" | "connectors.plan.writes" | "connectors.plan.next" | "connectors.plan.tool" | "connectors.layout.system" | "connectors.layout.budget" | "connectors.layout.tool" | "connectors.recipe.github" | "connectors.recipe.linear" | "connectors.recipe.huggingface" | "connectors.recipe.deepwiki" | "connectors.recipe.context7" | "connectors.recipe.wolfram" | "connectors.recipe.firecrawl" | "connectors.recipe.exa" | "interview.system" | "interview.opening" | "interview.retry" | "tool.remember" | "personal.suggest.system" | "personal.suggest.ask" | "personal.suggest.retry" | "tool.suggest_ideas" | "workshop.draft.personal";
   }): Promise<{
     id?: string;
     code?: Record<string, unknown>;
@@ -442,7 +442,7 @@ declare namespace slatebox.ai.prompts {
   /** Render AI prompt. Renders a prompt version (or text sent with the call) into the request a built-in sample sends, and reports its lint findings. No model is called and nothing is saved. Administrators only. @scope ai:admin:read @idempotent */
   function render(input: {
     /** The prompt, for example shape.system. */
-    id: "shape.system" | "shape.user" | "shape.retry" | "tool.propose_shapes" | "workshop.map.system" | "workshop.lane.system" | "workshop.chat.retry" | "tool.propose_map_edits" | "tool.propose_workshop_edits" | "workshop.draft.system" | "workshop.draft.component" | "workshop.draft.grid" | "workshop.draft.map" | "workshop.draft.release" | "workshop.draft.rules" | "workshop.draft.retry" | "workshop.draft.repair" | "tool.draft_workshop" | "tool.draft_component" | "tool.draft_grid" | "tool.draft_concept_map" | "tool.draft_release_plan" | "tool.revise_workshop_rules" | "exec.chat.system" | "exec.chat.fix" | "exec.chat.retry" | "agent.request.notes" | "presentation.segments" | "presentation.art" | "presentation.system" | "presentation.system.dynamic" | "presentation.system.slides" | "presentation.system.template" | "presentation.slate" | "presentation.user" | "presentation.brief" | "presentation.refine" | "tool.create-presentation" | "tool.create-presentation.image-query" | "tool.create-presentation.image-prompt" | "tool.create-presentation.image-why" | "library.refine.system" | "library.refine.request" | "library.refine.retry" | "tool.propose_library_refinement" | "connectors.plan.system" | "connectors.plan.writes" | "connectors.plan.next" | "connectors.plan.tool" | "connectors.layout.system" | "connectors.layout.budget" | "connectors.layout.tool" | "connectors.recipe.github" | "connectors.recipe.linear" | "connectors.recipe.huggingface" | "connectors.recipe.deepwiki" | "connectors.recipe.context7" | "connectors.recipe.wolfram" | "connectors.recipe.firecrawl" | "connectors.recipe.exa" | "interview.system" | "interview.opening" | "interview.retry" | "tool.remember";
+    id: "shape.system" | "shape.user" | "shape.retry" | "tool.propose_shapes" | "workshop.map.system" | "workshop.lane.system" | "workshop.chat.retry" | "tool.propose_map_edits" | "tool.propose_workshop_edits" | "workshop.draft.system" | "workshop.draft.component" | "workshop.draft.grid" | "workshop.draft.map" | "workshop.draft.release" | "workshop.draft.rules" | "workshop.draft.retry" | "workshop.draft.repair" | "tool.draft_workshop" | "tool.draft_component" | "tool.draft_grid" | "tool.draft_concept_map" | "tool.draft_release_plan" | "tool.revise_workshop_rules" | "exec.chat.system" | "exec.chat.fix" | "exec.chat.retry" | "agent.request.notes" | "presentation.segments" | "presentation.art" | "presentation.system" | "presentation.system.dynamic" | "presentation.system.slides" | "presentation.system.template" | "presentation.slate" | "presentation.user" | "presentation.brief" | "presentation.refine" | "tool.create-presentation" | "tool.create-presentation.image-query" | "tool.create-presentation.image-prompt" | "tool.create-presentation.image-why" | "library.refine.system" | "library.refine.request" | "library.refine.retry" | "tool.propose_library_refinement" | "connectors.plan.system" | "connectors.plan.writes" | "connectors.plan.next" | "connectors.plan.tool" | "connectors.layout.system" | "connectors.layout.budget" | "connectors.layout.tool" | "connectors.recipe.github" | "connectors.recipe.linear" | "connectors.recipe.huggingface" | "connectors.recipe.deepwiki" | "connectors.recipe.context7" | "connectors.recipe.wolfram" | "connectors.recipe.firecrawl" | "connectors.recipe.exa" | "interview.system" | "interview.opening" | "interview.retry" | "tool.remember" | "personal.suggest.system" | "personal.suggest.ask" | "personal.suggest.retry" | "tool.suggest_ideas" | "workshop.draft.personal";
     /** A saved version; 0 is the built-in text. (at least 0) */
     version?: number;
     /** The text. Values go in as {{name}}; {{#flag}}…{{/flag}} keeps text only when the flag is set, {{^flag}}…{{/flag}} only when it is not. (1–32768 characters) */
@@ -463,7 +463,7 @@ declare namespace slatebox.ai.prompts {
   /** Save AI prompt draft. Saves a new draft version of a prompt. Changes nothing live: a person publishes it after its checks pass. An agent's draft is marked as a suggestion. Returns the version and its lint findings. Administrators only. @scope ai:admin */
   function saveDraft(input: {
     /** The prompt, for example shape.system. */
-    id: "shape.system" | "shape.user" | "shape.retry" | "tool.propose_shapes" | "workshop.map.system" | "workshop.lane.system" | "workshop.chat.retry" | "tool.propose_map_edits" | "tool.propose_workshop_edits" | "workshop.draft.system" | "workshop.draft.component" | "workshop.draft.grid" | "workshop.draft.map" | "workshop.draft.release" | "workshop.draft.rules" | "workshop.draft.retry" | "workshop.draft.repair" | "tool.draft_workshop" | "tool.draft_component" | "tool.draft_grid" | "tool.draft_concept_map" | "tool.draft_release_plan" | "tool.revise_workshop_rules" | "exec.chat.system" | "exec.chat.fix" | "exec.chat.retry" | "agent.request.notes" | "presentation.segments" | "presentation.art" | "presentation.system" | "presentation.system.dynamic" | "presentation.system.slides" | "presentation.system.template" | "presentation.slate" | "presentation.user" | "presentation.brief" | "presentation.refine" | "tool.create-presentation" | "tool.create-presentation.image-query" | "tool.create-presentation.image-prompt" | "tool.create-presentation.image-why" | "library.refine.system" | "library.refine.request" | "library.refine.retry" | "tool.propose_library_refinement" | "connectors.plan.system" | "connectors.plan.writes" | "connectors.plan.next" | "connectors.plan.tool" | "connectors.layout.system" | "connectors.layout.budget" | "connectors.layout.tool" | "connectors.recipe.github" | "connectors.recipe.linear" | "connectors.recipe.huggingface" | "connectors.recipe.deepwiki" | "connectors.recipe.context7" | "connectors.recipe.wolfram" | "connectors.recipe.firecrawl" | "connectors.recipe.exa" | "interview.system" | "interview.opening" | "interview.retry" | "tool.remember";
+    id: "shape.system" | "shape.user" | "shape.retry" | "tool.propose_shapes" | "workshop.map.system" | "workshop.lane.system" | "workshop.chat.retry" | "tool.propose_map_edits" | "tool.propose_workshop_edits" | "workshop.draft.system" | "workshop.draft.component" | "workshop.draft.grid" | "workshop.draft.map" | "workshop.draft.release" | "workshop.draft.rules" | "workshop.draft.retry" | "workshop.draft.repair" | "tool.draft_workshop" | "tool.draft_component" | "tool.draft_grid" | "tool.draft_concept_map" | "tool.draft_release_plan" | "tool.revise_workshop_rules" | "exec.chat.system" | "exec.chat.fix" | "exec.chat.retry" | "agent.request.notes" | "presentation.segments" | "presentation.art" | "presentation.system" | "presentation.system.dynamic" | "presentation.system.slides" | "presentation.system.template" | "presentation.slate" | "presentation.user" | "presentation.brief" | "presentation.refine" | "tool.create-presentation" | "tool.create-presentation.image-query" | "tool.create-presentation.image-prompt" | "tool.create-presentation.image-why" | "library.refine.system" | "library.refine.request" | "library.refine.retry" | "tool.propose_library_refinement" | "connectors.plan.system" | "connectors.plan.writes" | "connectors.plan.next" | "connectors.plan.tool" | "connectors.layout.system" | "connectors.layout.budget" | "connectors.layout.tool" | "connectors.recipe.github" | "connectors.recipe.linear" | "connectors.recipe.huggingface" | "connectors.recipe.deepwiki" | "connectors.recipe.context7" | "connectors.recipe.wolfram" | "connectors.recipe.firecrawl" | "connectors.recipe.exa" | "interview.system" | "interview.opening" | "interview.retry" | "tool.remember" | "personal.suggest.system" | "personal.suggest.ask" | "personal.suggest.retry" | "tool.suggest_ideas" | "workshop.draft.personal";
     /** The text. Values go in as {{name}}; {{#flag}}…{{/flag}} keeps text only when the flag is set, {{^flag}}…{{/flag}} only when it is not. (1–32768 characters) */
     body: string;
     /** Per value: data encloses it in a <data> block so it reads as data, not instructions. */
@@ -486,7 +486,7 @@ declare namespace slatebox.ai.prompts {
   /** Test AI prompt. Sends a prompt version (or text sent with the call) with a built-in sample through a part of Slatebox's binding (default: the prompt's own). Returns the request sent, the raw answer, whether that part could use it, the model, latency and cost. The answer is shown, never applied. Metered to the caller; 30 an hour per administrator. Administrators only. @scope ai:admin */
   function test(input: {
     /** The prompt, for example shape.system. */
-    id: "shape.system" | "shape.user" | "shape.retry" | "tool.propose_shapes" | "workshop.map.system" | "workshop.lane.system" | "workshop.chat.retry" | "tool.propose_map_edits" | "tool.propose_workshop_edits" | "workshop.draft.system" | "workshop.draft.component" | "workshop.draft.grid" | "workshop.draft.map" | "workshop.draft.release" | "workshop.draft.rules" | "workshop.draft.retry" | "workshop.draft.repair" | "tool.draft_workshop" | "tool.draft_component" | "tool.draft_grid" | "tool.draft_concept_map" | "tool.draft_release_plan" | "tool.revise_workshop_rules" | "exec.chat.system" | "exec.chat.fix" | "exec.chat.retry" | "agent.request.notes" | "presentation.segments" | "presentation.art" | "presentation.system" | "presentation.system.dynamic" | "presentation.system.slides" | "presentation.system.template" | "presentation.slate" | "presentation.user" | "presentation.brief" | "presentation.refine" | "tool.create-presentation" | "tool.create-presentation.image-query" | "tool.create-presentation.image-prompt" | "tool.create-presentation.image-why" | "library.refine.system" | "library.refine.request" | "library.refine.retry" | "tool.propose_library_refinement" | "connectors.plan.system" | "connectors.plan.writes" | "connectors.plan.next" | "connectors.plan.tool" | "connectors.layout.system" | "connectors.layout.budget" | "connectors.layout.tool" | "connectors.recipe.github" | "connectors.recipe.linear" | "connectors.recipe.huggingface" | "connectors.recipe.deepwiki" | "connectors.recipe.context7" | "connectors.recipe.wolfram" | "connectors.recipe.firecrawl" | "connectors.recipe.exa" | "interview.system" | "interview.opening" | "interview.retry" | "tool.remember";
+    id: "shape.system" | "shape.user" | "shape.retry" | "tool.propose_shapes" | "workshop.map.system" | "workshop.lane.system" | "workshop.chat.retry" | "tool.propose_map_edits" | "tool.propose_workshop_edits" | "workshop.draft.system" | "workshop.draft.component" | "workshop.draft.grid" | "workshop.draft.map" | "workshop.draft.release" | "workshop.draft.rules" | "workshop.draft.retry" | "workshop.draft.repair" | "tool.draft_workshop" | "tool.draft_component" | "tool.draft_grid" | "tool.draft_concept_map" | "tool.draft_release_plan" | "tool.revise_workshop_rules" | "exec.chat.system" | "exec.chat.fix" | "exec.chat.retry" | "agent.request.notes" | "presentation.segments" | "presentation.art" | "presentation.system" | "presentation.system.dynamic" | "presentation.system.slides" | "presentation.system.template" | "presentation.slate" | "presentation.user" | "presentation.brief" | "presentation.refine" | "tool.create-presentation" | "tool.create-presentation.image-query" | "tool.create-presentation.image-prompt" | "tool.create-presentation.image-why" | "library.refine.system" | "library.refine.request" | "library.refine.retry" | "tool.propose_library_refinement" | "connectors.plan.system" | "connectors.plan.writes" | "connectors.plan.next" | "connectors.plan.tool" | "connectors.layout.system" | "connectors.layout.budget" | "connectors.layout.tool" | "connectors.recipe.github" | "connectors.recipe.linear" | "connectors.recipe.huggingface" | "connectors.recipe.deepwiki" | "connectors.recipe.context7" | "connectors.recipe.wolfram" | "connectors.recipe.firecrawl" | "connectors.recipe.exa" | "interview.system" | "interview.opening" | "interview.retry" | "tool.remember" | "personal.suggest.system" | "personal.suggest.ask" | "personal.suggest.retry" | "tool.suggest_ideas" | "workshop.draft.personal";
     /** A saved version; 0 is the built-in text. (at least 0) */
     version?: number;
     /** The text. Values go in as {{name}}; {{#flag}}…{{/flag}} keeps text only when the flag is set, {{^flag}}…{{/flag}} only when it is not. (1–32768 characters) */
@@ -496,7 +496,7 @@ declare namespace slatebox.ai.prompts {
     /** A built-in sample (ai.prompts.get lists them). Default: the first. (at most 40 characters) */
     sample?: string;
     /** Whose binding (model chain) to test against. */
-    surface?: "default" | "chat" | "chat.route" | "generation" | "presentation" | "vision" | "images" | "shape" | "workshop" | "workshop.draft" | "canvas" | "agent.slatebox" | "library" | "connectors" | "interview" | "eval";
+    surface?: "default" | "chat" | "chat.route" | "generation" | "presentation" | "vision" | "images" | "shape" | "workshop" | "workshop.draft" | "canvas" | "agent.slatebox" | "library" | "connectors" | "interview" | "personal.suggest" | "eval";
   }): Promise<({
     rendered?: Record<string, unknown>;
     answer?: Record<string, unknown>;
@@ -639,6 +639,8 @@ declare namespace slatebox.ai {
       connectors?: string | null;
       /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */
       interview?: string | null;
+      /** me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear. (at most 48 characters) */
+      "personal.suggest"?: string | null;
     };
     ownProviders?: "on" | "off";
   }): Promise<({
@@ -908,7 +910,7 @@ declare namespace slatebox.library {
         branches?: number;
         [key: string]: unknown;
       };
-      /** branchedFrom or forkedFrom: { itemId, version, title }. */
+      /** branchedFrom or forkedFrom: { itemId, version, title }; madeFor: { kind: "for-you", ideaId } for a component Slatebox built for its author from an idea in For you. */
       provenance?: Record<string, unknown>;
       url: string;
       preview?: {
@@ -986,7 +988,7 @@ declare namespace slatebox.library {
         branches?: number;
         [key: string]: unknown;
       };
-      /** branchedFrom or forkedFrom: { itemId, version, title }. */
+      /** branchedFrom or forkedFrom: { itemId, version, title }; madeFor: { kind: "for-you", ideaId } for a component Slatebox built for its author from an idea in For you. */
       provenance?: Record<string, unknown>;
       url: string;
       preview?: {
@@ -1189,7 +1191,7 @@ declare namespace slatebox.library.review {
         branches?: number;
         [key: string]: unknown;
       };
-      /** branchedFrom or forkedFrom: { itemId, version, title }. */
+      /** branchedFrom or forkedFrom: { itemId, version, title }; madeFor: { kind: "for-you", ideaId } for a component Slatebox built for its author from an idea in For you. */
       provenance?: Record<string, unknown>;
       url: string;
       preview?: {
@@ -1349,6 +1351,113 @@ declare namespace slatebox.media {
     /** False when the host shared nothing about the video (private, removed, or not answering). */
     found: boolean;
     notice?: string;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.personal.ideas {
+  /** Build an idea made for you. Builds one idea: the agent drafts it from your words (metered as a board draft), it is saved as your own private smart component in the library, and it opens on a new private slate. An idea built already answers the slate it opened on. A stale idea (About you changed since) is refused with 409 ideas_stale: refresh first. A token also needs slates:write. @scope profile:write */
+  function build(input: {
+    /** The idea, as personal.ideas.list gives it (ideas[].id). */
+    ideaId: string;
+  }): Promise<({
+    ideaId: string;
+    kind: "component" | "grid";
+    title: string;
+    /** Your library draft. */
+    itemId: string;
+    /** The new private slate it opened on. */
+    shareId: string;
+    /** false: it was built already, and this is that slate. */
+    built: boolean;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.personal.ideas {
+  /** Not for me. Turns down one idea: it goes, and the agent is not asked for it again. @scope profile:write */
+  function dismiss(input: {
+    /** The idea, as personal.ideas.list gives it (ideas[].id). */
+    ideaId: string;
+  }): Promise<({
+    ideaId: string;
+    dismissed: true;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.personal.ideas {
+  /** Ideas made for you. The smart components and printable pages Slatebox suggested for your work (For you), each with why it fits and what Build it makes, from what you keep in About you and the tools you connected. Asks nothing of the agent. Only you see them. @scope profile:read */
+  function list(input: Record<string, unknown>): Promise<{
+    /** Personalization is on. */
+    on: boolean;
+    ideas: Array<{
+      id: string;
+      title: string;
+      /** component: a smart component (a board of lanes); grid: a printable page. */
+      kind: "component" | "grid";
+      /** One line: what the person said or connected that it fits. */
+      why: string;
+      /** What Build it drafts. */
+      brief: string;
+      /** Connected tools it uses, by name. */
+      tools: string[];
+      /** Once built: the slate it opened on and its library draft. */
+      built?: {
+        shareId?: string;
+        itemId?: string;
+        [key: string]: unknown;
+      };
+      [key: string]: unknown;
+    }>;
+    /** Why there is nothing to suggest from (no request was made). */
+    empty: {
+      code?: "personalization-off" | "nothing-known";
+      message?: string;
+      [key: string]: unknown;
+    } | null;
+    /** About you changed since these ideas were made: refresh for ones that fit it now (a stale idea is not built). */
+    stale: boolean;
+    createdAt: string | null;
+    canRefresh: boolean;
+    [key: string]: unknown;
+  }>;
+}
+
+declare namespace slatebox.personal.ideas {
+  /** Get new ideas made for you. Asks the agent for 3 to 6 new ideas made for your work, from what you keep in About you and the names of the tools you connected; they replace the ones shown. One metered request, up to 10 an hour. With personalization off, or nothing known about you yet, nothing is asked and the empty state says what to do. @scope profile:write */
+  function refresh(input: Record<string, unknown>): Promise<({
+    /** Personalization is on. */
+    on: boolean;
+    ideas: Array<{
+      id: string;
+      title: string;
+      /** component: a smart component (a board of lanes); grid: a printable page. */
+      kind: "component" | "grid";
+      /** One line: what the person said or connected that it fits. */
+      why: string;
+      /** What Build it drafts. */
+      brief: string;
+      /** Connected tools it uses, by name. */
+      tools: string[];
+      /** Once built: the slate it opened on and its library draft. */
+      built?: {
+        shareId?: string;
+        itemId?: string;
+        [key: string]: unknown;
+      };
+      [key: string]: unknown;
+    }>;
+    /** Why there is nothing to suggest from (no request was made). */
+    empty: {
+      code?: "personalization-off" | "nothing-known";
+      message?: string;
+      [key: string]: unknown;
+    } | null;
+    /** About you changed since these ideas were made: refresh for ones that fit it now (a stale idea is not built). */
+    stale: boolean;
+    createdAt: string | null;
+    canRefresh: boolean;
     [key: string]: unknown;
   }) & { mode: "save" }>;
 }

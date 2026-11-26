@@ -74,6 +74,10 @@ test('every AI entry point calls runAIAction', () => {
     ['server/methods/canvas-conversation.js', 'const result = useAI ?'],
     // the interview in About you (S2): each turn's one model call, through server/interview/core.mjs's run
     ['server/methods/interview.js', 'run: (userId, fn) =>'],
+    // For you (S4): a suggestion's one model call, through server/personal/core.mjs's run (personal.suggest)
+    ['server/personal/meteor.js', 'run: refusing('],
+    // and building one: a draft through workshops.draft's path, metered as a draft (workshops.js draftForYou)
+    ['server/methods/workshops.js', 'export function draftForYou'],
   ]
   for (const [file, marker] of entries) {
     const text = source(file)

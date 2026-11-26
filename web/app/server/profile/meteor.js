@@ -5,7 +5,7 @@
 import { Meteor } from 'meteor/meteor'
 import { Random } from 'meteor/random'
 import { DDPRateLimiter } from 'meteor/ddp-rate-limiter'
-import { PersonalFacts, PersonalSettings } from '../../imports/api/common/models'
+import { PersonalFacts, PersonalIdeas, PersonalSettings } from '../../imports/api/common/models'
 import { createProfileStore, ensureProfileIndexes } from './store.mjs'
 import { PROFILE_WRITE_LIMITS } from '../actions/profile.mjs'
 
@@ -14,6 +14,8 @@ export const profileStore = createProfileStore({
   settings: PersonalSettings.rawCollection(),
   users: Meteor.users.rawCollection(),
   newId: () => Random.id(),
+  // For you's ideas (server/personal) go with the account too
+  ideas: PersonalIdeas.rawCollection(),
 })
 
 /**

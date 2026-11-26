@@ -103,11 +103,12 @@ test("the server card follows typedTools: exec and describe only when typed tool
 });
 
 // Restated (About you): seven more typed tools, profile.facts.* and profile.settings.get (it was 68).
-test("the app's server card comes from the action registry: 75 tools, 6 prompts, as generated", async () => {
+// Restated (For you, 2026-11-26): four more, personal.ideas.list, refresh, dismiss and build (it was 75).
+test("the app's server card comes from the action registry: 79 tools, 6 prompts, as generated", async () => {
   const tools = renderExecTool(buildClientManifest(createAppRegistry()));
   const card = buildServerCard({ tools, version: "1.0", appOrigin: ORIGIN });
   const generated = JSON.parse(await readFile(new URL("../web/app/server/actions/generated/exec-tool.json", import.meta.url), "utf8"));
-  assert.equal(card.tools.length, 75);
+  assert.equal(card.tools.length, 79);
   assert.equal(card.prompts.length, 6);
   assert.equal(card.resources.length, 2);
   assert.equal(card.resourceTemplates.length, 2);

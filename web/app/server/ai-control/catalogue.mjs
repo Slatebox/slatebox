@@ -97,6 +97,13 @@ export const SURFACES = defineSurfaces([
   // The interview (About you): the agent asks about the person's work, one question a turn, and proposes facts
   // with its remember tool for the person to keep. A conversation turn, metered as one (chat's estimate and ceiling).
   { id: 'interview', title: 'Getting to know you (the interview)', follows: 'chat', needs: ['tools'], requestFeatures: ['interview'], meterFeatures: ['interview'], estimate: 2000, ceiling: 50000 },
+  // For you (server/personal): from what the person keeps in About you and the names of the tools they connected, the
+  // agent suggests 3 to 6 smart components and printable pages made for their work. One forced tool call (and at most
+  // one retry), metered under its own key; building one is board drafting (workshop.draft, the workshop meter key).
+  // TODO(personalization allowance): add 'personal.suggest' to the list of personal meter features when that list lands,
+  // and decide there whether a For you build (metered under 'workshop' through workshops.js draftForYou) counts toward
+  // the allowance too: it would need its own meter key, as 'workshop' is every board draft's.
+  { id: 'personal.suggest', title: 'Ideas made for you (For you)', follows: 'chat', needs: ['tools'], requestFeatures: ['personal.suggest'], meterFeatures: ['personal.suggest'], estimate: 3000, ceiling: 50000 },
   // Prompt test runs and eval gates name their model per call; the row keeps them out of `chat`.
   { id: 'admin.test', title: 'Admin test runs', follows: null, useKey: false, estimate: 30000, ceiling: 200000 },
   // The judge of the live evals (scripts/evals): an administrator's choice only, never a person's, so a model other

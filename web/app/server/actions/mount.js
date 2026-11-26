@@ -50,6 +50,7 @@ import { posterAllowedFor } from '../media/media-lookup.mjs'
 import { createAppLibrary } from '../library/meteor'
 import { countApiCall, noticingFirstAction } from '../agent-reach/usage-meteor'
 import { profileStore } from '../profile/meteor'
+import { createAppPersonal } from '../personal/meteor'
 
 const IdempotencyRecords = new Mongo.Collection('apiIdempotencyRecords')
 const RateWindows = new Mongo.Collection('apiRateWindows')
@@ -202,6 +203,8 @@ export const deps = {
 
 // library.* (server/library): the shared library, over the same save core, slate access and decks.
 deps.library = createAppLibrary(deps)
+// personal.ideas.* (server/personal): For you, which saves to the library and opens slates through the same doors.
+deps.personal = createAppPersonal(deps)
 
 export const limiter = createRateLimiter({ collection: RateWindows.rawCollection() })
 export const registry = createAppRegistry({ deps, idempotency, limiter, extraActions: enterpriseHost.actions })

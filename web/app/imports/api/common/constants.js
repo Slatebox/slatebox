@@ -287,6 +287,15 @@ const CONSTANTS = {
         set: 'profile.settings.set',
       },
     },
+    // For you (server/actions/personal.mjs): ideas made for the person, from About you, and building one
+    personal: {
+      ideas: {
+        list: 'personal.ideas.list',
+        refresh: 'personal.ideas.refresh',
+        dismiss: 'personal.ideas.dismiss',
+        build: 'personal.ideas.build',
+      },
+    },
     // The interview in About you (server/methods/interview.js): the agent's turns, and keeping what it proposed
     interview: {
       start: 'interview.start',

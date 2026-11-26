@@ -539,6 +539,31 @@ export function createLibraryCore(deps) {
     return { itemId: id, slug: item.slug, status: 'draft' }
   }
 
+  /**
+   * Server only, never an action: a board Slatebox drafted for the person (For you, server/personal) saved as their
+   * own smart component, a private draft like one saved from a builder slate (it has none: library.submit sends the
+   * saved draft). `madeFor` says which idea it came from. → { itemId, slug, status: 'draft' }
+   */
+  async function saveMade(principal, { workshop, title, summary, madeFor = null }) {
+    if (!principal?.userId || principal.kind === 'guest') throw fail(403, 'sign_in_to_publish', 'Sign up to keep your own smart components.')
+    const meta = readMeta({ title, summary }, { kind: 'component' })
+    const draft = { kind: 'component', workshop: snapshotWorkshop(validateWorkshop(workshop)) }
+    checkSize(draft)
+    await spend(principal, 'saveDraft')
+    const actor = await authorActor(principal)
+    const id = newId()
+    const item = {
+      _id: id, kind: 'component', origin: 'user', status: 'draft', reviewStatus: null, slug: slugify(meta.title, id),
+      title: meta.title, summary: meta.summary, categoryLocked: false, synonyms: [], authorId: principal.userId, authorName: actor.name,
+      provenance: madeFor ? { madeFor: { kind: 'for-you', ideaId: String(madeFor).slice(0, 64) } } : {},
+      draft, versionCount: 0, counts: { copies: 0, adds: 0, branches: 0 }, popularity: 0,
+      license: LIBRARY_LICENSE, preview: previewOf(draft), createdAt: at(), updatedAt: at(),
+    }
+    await items.insertOne(item)
+    await log(item, 'created', actor)
+    return { itemId: id, slug: item.slug, status: 'draft' }
+  }
+
   async function ownsOrAdmins(principal, slate) {
     if (slate.userId === principal.userId) return true
     return Boolean(slate.orgId && (await isTeamAdmin(principal.userId, slate.orgId)))
@@ -999,7 +1024,7 @@ export function createLibraryCore(deps) {
   }
 
   return {
-    isReviewer, list, get, stats, export: exportPage, mine, fork, branch, saveDraft, submit, withdraw, discard, comment,
+    isReviewer, list, get, stats, export: exportPage, mine, fork, branch, saveDraft, saveMade, submit, withdraw, discard, comment,
     review: {
       queue, open, refine, update, approve,
       requestChanges: (principal, input) => decide(principal, input, 'review.requestChanges', 'changes_requested', 'sent back'),

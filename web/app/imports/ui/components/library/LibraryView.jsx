@@ -12,6 +12,7 @@ import libraryApi from '../../../api/client/library'
 import { buildLink, BUILD_SHAPES } from './build/buildTurns.mjs'
 import { categoryLabel } from '../../../api/common/library-model.mjs'
 import { startGroup } from '../../../api/common/first-slate.mjs'
+import ForYou from '../personal/ForYou'
 
 // The library (library final.md §2.3): a view inside Ask Slatebox's conversation, in the panel's
 // 344px column and in the phone's sheet. Cards two to a row with a looping picture, a detail view
@@ -322,6 +323,8 @@ export default function LibraryView({ onBack, onAdd, onSay, onSend, onWhatCanItD
         {catalogGroups.map(item => <Chip key={item.id} label={item.label} size="small" clickable color={group === item.id ? 'primary' : 'default'}
           variant={group === item.id ? 'filled' : 'outlined'} aria-pressed={group === item.id} onClick={() => setGroup(item.id)} />)}
       </Box>
+      {/* For you: the first group when Slatebox has ideas made for this person (signed in; none while searching) */}
+      {!query.trim() && <ForYou variant="panel" />}
       {here && <Box component="section" aria-label="On this slate" sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
         <Typography variant="caption" sx={{ fontWeight: 700 }}>On this slate</Typography>
         <Typography variant="body2" sx={{ flex: '1 1 auto' }}>{here.name}</Typography>

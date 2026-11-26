@@ -128,7 +128,11 @@ export { LibraryItems, LibraryVersions, LibraryEvents }
 const PersonalFacts = new Mongo.Collection('personalFacts')
 const PersonalSettings = new Mongo.Collection('personalSettings')
 
-export { PersonalFacts, PersonalSettings }
+// For you (server/personal): the ideas Slatebox suggested for each person, made from their About you. One row per
+// person, read and written through the personal.ideas.* actions only, never published.
+const PersonalIdeas = new Mongo.Collection('personalIdeas')
+
+export { PersonalFacts, PersonalSettings, PersonalIdeas }
 
 // AI control (server/ai-control): providers, models, the one choice per part of Slatebox, agents
 // and prompts an administrator manages at runtime, the global switch, and the append-only audit

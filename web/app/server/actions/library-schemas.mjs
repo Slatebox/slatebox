@@ -29,7 +29,7 @@ export const itemSummary = {
   properties: {
     id: { type: 'string' }, slug: { type: 'string' }, kind: kindInput, origin: { type: 'string', enum: ['builtin', 'user'] },
     title: { type: 'string' }, summary: { type: 'string' }, category: categoryInput, authorName: { type: 'string' },
-    publishedAt: { type: 'string' }, counts, provenance: { type: 'object', description: 'branchedFrom or forkedFrom: { itemId, version, title }.' },
+    publishedAt: { type: 'string' }, counts, provenance: { type: 'object', description: 'branchedFrom or forkedFrom: { itemId, version, title }; madeFor: { kind: "for-you", ideaId } for a component Slatebox built for its author from an idea in For you.' },
     url: { type: 'string' }, preview: { type: 'object', properties: { kind: kindInput, boardKind: { type: 'string' }, notes: { type: 'integer' } } },
   },
   required: ['id', 'slug', 'kind', 'origin', 'title', 'summary', 'authorName', 'counts', 'url'],

@@ -8,6 +8,8 @@
 //                       hidden, createdAt, updatedAt }   key: the same-fact key (unique per kind)
 //   personalSettings  { _id: userId, userId, on, sources { [sourceKey]: boolean },
 //                       derived { 'first-slate': { state: 'hidden'|'removed', job } }, updatedAt }
+//   personalIdeas     (optional, `ideas`) For you's ideas made from these facts (server/personal/core.mjs):
+//                       removed with the rest when the account goes
 import {
   FIRST_SLATE_FACT_ID,
   FactError,
@@ -45,7 +47,7 @@ export async function ensureProfileIndexes({ facts, settings }) {
   for (const index of PROFILE_INDEXES) await by[index.collection].createIndex(index.key, index.options || {})
 }
 
-export function createProfileStore({ facts, settings, users, newId, now = Date.now }) {
+export function createProfileStore({ facts, settings, users, newId, now = Date.now, ideas = null }) {
   const readSettings = async (userId) => (await settings.findOne({ _id: userId })) || null
   const readStart = async (userId) => (await users.findOne({ _id: userId }, { projection: { 'profile.start': 1 } }))?.profile?.start ?? null
   const stored = async (userId) => (await facts.find({ userId }).toArray()).map((doc) => ({ ...doc, id: doc._id }))
@@ -267,6 +269,8 @@ export function createProfileStore({ facts, settings, users, newId, now = Date.n
     async removeAll(userId) {
       await facts.deleteMany({ userId })
       await settings.deleteOne({ _id: userId })
+      // For you's ideas were made from these facts: they go with them
+      if (ideas) await ideas.deleteOne({ _id: userId })
     },
   }
   return store

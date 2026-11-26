@@ -10192,6 +10192,14 @@
                 ],
                 "maxLength": 48,
                 "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
+              },
+              "personal.suggest": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 48,
+                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
               }
             },
             "additionalProperties": false,
@@ -10812,6 +10820,7 @@
               "library",
               "connectors",
               "interview",
+              "personal.suggest",
               "eval"
             ],
             "description": "For target binding: the part of Slatebox."
@@ -10882,7 +10891,12 @@
               "interview.system",
               "interview.opening",
               "interview.retry",
-              "tool.remember"
+              "tool.remember",
+              "personal.suggest.system",
+              "personal.suggest.ask",
+              "personal.suggest.retry",
+              "tool.suggest_ideas",
+              "workshop.draft.personal"
             ],
             "description": "For target prompt: the prompt."
           },
@@ -11841,7 +11855,7 @@
           "changes": {
             "type": "array",
             "minItems": 1,
-            "maxItems": 16,
+            "maxItems": 17,
             "items": {
               "type": "object",
               "properties": {
@@ -11863,6 +11877,7 @@
                     "library",
                     "connectors",
                     "interview",
+                    "personal.suggest",
                     "eval"
                   ],
                   "description": "The part of Slatebox, for example shape or agent.slatebox; default is everything not set."
@@ -12075,7 +12090,12 @@
               "interview.system",
               "interview.opening",
               "interview.retry",
-              "tool.remember"
+              "tool.remember",
+              "personal.suggest.system",
+              "personal.suggest.ask",
+              "personal.suggest.retry",
+              "tool.suggest_ideas",
+              "workshop.draft.personal"
             ],
             "description": "The prompt, for example shape.system."
           }
@@ -12220,7 +12240,12 @@
               "interview.system",
               "interview.opening",
               "interview.retry",
-              "tool.remember"
+              "tool.remember",
+              "personal.suggest.system",
+              "personal.suggest.ask",
+              "personal.suggest.retry",
+              "tool.suggest_ideas",
+              "workshop.draft.personal"
             ],
             "description": "The prompt, for example shape.system."
           },
@@ -12394,7 +12419,12 @@
               "interview.system",
               "interview.opening",
               "interview.retry",
-              "tool.remember"
+              "tool.remember",
+              "personal.suggest.system",
+              "personal.suggest.ask",
+              "personal.suggest.retry",
+              "tool.suggest_ideas",
+              "workshop.draft.personal"
             ],
             "description": "The prompt, for example shape.system."
           },
@@ -12567,7 +12597,12 @@
               "interview.system",
               "interview.opening",
               "interview.retry",
-              "tool.remember"
+              "tool.remember",
+              "personal.suggest.system",
+              "personal.suggest.ask",
+              "personal.suggest.retry",
+              "tool.suggest_ideas",
+              "workshop.draft.personal"
             ],
             "description": "The prompt, for example shape.system."
           },
@@ -12616,6 +12651,7 @@
               "library",
               "connectors",
               "interview",
+              "personal.suggest",
               "eval"
             ],
             "description": "Whose binding (model chain) to test against."
@@ -18399,7 +18435,7 @@
               },
               "provenance": {
                 "type": "object",
-                "description": "branchedFrom or forkedFrom: { itemId, version, title }."
+                "description": "branchedFrom or forkedFrom: { itemId, version, title }; madeFor: { kind: \"for-you\", ideaId } for a component Slatebox built for its author from an idea in For you."
               },
               "url": {
                 "type": "string"
@@ -20098,7 +20134,7 @@
                 },
                 "provenance": {
                   "type": "object",
-                  "description": "branchedFrom or forkedFrom: { itemId, version, title }."
+                  "description": "branchedFrom or forkedFrom: { itemId, version, title }; madeFor: { kind: \"for-you\", ideaId } for a component Slatebox built for its author from an idea in For you."
                 },
                 "url": {
                   "type": "string"
@@ -20284,7 +20320,7 @@
               },
               "provenance": {
                 "type": "object",
-                "description": "branchedFrom or forkedFrom: { itemId, version, title }."
+                "description": "branchedFrom or forkedFrom: { itemId, version, title }; madeFor: { kind: \"for-you\", ideaId } for a component Slatebox built for its author from an idea in For you."
               },
               "url": {
                 "type": "string"
@@ -21301,6 +21337,469 @@
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "personal.ideas.list",
+      "title": "Ideas made for you",
+      "description": "The smart components and printable pages Slatebox suggested for your work (For you), each with why it fits and what Build it makes, from what you keep in About you and the tools you connected. Asks nothing of the agent. Only you see them.",
+      "action": "personal.ideas.list",
+      "toolset": "account",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "scope": "profile:read",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/personal/ideas",
+        "pathParams": [],
+        "queryParams": [],
+        "bodyParams": [],
+        "idempotencyKey": "none"
+      },
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "on": {
+            "type": "boolean",
+            "description": "Personalization is on."
+          },
+          "ideas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "component",
+                    "grid"
+                  ],
+                  "description": "component: a smart component (a board of lanes); grid: a printable page."
+                },
+                "why": {
+                  "type": "string",
+                  "description": "One line: what the person said or connected that it fits."
+                },
+                "brief": {
+                  "type": "string",
+                  "description": "What Build it drafts."
+                },
+                "tools": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Connected tools it uses, by name."
+                },
+                "built": {
+                  "type": "object",
+                  "properties": {
+                    "shareId": {
+                      "type": "string"
+                    },
+                    "itemId": {
+                      "type": "string"
+                    }
+                  },
+                  "description": "Once built: the slate it opened on and its library draft."
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "kind",
+                "why",
+                "brief",
+                "tools"
+              ]
+            }
+          },
+          "empty": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "personalization-off",
+                  "nothing-known"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "description": "Why there is nothing to suggest from (no request was made)."
+          },
+          "stale": {
+            "type": "boolean",
+            "description": "About you changed since these ideas were made: refresh for ones that fit it now (a stale idea is not built)."
+          },
+          "createdAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "canRefresh": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on",
+          "ideas",
+          "empty",
+          "stale",
+          "createdAt",
+          "canRefresh"
+        ]
+      },
+      "tool": {
+        "name": "list_ideas_for_you",
+        "title": "Read the ideas made for the person",
+        "description": "Read the smart components and printable pages Slatebox suggested for the person's work, each with why it fits.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "personal.ideas.refresh",
+      "title": "Get new ideas made for you",
+      "description": "Asks the agent for 3 to 6 new ideas made for your work, from what you keep in About you and the names of the tools you connected; they replace the ones shown. One metered request, up to 10 an hour. With personalization off, or nothing known about you yet, nothing is asked and the empty state says what to do.",
+      "action": "personal.ideas.refresh",
+      "toolset": "account",
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "scope": "profile:write",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/personal/ideas/refresh",
+        "pathParams": [],
+        "queryParams": [],
+        "bodyParams": [],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "on": {
+            "type": "boolean",
+            "description": "Personalization is on."
+          },
+          "ideas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "component",
+                    "grid"
+                  ],
+                  "description": "component: a smart component (a board of lanes); grid: a printable page."
+                },
+                "why": {
+                  "type": "string",
+                  "description": "One line: what the person said or connected that it fits."
+                },
+                "brief": {
+                  "type": "string",
+                  "description": "What Build it drafts."
+                },
+                "tools": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Connected tools it uses, by name."
+                },
+                "built": {
+                  "type": "object",
+                  "properties": {
+                    "shareId": {
+                      "type": "string"
+                    },
+                    "itemId": {
+                      "type": "string"
+                    }
+                  },
+                  "description": "Once built: the slate it opened on and its library draft."
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "kind",
+                "why",
+                "brief",
+                "tools"
+              ]
+            }
+          },
+          "empty": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "personalization-off",
+                  "nothing-known"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "description": "Why there is nothing to suggest from (no request was made)."
+          },
+          "stale": {
+            "type": "boolean",
+            "description": "About you changed since these ideas were made: refresh for ones that fit it now (a stale idea is not built)."
+          },
+          "createdAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "canRefresh": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on",
+          "ideas",
+          "empty",
+          "stale",
+          "createdAt",
+          "canRefresh"
+        ]
+      },
+      "tool": {
+        "name": "refresh_ideas_for_you",
+        "title": "Get new ideas made for the person",
+        "description": "Ask Slatebox for new smart components and printable pages made for the person's work, from their About you and connected tools.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "personal.ideas.dismiss",
+      "title": "Not for me",
+      "description": "Turns down one idea: it goes, and the agent is not asked for it again.",
+      "action": "personal.ideas.dismiss",
+      "toolset": "account",
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "scope": "profile:write",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/personal/ideas/{ideaId}/dismiss",
+        "pathParams": [
+          "ideaId"
+        ],
+        "queryParams": [],
+        "bodyParams": [],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "ideaId": {
+            "type": "string",
+            "pattern": "^i[a-f0-9]{15}$",
+            "description": "The idea, as personal.ideas.list gives it (ideas[].id)."
+          }
+        },
+        "required": [
+          "ideaId"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "ideaId": {
+            "type": "string"
+          },
+          "dismissed": {
+            "const": true
+          }
+        },
+        "required": [
+          "ideaId",
+          "dismissed"
+        ]
+      },
+      "tool": {
+        "name": "dismiss_idea_for_you",
+        "title": "Turn down an idea made for the person",
+        "description": "Turn down one idea made for the person, so it is not suggested again.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "personal.ideas.build",
+      "title": "Build an idea made for you",
+      "description": "Builds one idea: the agent drafts it from your words (metered as a board draft), it is saved as your own private smart component in the library, and it opens on a new private slate. An idea built already answers the slate it opened on. A stale idea (About you changed since) is refused with 409 ideas_stale: refresh first. A token also needs slates:write.",
+      "action": "personal.ideas.build",
+      "toolset": "account",
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "scope": "profile:write",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/personal/ideas/{ideaId}/build",
+        "pathParams": [
+          "ideaId"
+        ],
+        "queryParams": [],
+        "bodyParams": [],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "ideaId": {
+            "type": "string",
+            "pattern": "^i[a-f0-9]{15}$",
+            "description": "The idea, as personal.ideas.list gives it (ideas[].id)."
+          }
+        },
+        "required": [
+          "ideaId"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "ideaId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "component",
+              "grid"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "itemId": {
+            "type": "string",
+            "description": "Your library draft."
+          },
+          "shareId": {
+            "type": "string",
+            "description": "The new private slate it opened on."
+          },
+          "built": {
+            "type": "boolean",
+            "description": "false: it was built already, and this is that slate."
+          }
+        },
+        "required": [
+          "ideaId",
+          "kind",
+          "title",
+          "itemId",
+          "shareId",
+          "built"
+        ]
+      },
+      "tool": {
+        "name": "build_idea_for_you",
+        "title": "Build an idea made for the person",
+        "description": "Build one idea made for the person: drafted from their words, saved as their private library draft, opened on a new private slate.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
           "openWorldHint": false
         }
       }

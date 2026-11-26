@@ -100,7 +100,7 @@ export async function recordCallSites(appRoot, { disabled = false, offFirst = fa
 
   const workshopsUrl = pathToFileURL(root + TARGETS[0]).href
   const canvasUrl = pathToFileURL(root + TARGETS[1]).href
-  await import(workshopsUrl)
+  const workshops = await import(workshopsUrl)
   const { modelFor } = await import(canvasUrl)
 
   // What each request's check tells the model after a wrong answer (its retry prompt).
@@ -166,6 +166,15 @@ export async function recordCallSites(appRoot, { disabled = false, offFirst = fa
     out.canvas = shape(last(), [{ toolCall: { name: 'exec', arguments: { code: '' } } }, { toolCall: null, message: { content: '' } }])
     Object.assign(out, await recordPure(pure))
     Object.assign(out, await recordPresentations(methods, calls))
+    // For you (from S4, 2026-11-26): a suggestion, and an idea drafted for the person (workshops.js draftForYou)
+    if (pure.personal) Object.assign(out, recordPersonal(pure))
+    if (workshops.draftForYou) {
+      const personal = { facts: '- role: Product manager\n- routine: Plans sprints in Linear every Monday', why: 'You plan sprints in Linear every Monday.', tools: '- Linear' }
+      for (const format of ['component', 'grid']) {
+        await quiet(() => workshops.draftForYou({ userId: 'ana', brief: 'A Monday sprint planning board with a backlog of Linear issues and a lane that holds eight.', format, personal }))
+        out[`personal:draft:${format}`] = shape(last(), [...wrongTool, { toolCall: { name: last().functions[0].name, arguments: {} } }])
+      }
+    }
     return used ? [...asked].sort() : out
   }
   board = LANES
@@ -194,17 +203,19 @@ export async function recordCallSites(appRoot, { disabled = false, offFirst = fa
 // ---- the prompt sites outside Meteor files: loaded before the hooks, as they are ----------------
 async function loadPure(root) {
   const at = (path) => import(pathToFileURL(root + path).href)
-  const [shapes, execChat, teammate, refine, registry, render, translate, context, prompts, interview, interviewRules] = await Promise.all([
+  const [shapes, execChat, teammate, refine, registry, render, translate, context, prompts, interview, interviewRules, personal] = await Promise.all([
     at('server/shapes/shape-core.mjs'), at('server/methods/ai/exec-chat.mjs'), at('server/agents/teammate.mjs'),
     at('server/library/refine-ai.mjs'), at('server/actions/index.mjs'), at('server/actions/client-render.mjs'),
     // invited agents (enterprise/, beside web/): the plan and layout prompts, with the registry's text
     at('../../enterprise/server/translate.mjs'), at('../../enterprise/server/context.mjs'), at('server/ai-control/prompts/index.mjs'),
     // the interview (About you): its turns' requests, and the tool lines the prompt names (from S2, 2026-11-26)
     at('server/interview/core.mjs').catch(() => null), at('imports/api/common/interview.mjs').catch(() => null),
+    // For you: the suggestion's request (from S4, 2026-11-26)
+    at('server/personal/core.mjs').catch(() => null),
   ])
   const manifest = render.buildClientManifest(registry.createAppRegistry())
   const exec = render.renderExecTool(manifest).exec
-  return { shapes, execChat, teammate, refine, manifest, execTool: { name: exec.name, description: exec.description, parameters: exec.inputSchema }, translate, context, promptText: prompts.promptText, interview, interviewRules }
+  return { shapes, execChat, teammate, refine, manifest, execTool: { name: exec.name, description: exec.description, parameters: exec.inputSchema }, translate, context, promptText: prompts.promptText, interview, interviewRules, personal }
 }
 
 const clone = (value) => JSON.parse(JSON.stringify(value))
@@ -275,6 +286,19 @@ async function recordPure({ shapes, execChat, teammate, refine, manifest, execTo
   }
   Object.assign(out, recordConnectors({ translate, context, promptText }))
   if (interview && interviewRules) Object.assign(out, recordInterview({ interview, interviewRules }))
+  return out
+}
+
+// ---- For you (server/personal/core.mjs): a suggestion with nothing turned down, and one with -----
+function recordPersonal({ personal }) {
+  const out = {}
+  const tools = [{ name: 'Linear', cardId: 'linear', kind: 'mcp' }, { name: 'Team </data> notes', cardId: null, kind: 'mcp' }]
+  const facts = '- role: Product manager\n- routine: Plans sprints in Linear every Monday'
+  // its check's retry: another tool, and ideas that are generic and tied to nothing the person said
+  const weak = { toolCall: { name: 'suggest_ideas', arguments: { ideas: [{ title: 'Kanban board', kind: 'component', why: 'Everyone needs one.', brief: 'A board with to do, doing and done lanes.' }] } } }
+  const site = (opts) => ({ request: clone(opts), retries: clone([opts.validateResponse({ toolCall: { name: 'not_this_tool', arguments: {} } }), opts.validateResponse(weak)]) })
+  out['personal:suggest'] = site(personal.suggestRequest({ facts, tools }))
+  out['personal:suggestDismissed'] = site(personal.suggestRequest({ facts: '', tools, dismissed: ['component\u0000monday sprint planning'], dismissedTitles: ['Monday sprint planning'] }))
   return out
 }
 

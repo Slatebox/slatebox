@@ -68,8 +68,11 @@ test('fixed prices, estimates and per-action ceilings', () => {
     presentation: 10000, 'image-search': 5000, 'image-generation': 30000, shape: 8000,
     // the interview (S2, 2026-11-26): one conversation turn, chat's estimate
     interview: 2000,
+    // For you (S4, 2026-11-26): one suggestion, a forced call and at most one retry
+    'personal.suggest': 3000,
   })
   assert.equal(actionCeilingMicros('interview'), 50_000)
+  assert.equal(actionCeilingMicros('personal.suggest'), 50_000)
   assert.equal(actionCeilingMicros('generation'), 200_000)
   // A custom shape is a short prompt and at most one retry.
   assert.equal(actionCeilingMicros('shape'), 60_000)

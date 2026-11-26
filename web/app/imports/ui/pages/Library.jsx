@@ -16,6 +16,7 @@ import Alert from '@mui/material/Alert'
 import SearchIcon from '@mui/icons-material/Search'
 import libraryApi from '../../api/client/library'
 import LibraryCard from '../components/library/gallery/LibraryCard'
+import ForYou from '../components/personal/ForYou'
 import { CATEGORY_CHIPS, countLine, galleryQuery, KIND_TABS, listInput, readGalleryQuery, SORTS } from '../components/library/gallery/galleryCopy.mjs'
 
 /**
@@ -134,6 +135,10 @@ export default function Library() {
           <Button onClick={() => { setQuery(''); navigate({ search: '' }, { replace: true }) }}>Show everything</Button>
         </Box>
       )}
+
+      {/* For you: the first group, when Slatebox has ideas made for this person (signed in; none while searching, and only
+          under All or Smart components: its ideas are components and pages) */}
+      {!filters.q && (!filters.kind || filters.kind === 'component') && <ForYou variant="library" />}
 
       <Box
         component="section"

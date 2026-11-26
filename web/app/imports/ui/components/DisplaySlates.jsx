@@ -5,7 +5,7 @@ import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
 import { Random } from 'meteor/random'
 import { useTheme } from '@mui/material/styles'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import Typography from '@mui/material/Typography'
 import ImageList from '@mui/material/ImageList'
 import ImageListItem from '@mui/material/ImageListItem'
@@ -27,6 +27,7 @@ import CONSTANTS from '../../api/common/constants'
 import getUserName from '../../api/common/getUserName'
 import { useTranslator, getTranslation } from '../common/i18n'
 import RecentlyJoined from './RecentlyJoined'
+import ForYou from './personal/ForYou'
 import EmptyState from './EmptyState'
 import { emptySlatesCopy, slateListView, SLATES_FAILED_COPY } from '../common/emptySlates.mjs'
 import Title from './Title'
@@ -54,6 +55,7 @@ export default function DisplaySlates({
   showDescription,
 }) {
   const history = useNavigate()
+  const location = useLocation()
   const theme = useTheme()
   const t = useTranslator()
   const mdmq = useMediaQuery(theme.breakpoints.up('md'))
@@ -353,6 +355,8 @@ export default function DisplaySlates({
       )}
     >
       <Box sx={{ flexGrow: 1, overflowY: 'auto', pt: PAGE_SPACE.header, pb: 2 }}>
+        {/* For you: ideas made for this person's work (server/personal); "See ideas made for you" after a talk asks afresh */}
+        {type === 'mine' && <ForYou variant="page" fresh={location.state?.forYou === 'fresh'} />}
         {type === 'mine' && <RecentlyJoined />}
         {view === 'loading' ? (
           <ImageList

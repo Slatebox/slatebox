@@ -383,6 +383,14 @@
                         ],
                         "maxLength": 48,
                         "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
+                      },
+                      "personal.suggest": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 48,
+                        "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
                       }
                     },
                     "additionalProperties": false,
@@ -1003,7 +1011,7 @@
                   "changes": {
                     "type": "array",
                     "minItems": 1,
-                    "maxItems": 16,
+                    "maxItems": 17,
                     "items": {
                       "type": "object",
                       "properties": {
@@ -1025,6 +1033,7 @@
                             "library",
                             "connectors",
                             "interview",
+                            "personal.suggest",
                             "eval"
                           ],
                           "description": "The part of Slatebox, for example shape or agent.slatebox; default is everything not set."
@@ -2005,7 +2014,12 @@
                       "interview.system",
                       "interview.opening",
                       "interview.retry",
-                      "tool.remember"
+                      "tool.remember",
+                      "personal.suggest.system",
+                      "personal.suggest.ask",
+                      "personal.suggest.retry",
+                      "tool.suggest_ideas",
+                      "workshop.draft.personal"
                     ],
                     "description": "The prompt, for example shape.system."
                   },
@@ -2207,7 +2221,12 @@
                       "interview.system",
                       "interview.opening",
                       "interview.retry",
-                      "tool.remember"
+                      "tool.remember",
+                      "personal.suggest.system",
+                      "personal.suggest.ask",
+                      "personal.suggest.retry",
+                      "tool.suggest_ideas",
+                      "workshop.draft.personal"
                     ],
                     "description": "The prompt, for example shape.system."
                   },
@@ -2256,6 +2275,7 @@
                       "library",
                       "connectors",
                       "interview",
+                      "personal.suggest",
                       "eval"
                     ],
                     "description": "Whose binding (model chain) to test against."
@@ -2406,7 +2426,12 @@
                 "interview.system",
                 "interview.opening",
                 "interview.retry",
-                "tool.remember"
+                "tool.remember",
+                "personal.suggest.system",
+                "personal.suggest.ask",
+                "personal.suggest.retry",
+                "tool.suggest_ideas",
+                "workshop.draft.personal"
               ],
               "description": "The prompt, for example shape.system."
             }
@@ -2547,7 +2572,12 @@
                 "interview.system",
                 "interview.opening",
                 "interview.retry",
-                "tool.remember"
+                "tool.remember",
+                "personal.suggest.system",
+                "personal.suggest.ask",
+                "personal.suggest.retry",
+                "tool.suggest_ideas",
+                "workshop.draft.personal"
               ],
               "description": "The prompt, for example shape.system."
             }
@@ -3115,6 +3145,7 @@
                       "library",
                       "connectors",
                       "interview",
+                      "personal.suggest",
                       "eval"
                     ],
                     "description": "For target binding: the part of Slatebox."
@@ -3185,7 +3216,12 @@
                       "interview.system",
                       "interview.opening",
                       "interview.retry",
-                      "tool.remember"
+                      "tool.remember",
+                      "personal.suggest.system",
+                      "personal.suggest.ask",
+                      "personal.suggest.retry",
+                      "tool.suggest_ideas",
+                      "workshop.draft.personal"
                     ],
                     "description": "For target prompt: the prompt."
                   },
@@ -4420,7 +4456,7 @@
                           },
                           "provenance": {
                             "type": "object",
-                            "description": "branchedFrom or forkedFrom: { itemId, version, title }."
+                            "description": "branchedFrom or forkedFrom: { itemId, version, title }; madeFor: { kind: \"for-you\", ideaId } for a component Slatebox built for its author from an idea in For you."
                           },
                           "url": {
                             "type": "string"
@@ -5179,7 +5215,7 @@
                         },
                         "provenance": {
                           "type": "object",
-                          "description": "branchedFrom or forkedFrom: { itemId, version, title }."
+                          "description": "branchedFrom or forkedFrom: { itemId, version, title }; madeFor: { kind: \"for-you\", ideaId } for a component Slatebox built for its author from an idea in For you."
                         },
                         "url": {
                           "type": "string"
@@ -5363,7 +5399,7 @@
                         },
                         "provenance": {
                           "type": "object",
-                          "description": "branchedFrom or forkedFrom: { itemId, version, title }."
+                          "description": "branchedFrom or forkedFrom: { itemId, version, title }; madeFor: { kind: \"for-you\", ideaId } for a component Slatebox built for its author from an idea in For you."
                         },
                         "url": {
                           "type": "string"
@@ -7085,7 +7121,7 @@
                         },
                         "provenance": {
                           "type": "object",
-                          "description": "branchedFrom or forkedFrom: { itemId, version, title }."
+                          "description": "branchedFrom or forkedFrom: { itemId, version, title }; madeFor: { kind: \"for-you\", ideaId } for a component Slatebox built for its author from an idea in For you."
                         },
                         "url": {
                           "type": "string"
@@ -8186,6 +8222,617 @@
                   "required": [
                     "media",
                     "found"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/personal/ideas": {
+      "get": {
+        "operationId": "listPersonalIdeas",
+        "summary": "Ideas made for you",
+        "description": "The smart components and printable pages Slatebox suggested for your work (For you), each with why it fits and what Build it makes, from what you keep in About you and the tools you connected. Asks nothing of the agent. Only you see them.",
+        "x-required-scope": "profile:read",
+        "x-slatebox": {
+          "action": "personal.ideas.list",
+          "toolset": "account",
+          "readOnly": true,
+          "destructive": false,
+          "idempotent": true,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ]
+        },
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "on": {
+                      "type": "boolean",
+                      "description": "Personalization is on."
+                    },
+                    "ideas": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "component",
+                              "grid"
+                            ],
+                            "description": "component: a smart component (a board of lanes); grid: a printable page."
+                          },
+                          "why": {
+                            "type": "string",
+                            "description": "One line: what the person said or connected that it fits."
+                          },
+                          "brief": {
+                            "type": "string",
+                            "description": "What Build it drafts."
+                          },
+                          "tools": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "description": "Connected tools it uses, by name."
+                          },
+                          "built": {
+                            "type": "object",
+                            "properties": {
+                              "shareId": {
+                                "type": "string"
+                              },
+                              "itemId": {
+                                "type": "string"
+                              }
+                            },
+                            "description": "Once built: the slate it opened on and its library draft."
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title",
+                          "kind",
+                          "why",
+                          "brief",
+                          "tools"
+                        ]
+                      }
+                    },
+                    "empty": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "personalization-off",
+                            "nothing-known"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "description": "Why there is nothing to suggest from (no request was made)."
+                    },
+                    "stale": {
+                      "type": "boolean",
+                      "description": "About you changed since these ideas were made: refresh for ones that fit it now (a stale idea is not built)."
+                    },
+                    "createdAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "canRefresh": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "on",
+                    "ideas",
+                    "empty",
+                    "stale",
+                    "createdAt",
+                    "canRefresh"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/personal/ideas/refresh": {
+      "post": {
+        "operationId": "refreshPersonalIdeas",
+        "summary": "Get new ideas made for you",
+        "description": "Asks the agent for 3 to 6 new ideas made for your work, from what you keep in About you and the names of the tools you connected; they replace the ones shown. One metered request, up to 10 an hour. With personalization off, or nothing known about you yet, nothing is asked and the empty state says what to do.",
+        "x-required-scope": "profile:write",
+        "x-slatebox": {
+          "action": "personal.ideas.refresh",
+          "toolset": "account",
+          "readOnly": false,
+          "destructive": false,
+          "idempotent": false,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ],
+          "modes": [
+            "save"
+          ],
+          "idempotency": "optional"
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "description": "Reuse the same key with the same token only to retry one intended write. A different request under a used key answers 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[!-~]+$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Slatebox-Confirm",
+            "required": false,
+            "description": "An agent's save that removes something, changes someone else's notes, rewrites many notes' text or widens access answers 409 confirmation_required. Once the person agrees, send the same request again (same Idempotency-Key) with this header set to details.confirmationId. It works once and expires after 10 minutes.",
+            "schema": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A preview, or the answer to a repeated request with the same key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "on": {
+                      "type": "boolean",
+                      "description": "Personalization is on."
+                    },
+                    "ideas": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "component",
+                              "grid"
+                            ],
+                            "description": "component: a smart component (a board of lanes); grid: a printable page."
+                          },
+                          "why": {
+                            "type": "string",
+                            "description": "One line: what the person said or connected that it fits."
+                          },
+                          "brief": {
+                            "type": "string",
+                            "description": "What Build it drafts."
+                          },
+                          "tools": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "description": "Connected tools it uses, by name."
+                          },
+                          "built": {
+                            "type": "object",
+                            "properties": {
+                              "shareId": {
+                                "type": "string"
+                              },
+                              "itemId": {
+                                "type": "string"
+                              }
+                            },
+                            "description": "Once built: the slate it opened on and its library draft."
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title",
+                          "kind",
+                          "why",
+                          "brief",
+                          "tools"
+                        ]
+                      }
+                    },
+                    "empty": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "personalization-off",
+                            "nothing-known"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "description": "Why there is nothing to suggest from (no request was made)."
+                    },
+                    "stale": {
+                      "type": "boolean",
+                      "description": "About you changed since these ideas were made: refresh for ones that fit it now (a stale idea is not built)."
+                    },
+                    "createdAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "canRefresh": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "on",
+                    "ideas",
+                    "empty",
+                    "stale",
+                    "createdAt",
+                    "canRefresh"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/personal/ideas/{ideaId}/build": {
+      "post": {
+        "operationId": "buildPersonalIdea",
+        "summary": "Build an idea made for you",
+        "description": "Builds one idea: the agent drafts it from your words (metered as a board draft), it is saved as your own private smart component in the library, and it opens on a new private slate. An idea built already answers the slate it opened on. A stale idea (About you changed since) is refused with 409 ideas_stale: refresh first. A token also needs slates:write.",
+        "x-required-scope": "profile:write",
+        "x-slatebox": {
+          "action": "personal.ideas.build",
+          "toolset": "account",
+          "readOnly": false,
+          "destructive": false,
+          "idempotent": false,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ],
+          "modes": [
+            "save"
+          ],
+          "idempotency": "optional"
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ideaId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^i[a-f0-9]{15}$",
+              "description": "The idea, as personal.ideas.list gives it (ideas[].id)."
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "description": "Reuse the same key with the same token only to retry one intended write. A different request under a used key answers 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[!-~]+$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Slatebox-Confirm",
+            "required": false,
+            "description": "An agent's save that removes something, changes someone else's notes, rewrites many notes' text or widens access answers 409 confirmation_required. Once the person agrees, send the same request again (same Idempotency-Key) with this header set to details.confirmationId. It works once and expires after 10 minutes.",
+            "schema": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A preview, or the answer to a repeated request with the same key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ideaId": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "component",
+                        "grid"
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "itemId": {
+                      "type": "string",
+                      "description": "Your library draft."
+                    },
+                    "shareId": {
+                      "type": "string",
+                      "description": "The new private slate it opened on."
+                    },
+                    "built": {
+                      "type": "boolean",
+                      "description": "false: it was built already, and this is that slate."
+                    }
+                  },
+                  "required": [
+                    "ideaId",
+                    "kind",
+                    "title",
+                    "itemId",
+                    "shareId",
+                    "built"
+                  ]
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ideaId": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "component",
+                        "grid"
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "itemId": {
+                      "type": "string",
+                      "description": "Your library draft."
+                    },
+                    "shareId": {
+                      "type": "string",
+                      "description": "The new private slate it opened on."
+                    },
+                    "built": {
+                      "type": "boolean",
+                      "description": "false: it was built already, and this is that slate."
+                    }
+                  },
+                  "required": [
+                    "ideaId",
+                    "kind",
+                    "title",
+                    "itemId",
+                    "shareId",
+                    "built"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/personal/ideas/{ideaId}/dismiss": {
+      "post": {
+        "operationId": "dismissPersonalIdea",
+        "summary": "Not for me",
+        "description": "Turns down one idea: it goes, and the agent is not asked for it again.",
+        "x-required-scope": "profile:write",
+        "x-slatebox": {
+          "action": "personal.ideas.dismiss",
+          "toolset": "account",
+          "readOnly": false,
+          "destructive": false,
+          "idempotent": false,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ],
+          "modes": [
+            "save"
+          ],
+          "idempotency": "optional"
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ideaId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^i[a-f0-9]{15}$",
+              "description": "The idea, as personal.ideas.list gives it (ideas[].id)."
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "description": "Reuse the same key with the same token only to retry one intended write. A different request under a used key answers 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[!-~]+$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Slatebox-Confirm",
+            "required": false,
+            "description": "An agent's save that removes something, changes someone else's notes, rewrites many notes' text or widens access answers 409 confirmation_required. Once the person agrees, send the same request again (same Idempotency-Key) with this header set to details.confirmationId. It works once and expires after 10 minutes.",
+            "schema": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A preview, or the answer to a repeated request with the same key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ideaId": {
+                      "type": "string"
+                    },
+                    "dismissed": {
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "ideaId",
+                    "dismissed"
                   ]
                 }
               }

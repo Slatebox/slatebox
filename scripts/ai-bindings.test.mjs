@@ -16,8 +16,8 @@ async function world() {
 }
 
 test('the parts that can be bound: default and every part a call site sends', () => {
-  assert.deepEqual(BINDABLE_SURFACES, ['default', 'chat', 'chat.route', 'generation', 'presentation', 'vision', 'images', 'shape', 'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors', 'interview', 'eval'])
-  // the interview (S2, 2026-11-26): an administrator binds it, or turns it off, like any part
+  assert.deepEqual(BINDABLE_SURFACES, ['default', 'chat', 'chat.route', 'generation', 'presentation', 'vision', 'images', 'shape', 'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors', 'interview', 'personal.suggest', 'eval'])
+  // the interview (S2, 2026-11-26): an administrator binds it, or turns it off, like any part; so For you's suggestion (S4)
 })
 
 test('set, clear and turn off per part; the next request goes to the new model', async () => {
