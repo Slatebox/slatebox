@@ -35,7 +35,7 @@ Slatebox installer. Enter accepts the default in brackets; Ctrl-C stops without 
 Plan: write the files for Slatebox "slatebox"
 
   Address:   http://localhost:7070
-  Image:     ghcr.io/slatebox/slatebox@sha256:8a64b09e8e6d53a0fb2b76b60048474eba52a010ddd7f7b834ea898a003e4ec5
+  Image:     ghcr.io/slatebox/slatebox@sha256:40cb7fe13714ed5e691479dc283afe65737e643ffda59257ee5c97ad6163b20a
 
   Files:
     - <HOME>/slatebox-deploy/slatebox/Chart.yaml

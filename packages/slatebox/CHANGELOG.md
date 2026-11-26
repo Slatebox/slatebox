@@ -80,6 +80,10 @@ release's highlights.
 
 ### Changed
 
+- **image:** installs Slatebox 2.1.0 (`ghcr.io/slatebox/slatebox:2.1.0`), the first self-host image built,
+  smoke-tested and signed by GitHub from a release tag (cosign keyless, with build provenance); its
+  version is the app's version. It adds `slatebox updates`, so new installs get automatic updates.
+
 - The wizard's key handling is `@clack/core` 1.6.0 (pinned exactly; about 56 kB), loaded only
   for a wizard run: `--version`, `--json`, `--yes`, agents, pipes and CI never load it.
 - `--json`, `--yes`, a run with nobody to ask (exit 3), the answers file, flags and exit codes

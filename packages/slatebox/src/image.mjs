@@ -12,11 +12,12 @@ import { EXIT, InstallError } from './errors.mjs'
 export const DEFAULT_REPOSITORY = 'ghcr.io/slatebox/slatebox'
 // 0.2.0 added the team-address tunnel (cloudflared); 0.2.1 the self-host fixes and team moves;
 // 0.2.2 adds SSO accounts joining the setup team as members (SSO slice 1) and the Help and
-// support menu. PINNED_DIGEST is the published multi-arch index of
-// ghcr.io/slatebox/slatebox:0.2.2 (linux/amd64 and linux/arm64); `npm publish` refuses to run
-// without it.
-export const PINNED_TAG = '0.2.2'
-export const PINNED_DIGEST = 'sha256:8a64b09e8e6d53a0fb2b76b60048474eba52a010ddd7f7b834ea898a003e4ec5'
+// support menu; 2.1.0 is the first image GitHub builds and signs from a release tag (the image
+// version now equals the app version) and adds `slatebox updates` (automatic updates).
+// PINNED_DIGEST is the published multi-arch index of ghcr.io/slatebox/slatebox:2.1.0
+// (linux/amd64 and linux/arm64); `npm publish` refuses to run without it.
+export const PINNED_TAG = '2.1.0'
+export const PINNED_DIGEST = 'sha256:40cb7fe13714ed5e691479dc283afe65737e643ffda59257ee5c97ad6163b20a'
 export const DEFAULT_IMAGE = PINNED_DIGEST ? `${DEFAULT_REPOSITORY}@${PINNED_DIGEST}` : `${DEFAULT_REPOSITORY}:${PINNED_TAG}`
 
 // What the pinned image accepts: its own `slatebox settings --json` (self-host/rootfs/opt/slatebox/
@@ -25,14 +26,13 @@ export const DEFAULT_IMAGE = PINNED_DIGEST ? `${DEFAULT_REPOSITORY}@${PINNED_DIG
 // guess from an older image. The image is still probed after it is pulled, and that answer wins.
 export const PINNED_CAPABILITIES = Object.freeze({
   settings: Object.freeze([
-    'SLATEBOX_URL', 'SLATEBOX_HTTPS', 'SLATEBOX_ACME_CA', 'SLATEBOX_MAIL_URL', 'SLATEBOX_MAIL_FROM',
-    'SLATEBOX_AI_KEY', 'SLATEBOX_AI_URL', 'SLATEBOX_AI_MODEL', 'SLATEBOX_AI_CONFIG',
-    'SLATEBOX_AI_PROVIDERS', 'SLATEBOX_AI_DEFAULT', 'SLATEBOX_AI_OWN_PROVIDERS', 'SLATEBOX_AI_PRIVATE_ENDPOINTS',
-    'SLATEBOX_SETTINGS', 'SLATEBOX_SSO', 'SLATEBOX_SSO_ONLY', 'SLATEBOX_SSO_ADMIN', 'SLATEBOX_SSO_DEFAULT_ROLE',
-    'SLATEBOX_SSO_DOMAINS', 'SLATEBOX_KEY_ENCRYPTION_KEY',
-    'SLATEBOX_TUNNEL_TOKEN', 'SLATEBOX_LICENSE', 'SLATEBOX_LICENSE_FILE', 'MONGO_URL', 'MONGO_OPLOG_URL',
+    'SLATEBOX_URL', 'SLATEBOX_HTTPS', 'SLATEBOX_ACME_CA', 'SLATEBOX_MAIL_URL', 'SLATEBOX_MAIL_FROM', 'SLATEBOX_AI_KEY',
+    'SLATEBOX_AI_URL', 'SLATEBOX_AI_MODEL', 'SLATEBOX_AI_CONFIG', 'SLATEBOX_AI_PROVIDERS', 'SLATEBOX_AI_DEFAULT', 'SLATEBOX_AI_OWN_PROVIDERS',
+    'SLATEBOX_AI_PRIVATE_ENDPOINTS', 'SLATEBOX_SETTINGS', 'SLATEBOX_SSO', 'SLATEBOX_SSO_ONLY', 'SLATEBOX_SSO_ADMIN', 'SLATEBOX_SSO_DEFAULT_ROLE',
+    'SLATEBOX_SSO_DOMAINS', 'SLATEBOX_KEY_ENCRYPTION_KEY', 'SLATEBOX_TUNNEL_TOKEN', 'SLATEBOX_LICENSE', 'SLATEBOX_LICENSE_FILE', 'SLATEBOX_UPDATES',
+    'SLATEBOX_UPDATE_FEED', 'MONGO_URL', 'MONGO_OPLOG_URL',
   ]),
-  commands: Object.freeze(['backup', 'restore', 'password-link', 'setup-link', 'health', 'version', 'sso', 'ai', 'settings', 'tunnel']),
+  commands: Object.freeze(['backup', 'restore', 'password-link', 'setup-link', 'health', 'version', 'sso', 'ai', 'settings', 'tunnel', 'updates', 'restore-on-start']),
   source: 'pinned',
 })
 
