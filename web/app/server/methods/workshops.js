@@ -164,7 +164,11 @@ async function draftWorkshop(brief, format = 'lanes', currentDraft) {
     maxResponseValidationRetries: 1,
     validateResponse({ toolCall }) {
       // a lane board: its slips repaired, and a retry that names what was wrong (workshop-lane-draft.mjs)
-      if (!special) return laneDraftCheck(toolCall, { tool, parse })
+      if (!special) {
+        const check = laneDraftCheck(toolCall, { tool, parse })
+        if (check) console.warn('[workshops.draft] lane draft refused:', check.retryPrompt.split(' Return a complete')[0].slice(0, 240))
+        return check
+      }
       try {
         if (toolCall?.name !== tool.name) throw new Error('Call the requested tool.')
         parse(toolCall.arguments)

@@ -182,3 +182,10 @@ test('the owner\'s words end to end: a builder slate gets a smart component, nev
     assert.doesNotMatch(JSON.stringify(preview), /Operation \d+ count/)
   }
 })
+
+test('the preview says what was made once: no doubled full stop, and no "add your cards" for a board that brings its pieces', async () => {
+  const { readFileSync } = await import('node:fs')
+  const page = readFileSync(new URL('../../../web/app/imports/ui/components/NativeCanvasConversation.jsx', import.meta.url), 'utf8')
+  assert.match(page, /\{draft\.said\.replace\(\/\^Added \/,'Keep this to add '\)\}\{\/\[\.!\?\]\$\/\.test\(draft\.said\) \? '' : '\.'\}/)
+  assert.match(page, /draft\.format==='lanes' && !draft\.component && !draft\.canvas\?\.workshop\?\.cards\?\.length && <Typography variant="body2">Add your cards in the workshop after Keep\./)
+})

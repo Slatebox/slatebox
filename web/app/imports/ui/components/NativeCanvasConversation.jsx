@@ -408,8 +408,9 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
       {!draft.component && draft.capacities?.map(l=><Typography variant="body2" key={l.label}>{l.label} holds up to {l.capacity} cards.</Typography>)}
       {/* The board's rules as the chips it draws above itself on the canvas (boardLegend): the chat and the canvas say the same. */}
       {draft.canvas?.workshop && <BoardRules workshop={draft.canvas.workshop} />}
-      {draft.format==='lanes' && !draft.component && <Typography variant="body2">Add your cards in the workshop after Keep.</Typography>}
-      {draft.said && <Typography variant="body2">{draft.said.replace(/^Added /,'Keep this to add ')}.</Typography>}
+      {/* Only a board that comes with no cards asks for them; a described smart component brings its pieces. */}
+      {draft.format==='lanes' && !draft.component && !draft.canvas?.workshop?.cards?.length && <Typography variant="body2">Add your cards in the workshop after Keep.</Typography>}
+      {draft.said && <Typography variant="body2">{draft.said.replace(/^Added /,'Keep this to add ')}{/[.!?]$/.test(draft.said) ? '' : '.'}</Typography>}
       {draft.imported && <Typography variant="body2" data-import-summary="">Imported drawing: {draft.imported.notes} {draft.imported.notes===1?'note':'notes'}, {draft.imported.lines} {draft.imported.lines===1?'line':'lines'}. Keep it to add them to this slate.</Typography>}
       {draft.importLeft && <Typography variant="body2" color="text.secondary">{draft.importLeft}</Typography>}
       {/* What Keep does, in the board's own words: "play the route" is a map's only. */}

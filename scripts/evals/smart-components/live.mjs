@@ -69,7 +69,7 @@ async function renderCheck(token, userId, shareId, workshop, id) {
     const page = await context.newPage()
     const errors = []
     page.on('pageerror', (error) => errors.push(error.message))
-    await page.goto(args.origin + '/canvas/' + shareId)
+    await page.goto(args.origin + '/canvas/' + shareId, { waitUntil: 'domcontentloaded', timeout: 90000 })
     const want = workshop.cards.length
     const drawn = async () => page.evaluate((cardIds) => {
       const ids = [...document.querySelectorAll('#slateCanvas [data-node-id]')].map((g) => g.getAttribute('data-node-id'))
@@ -138,7 +138,9 @@ let next = 0
 const workers = Array.from({ length: Math.max(1, Number(args.concurrency)) }, async () => {
   while (next < cases.length) {
     const index = next++
-    const row = await runCase(cases[index], index)
+    let row = await runCase(cases[index], index)
+    // The eval's own connection dropping (the app restarting under it) is no answer from the app: asked once more.
+    if (row.problems.some((p) => /^eval error: DDP connection (closed|failed)/.test(p)) && row.latencyMs === undefined) row = await runCase(cases[index], index + 10000)
     rows[index] = row
     console.log(`${row.ok ? 'PASS' : 'FAIL'} ${row.id} ${row.latencyMs ?? '-'}ms${row.board ? ` "${row.board.title}" [${row.board.lanes.join(' | ')}] ${row.board.cards} pieces, ${row.board.rules} rules` : ''}${row.ok ? '' : '\n     ' + row.problems.join('\n     ')}`)
   }
@@ -149,7 +151,7 @@ await Promise.all(workers)
 if (args.mongo) {
   const ids = rows.map((r) => r.userId).filter(Boolean)
   try {
-    const audit = JSON.parse(mongo(`JSON.stringify(db.aiAudit.find({userId:{$in:${JSON.stringify(ids)}}},{userId:1,model:1,status:1,usage:1,duration:1}).toArray())`))
+    const audit = JSON.parse(mongo(`JSON.stringify(db.aiAudit.find({userId:{$in:${JSON.stringify(ids)}}},{userId:1,model:1,status:1,usage:1,duration:1,responseStatus:1}).toArray())`))
     // Prices: --prices / EVAL_PRICES first, else the app's own model table (Admin › AI control, aiModels).
     try {
       const table = JSON.parse(mongo('JSON.stringify(db.aiModels.find({},{model:1,prices:1}).toArray())'))
@@ -162,6 +164,13 @@ if (args.mongo) {
       row.inputTokens = mine.reduce((n, a) => n + (a.usage?.inputTokens ?? 0), 0)
       row.outputTokens = mine.reduce((n, a) => n + (a.usage?.outputTokens ?? 0), 0)
       row.models = [...new Set(mine.map((a) => a.model))]
+      // A draft lost to the endpoint (unreachable, timed out, 5xx) is the provider's outage, not the builder's: it
+      // still fails the case, named as what it was, and the summary also gives the rate without those.
+      const lost = mine.filter((a) => ['network_error', 'timeout'].includes(a.status) || a.responseStatus >= 500)
+      if (!row.ok && lost.length && row.provider !== 'ai') {
+        row.outage = true
+        row.problems.push(`the model endpoint failed: ${lost.map((a) => a.status + (a.responseStatus ? ' ' + a.responseStatus : '')).join(', ')}`)
+      }
       const price = row.models.length === 1 ? prices[row.models[0]] : null
       if (price) row.costUsd = (row.inputTokens * price[0] + row.outputTokens * price[1]) / 1e6
     }
@@ -181,6 +190,8 @@ const sum = (key) => rows.reduce((n, r) => n + (r[key] ?? 0), 0)
 const summary = {
   run: RUN, origin: args.origin, at: new Date().toISOString(), cases: rows.length,
   passRate: passed / rows.length, passed,
+  outages: rows.filter((r) => r.outage).length,
+  passRateWithoutOutages: passed / Math.max(1, rows.filter((r) => !r.outage).length),
   validComponentRate: valid / rows.length,
   drafted: rows.filter((r) => r.provider === 'ai').length,
   latencyMs: { p50: pct(0.5), p90: pct(0.9), max: latencies.at(-1) },

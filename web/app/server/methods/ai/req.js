@@ -256,7 +256,8 @@ async function requestFromProvider({ prompts, system, maxSize, userId: askedFor,
         }
       } catch (err) {
         const message = chosenLabel ? `${chosenLabel} could not be reached` : localWorkshop ? 'Workshop provider request failed' : sdkPath ? 'Chat provider request failed' : err.message
-        console.error('unable to invoke', message)
+        // what went wrong underneath (a reset, a refused lookup, a timeout), for whoever reads the server log
+        console.error('unable to invoke', message, String(err?.cause?.code || err?.code || err?.name || '').slice(0, 60), String(err?.cause?.message || err?.message || '').slice(0, 200))
         const timedOut = err.name === 'AbortError'
         // a chosen model that timed out is not asked again: it would wait as long again
         const retryable =
