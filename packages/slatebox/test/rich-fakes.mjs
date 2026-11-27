@@ -67,7 +67,9 @@ export async function richCli(argv, { run, fetch, home, env = {}, columns = 100,
         await new Promise(resolve => setTimeout(resolve, key === KEY.esc ? 80 : 2))
       }
     }
-  })().catch(error => { failure = error; t.stdin.write(KEY.ctrlC) })
+  // Ctrl-C stops the wizard; ending stdin also stops the plain questions (as when @clack/core is
+  // not installed and the CLI falls back to them), so a script that never matches fails, not hangs.
+  })().catch(error => { failure = error; t.stdin.write(KEY.ctrlC); setTimeout(() => t.stdin.end(), 100) })
   const code = await done
   await typing
   if (failure) throw failure

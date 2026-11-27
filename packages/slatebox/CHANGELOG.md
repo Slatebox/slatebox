@@ -13,6 +13,10 @@ release's highlights.
 
 ## [Unreleased]
 
+- New installs get Slatebox 2.1.4 (`ghcr.io/slatebox/slatebox@sha256:0094cd5d…`, built and signed by GitHub
+  from the `v2.1.4` tag): integrations free with no key, About you and the interview, start-page tiles,
+  passkeys, voice (once a voice model is set up) and room-bound live-collaboration tokens.
+
 ## [0.3.1] - 2026-11-26
 
 ### Highlights

@@ -54,8 +54,10 @@ test('the wizard depends on @clack/core 1.6.0 exactly, and never on @clack/promp
   assert.equal(all['@clack/prompts'], undefined)
   assert.equal(all.ink, undefined)
   const create = JSON.parse(readFileSync(new URL('../../create-slatebox/package.json', import.meta.url), 'utf8'))
-  assert.equal(manifest.version, '0.3.0')
-  assert.equal(create.dependencies.slatebox, '0.3.0')
+  // create-slatebox runs this exact installer: one X.Y.Z, never a range. scripts/release.mjs
+  // moves both together, so the check follows the version rather than naming one.
+  assert.match(manifest.version, /^\d+\.\d+\.\d+$/)
+  assert.equal(create.dependencies.slatebox, manifest.version)
 })
 
 // Accepted and documented (CHANGELOG 0.3.0): the exact pins are for direct dependencies. npx does
