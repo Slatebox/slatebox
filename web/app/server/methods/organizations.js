@@ -27,6 +27,7 @@ import AuthManager from '../../imports/api/common/AuthManager'
 import { removePersonalData } from '../profile/meteor'
 import { audit } from '../audit/recorder.mjs'
 import { removeIntegrationsOfAccount } from '../integrations/meteor'
+import { removeAccountRows } from './account-rows'
 import { releaseUploadsOfSlates, removeUploadsOfAccount } from '../upload-removal'
 
 const method = {}
@@ -159,6 +160,8 @@ method[CONSTANTS.methods.organizations.delete] = async function deleteOrganizati
 
       // About you: every fact they kept and their personalization switches
       await removePersonalData(user._id)
+      // their tokens, presentations, AI keys and choices and passkeys, as users.delete does
+      await removeAccountRows(user._id)
 
       // As users.delete does: Meteor Accounts closes every connection watching a removed login
       // token, so the result never reached Team settings. Release only this connection's

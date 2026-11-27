@@ -54,8 +54,9 @@ const queue = {
     }
     return items
   },
-  done: (id) => queueRows().deleteOne({ _id: id }),
-  later: (id, { dueAt, attempts, failure }) => queueRows().updateOne({ _id: id }, { $set: { dueAt, attempts, failure } }),
+  // Only the row this run claimed: one released again meanwhile (a new dueAt) keeps its new wait.
+  done: (item) => queueRows().deleteOne({ _id: item._id, dueAt: item.dueAt }),
+  later: (item, { dueAt, attempts, failure }) => queueRows().updateOne({ _id: item._id, dueAt: item.dueAt }, { $set: { dueAt, attempts, failure } }),
 }
 
 const log = (message, details) => console.log(`[upload-removal] ${message}`, details)

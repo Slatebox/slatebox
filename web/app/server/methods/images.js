@@ -9,7 +9,8 @@ import { Random } from 'meteor/random'
 import fetch from 'node-fetch'
 import CONSTANTS from '../../imports/api/common/constants'
 import { check, Match } from 'meteor/check'
-import { deleteStoredFile, storeImage } from '../common/fileStore'
+import { storeImage } from '../common/fileStore'
+import { releaseUploads } from '../upload-removal'
 import { uploadKeyOf } from '../sbImages'
 import extractImagePalette from '../common/imagePalette.mjs'
 import { renderSvgToPng } from '../common/render-svg.mjs'
@@ -98,13 +99,15 @@ method[CONSTANTS.methods.images.getColors] = async ({ imgUrl, imgType } = {}) =>
   return null
 }
 
-// A person removes a file they uploaded: the exact key, read from the url the upload returned.
+// A person removes a file they uploaded (the upload dialog's Remove File, a replaced or removed
+// team logo): the exact key, read from the url the upload returned. It is released, not deleted at
+// once: a slate, a presentation or a copy that still shows it keeps it (upload-removal.js).
 method[CONSTANTS.methods.images.removeImage] = async function removeImage(opts) {
   check(opts, { url: String })
   if (!this.userId) return null
   const key = uploadKeyOf(opts.url, this.userId)
   if (!key) return false
-  await deleteStoredFile(key)
+  await releaseUploads([key])
   return true
 }
 

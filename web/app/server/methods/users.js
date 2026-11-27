@@ -45,6 +45,7 @@ import {
   SlateApiTokens,
   SlateOperationRuns,
   SlatePresentations,
+  SlatePresentationConversations,
   LoginLinks,
   APILinks,
   ProviderKeys,
@@ -634,7 +635,9 @@ method[CONSTANTS.methods.users.delete] = async function removeOwnAccount() {
   await releaseUploadsOfSlates(owner)
   await Slates.removeAsync(owner)
   await SlateSnapshots.removeAsync(owner)
-  await SlatePresentations.removeAsync({ ...owner, workshop: { $exists: true } })
+  // every presentation they made (a deck keeps a copy of the slate and its pictures) and its chat
+  await SlatePresentations.removeAsync(owner)
+  await SlatePresentationConversations.removeAsync(owner)
   await Messages.removeAsync(owner)
   // the person's own AI connections, keys and choices
   await ProviderKeys.removeAsync({ ownerType: 'user', ownerId: user._id })

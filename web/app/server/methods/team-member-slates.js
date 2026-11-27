@@ -11,6 +11,7 @@ import { removePersonalData } from '../profile/meteor'
 import { audit } from '../audit/recorder.mjs'
 import { personLabel } from '../audit/meteor'
 import { removeIntegrationsOfAccount } from '../integrations/meteor'
+import { removeAccountRows } from './account-rows'
 import { releaseUploadsOfSlates, removeUploadsOfAccount } from '../upload-removal'
 
 // A team member with canRemoveUsers removes another member: the slates that member owns in the
@@ -45,6 +46,8 @@ Meteor.methods({
     await Permissions.removeAsync({ userId: memberId, orgId })
     // About you: every fact they kept and their personalization switches
     await removePersonalData(memberId)
+    // their tokens, presentations, AI keys and choices and passkeys, as users.delete does
+    await removeAccountRows(memberId)
     const removed = await Meteor.users.findOneAsync({ _id: memberId, orgId }, { fields: { _id: 1, createdAt: 1 } })
     await Meteor.users.removeAsync({ _id: memberId, orgId })
     // their uploaded files, in the background; one a team slate that stays still shows is kept (upload-removal.js)

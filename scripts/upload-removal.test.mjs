@@ -10,11 +10,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
+  accountFileKeyFor,
+  accountPrefixes,
   bucketUploadsOf,
   createUploadRemoval,
   dayFoldersBetween,
   failureOf,
   GRACE_MS,
+  monthFoldersBetween,
   LEASE_MS,
   pagedKeys,
   referencedKeys,
@@ -51,8 +54,9 @@ function memoryQueue() {
       for (const row of due) row.dueAt = at + leaseMs;
       return due.map((row) => ({ ...row }));
     },
-    async done(itemId) { rows.delete(itemId); },
-    async later(itemId, change) { Object.assign(rows.get(itemId), change); },
+    // only the row as it was claimed: one released again meanwhile keeps its new wait
+    async done(item) { if (rows.get(item._id)?.dueAt === item.dueAt) rows.delete(item._id); },
+    async later(item, change) { const row = rows.get(item._id); if (row?.dueAt === item.dueAt) Object.assign(row, change); },
   };
 }
 
@@ -85,7 +89,7 @@ function mockBucket(keys = []) {
     fail(error) { failing = error; },
     heal() { failing = null; },
     files: {
-      listUploadsOf: (userId, since) => bucketUploadsOf({ userId, since: since ?? Date.UTC(2026, 10, 1), until: clockNow(), listPrefix, dateFolder, uploadKeyFor }),
+      listUploadsOf: (userId, since) => bucketUploadsOf({ userId, since: since ?? Date.UTC(2026, 10, 1), until: clockNow(), listPrefix, dateFolder }),
       remove: (k) => send({ type: "DeleteObject", Key: k }),
     },
   };
@@ -307,7 +311,10 @@ test("a removed account's uploads are listed day by day (u_<id>_ in the name) an
   assert.equal(w.bucket.calls.list.filter((p) => p === `2026/11/20/u_${ALICE}_`).length, 2, "two pages of two keys");
   assert.ok(w.bucket.calls.list.includes(`2026/11/17/u_${ALICE}_`));
   assert.ok(w.bucket.calls.list.includes(`2026/11/28/u_${ALICE}_`));
-  assert.ok(w.bucket.calls.list.every((p) => p.endsWith(`/u_${ALICE}_`)));
+  // and the agent's pictures by day, a presentation's copied pictures by UTC month: nothing else
+  assert.ok(w.bucket.calls.list.includes(`2026/11/20/ai_${ALICE}_`));
+  assert.ok(w.bucket.calls.list.includes(`2026/11/presentation_${ALICE}_`));
+  assert.ok(w.bucket.calls.list.every((p) => new RegExp(`^(\\d{4}/\\d{2}/\\d{2}/(u|ai)|\\d{4}/\\d{2}/presentation)_${ALICE}_$`).test(p)), "only this person's names");
   assert.equal(w.queue.rows.size, 0);
   assert.deepEqual(w.logs.at(-1), { message: "account uploads removed", details: { removed: 5, kept: 0 } });
 });
@@ -353,6 +360,70 @@ test("day folders cover the day before and after, once each", () => {
   assert.deepEqual(folders, ["2026/11/29", "2026/11/30", "2026/12/01", "2026/12/02", "2026/12/03"]);
 });
 
+// ---- the agent's pictures and a presentation's copied pictures --------------------------------
+
+const aiKey = (user, n, day = new Date(2026, 10, 20, 12)) => `${dateFolder(day)}/ai_${user}_${id(n)}.png`;
+const deckKey = (user, n, year = 2026, month = 11) => `${year}/${String(month).padStart(2, "0")}/presentation_${user}_${id(n)}.jpg`;
+
+test("the agent's pictures and a presentation's copied pictures are read, released and kept like uploads", async () => {
+  const a = aiKey(ALICE, 1);
+  const p = deckKey(ALICE, 2);
+  assert.deepEqual([...uploadKeysIn({ nodes: [photoNote("n", a)], deck: JSON.stringify({ img: url(p).replace(/\//g, "\\/") }) })].sort(), [a, p].sort());
+  assert.deepEqual(releasedUploadKeys({ nodes: [photoNote("n", a)] }, { nodes: [] }), [a]);
+  assert.equal(accountFileKeyFor(a, ALICE), a);
+  assert.equal(accountFileKeyFor(p, ALICE), p);
+  assert.equal(accountFileKeyFor(a, BOB), null);
+  assert.equal(accountFileKeyFor(`2026/11/20/ai_${ALICE}_short.png`, ALICE), null);
+  assert.equal(accountFileKeyFor(`2026/11/20/presentation_${ALICE}_${id(3)}.jpg`, ALICE), null, "a presentation's picture is in a month folder");
+  // a presentation that still shows it keeps it
+  const w = world({ bucketKeys: [a, p], docs: { slatePresentations: [{ _id: "deck", presentationData: JSON.stringify({ nodes: [photoNote("x", a), photoNote("y", p)] }) }] } });
+  await w.removal.released([a, p]);
+  w.clock.t += GRACE_MS;
+  await w.removal.sweep();
+  assert.equal(w.bucket.objects.size, 2);
+  w.db.slatePresentations.length = 0;
+  await w.removal.released([a, p]);
+  w.clock.t += GRACE_MS;
+  await w.removal.sweep();
+  assert.equal(w.bucket.objects.size, 0);
+});
+
+test("a removed account's agent pictures and presentation pictures go with it; anyone else's stay", async () => {
+  const mine = [aiKey(ALICE, 1, new Date(2026, 10, 19, 8)), aiKey(ALICE, 2), deckKey(ALICE, 3), deckKey(ALICE, 4, 2026, 10)];
+  const theirs = [aiKey(BOB, 5), deckKey(BOB, 6)];
+  const shown = aiKey(ALICE, 7);
+  const w = world({ bucketKeys: [...mine, ...theirs, shown], docs: { slates: [{ _id: "bobs", userId: BOB, nodes: [photoNote("a", shown)] }] } });
+  // made on the last day of October (UTC): October's month folder is listed too
+  await w.removal.accountRemoved({ userId: ALICE, createdAt: new Date(Date.UTC(2026, 9, 31, 12)) });
+  await w.removal.sweep();
+  assert.deepEqual(w.bucket.calls.remove.sort(), [...mine].sort());
+  assert.deepEqual([...w.bucket.objects].sort(), [...theirs, shown].sort());
+  assert.ok(w.queue.rows.has(`file:${shown}`), "the one Bob's slate shows is checked again later");
+});
+
+test("month folders are UTC months, from the day before to the day after, once each", () => {
+  assert.deepEqual(monthFoldersBetween(Date.UTC(2026, 10, 1, 1), Date.UTC(2026, 11, 31, 1)), ["2026/10", "2026/11", "2026/12", "2027/01"]);
+  assert.deepEqual(monthFoldersBetween(Date.UTC(2026, 10, 15), Date.UTC(2026, 10, 16)), ["2026/11"]);
+  const prefixes = accountPrefixes({ userId: ALICE, since: new Date(2026, 10, 20, 12), until: new Date(2026, 10, 20, 12), dateFolder });
+  assert.deepEqual(prefixes.filter((p) => p.includes("presentation_")), [`2026/11/presentation_${ALICE}_`]);
+  assert.equal(prefixes.filter((p) => p.includes("/u_")).length, 3);
+  assert.equal(prefixes.filter((p) => p.includes("/ai_")).length, 3);
+});
+
+test("a file released again while a run holds it keeps its new wait", async () => {
+  const k = key(ALICE, 8);
+  const w = world({ bucketKeys: [k], docs: { slates: [{ _id: "s1", nodes: [photoNote("a", k)] }] } });
+  await w.removal.released([k]);
+  w.clock.t += GRACE_MS;
+  // during the run's reference check, the slate stops showing it and the save releases it again
+  const claimed = await w.queue.claim({ at: w.clock.t, limit: 5, leaseMs: LEASE_MS });
+  await w.removal.released([k]);
+  await w.queue.done(claimed[0]);
+  assert.equal(w.queue.rows.get(`file:${k}`)?.dueAt, w.clock.t + GRACE_MS, "the new release is not dropped");
+  await w.queue.later(claimed[0], { dueAt: 0, attempts: 1 });
+  assert.equal(w.queue.rows.get(`file:${k}`).dueAt, w.clock.t + GRACE_MS, "nor moved by the old run's retry");
+});
+
 // ---- the wiring ---------------------------------------------------------------------------------
 
 const app = (path) => readFileSync(new URL(`../web/app/${path}`, import.meta.url), "utf8");
@@ -380,13 +451,43 @@ test("every path that removes a saved account removes its uploads after the acco
   assert.match(glue, /'files\.files', 'files\.chunks'/);
 });
 
+test("every account removal removes the account's tokens, presentations, AI keys and passkeys", () => {
+  const rows = app("server/methods/account-rows.js");
+  for (const line of [
+    "await JoinedSlates.removeAsync(userId)", "await SlateApiTokens.removeAsync(owner)", "await SlateOperationRuns.removeAsync(owner)",
+    "await SlatePresentations.removeAsync(owner)", "await SlatePresentationConversations.removeAsync(owner)",
+    "await ProviderKeys.removeAsync({ ownerType: 'user', ownerId: userId })", "await AIChoices.removeAsync({ _id: 'user:' + userId })",
+    "await removePasskeysOf(userId)",
+  ]) assert.ok(rows.includes(line), line);
+  for (const [file, call, removal] of [
+    ["server/methods/organizations.js", "await removeAccountRows(user._id)", "Meteor.users.removeAsync({ _id: user._id })"],
+    ["server/methods/team-member-slates.js", "await removeAccountRows(memberId)", "Meteor.users.removeAsync({ _id: memberId, orgId })"],
+  ]) {
+    const text = app(file);
+    assert.match(text, /import \{ removeAccountRows \} from '\.\/account-rows'/, file);
+    assert.ok(text.indexOf(call) > 0 && text.indexOf(call) < text.indexOf(removal), `${file}: before the account goes`);
+  }
+  // users.delete keeps its own list: every presentation, not only a workshop's
+  const users = app("server/methods/users.js");
+  assert.ok(users.includes("await SlatePresentations.removeAsync(owner)"));
+  assert.ok(users.includes("await SlatePresentationConversations.removeAsync(owner)"));
+});
+
 test("both save cores release deleted notes' files, and a deleted slate releases its pictures", () => {
   const save = app("server/slate-save.js");
   assert.equal(save.match(/onReleased: \(keys\) => releaseUploads\(keys\)/g)?.length, 2);
   const slates = app("server/methods/slates.js");
   const del = slates.slice(slates.indexOf("export async function deleteOwnedSlate"));
   assert.ok(del.indexOf("await releaseUploadsOfSlates({ _id: slate._id })") < del.indexOf("await Slates.removeAsync({ _id: slate._id })"));
+  // a removed upload or team logo is released, never deleted at once: a slate that shows it keeps it
+  const images = app("server/methods/images.js");
+  const remove = images.slice(images.indexOf("async function removeImage"), images.indexOf("async function removeImage") + 400);
+  assert.ok(remove.includes("await releaseUploads([key])") && !remove.includes("deleteStoredFile"), "images.removeImage releases");
   // the bucket's listing is the tested one
   assert.match(app("server/common/s3Utils.js"), /return pagedKeys\(\(ContinuationToken\) => sendS3\(new ListObjectsV2Command\(\{ Bucket, Prefix: prefix, ContinuationToken \}\)\)\)/);
-  assert.match(app("server/common/fileStore.js"), /return bucketUploadsOf\(\{ userId, since: since \?\? FIRST_UPLOAD_DAY, until: Date\.now\(\), listPrefix: listS3Keys, dateFolder, uploadKeyFor \}\)/);
+  assert.match(app("server/common/fileStore.js"), /return bucketUploadsOf\(\{ userId, since: since \?\? FIRST_UPLOAD_DAY, until: Date\.now\(\), listPrefix: listS3Keys, dateFolder \}\)/);
+  // a self-host's database files: the same three names, filtered by the same rule
+  const store = app("server/common/fileStore.js");
+  assert.match(store, /\(\?:u\|ai\)\|presentation\)_\$\{userId\}_/);
+  assert.match(store, /\.filter\(\(key\) => accountFileKeyFor\(key, userId\)\)/);
 });

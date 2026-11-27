@@ -1,5 +1,8 @@
-// Removing a person's uploaded files (the editor's image uploads and the phone app's photos, keys
-// <YYYY>/<MM>/<DD>/u_<userId>_<id>.<ext>, upload-keys.mjs) once nothing uses them any more.
+// Removing a person's stored files once nothing uses them any more: the editor's image uploads and
+// the phone app's photos (<YYYY>/<MM>/<DD>/u_<userId>_<id>.<ext>, upload-keys.mjs), the pictures
+// the agent made for them (<YYYY>/<MM>/<DD>/ai_<userId>_<id>.<ext>, methods/stabilityai.js) and the
+// pictures a presentation copied in from a link (<YYYY>/<MM>/presentation_<userId>_<id>.<ext>, UTC
+// month, methods/presentations.js).
 //
 // Two things release files:
 //   - an account is removed (users.delete, a team owner deleting their team, an admin removing a
@@ -27,8 +30,22 @@ export const RETRY_MS = 15 * 60 * 1000
 export const MAX_RETRY_MS = 24 * 60 * 60 * 1000
 const DAY_MS = 24 * 60 * 60 * 1000
 
-// An upload key anywhere in a text: an absolute URL, a /files/ path, a key on its own.
-const UPLOAD_KEY_TEXT = /\d{4}\/\d{2}\/\d{2}\/u_[A-Za-z0-9]{17}_[A-Za-z0-9]{17}\.(?:png|jpg|gif|webp|pdf|txt)/g
+// The names of a person's files: the person's id and a Random.id() (17 letters and digits each).
+const ID = '[A-Za-z0-9]{17}'
+const DAY_FILE = `\\d{4}/\\d{2}/\\d{2}/(?:u|ai)_(${ID})_${ID}\\.(?:png|jpg|gif|webp|pdf|txt)`
+const MONTH_FILE = `\\d{4}/\\d{2}/presentation_(${ID})_${ID}\\.(?:png|jpg|gif|webp|img)`
+// A person's file key anywhere in a text: an absolute URL, a /files/ path, a key on its own. The
+// same names are released, looked for as references and listed for a removed account, so a file
+// is never removed for a way of naming it the reference check does not read.
+const UPLOAD_KEY_TEXT = new RegExp(`${DAY_FILE}|${MONTH_FILE}`, 'g')
+const ACCOUNT_FILE = new RegExp(`^(?:${DAY_FILE}|${MONTH_FILE})$`)
+
+/** The key when it names one of that person's files (an upload, an agent's picture, a presentation's copied picture), else null. */
+export function accountFileKeyFor(key, userId) {
+  if (typeof key !== 'string' || !userId) return null
+  const m = ACCOUNT_FILE.exec(key)
+  return m && (m[1] ?? m[2]) === userId ? key : null
+}
 
 function textOf(value) {
   if (value === undefined || value === null) return ''
@@ -48,7 +65,7 @@ function textOf(value) {
 export function uploadKeysIn(value) {
   const text = textOf(value)
   const keys = new Set()
-  if (!text.includes('u_')) return keys
+  if (!text.includes('_')) return keys
   const plain = text.replace(/%2F/gi, '/').replace(/\\+\//g, '/')
   for (const match of plain.matchAll(UPLOAD_KEY_TEXT)) keys.add(match[0])
   return keys
@@ -88,6 +105,18 @@ export function dayFoldersBetween(since, until, dateFolder) {
   return folders
 }
 
+/** The UTC month folders (2026/11) from a day before `since` to a day after `until`. */
+export function monthFoldersBetween(since, until) {
+  const start = new Date(new Date(since).getTime() - DAY_MS)
+  const end = new Date(new Date(until).getTime() + DAY_MS)
+  const last = end.getUTCFullYear() * 12 + end.getUTCMonth()
+  const folders = []
+  for (let month = start.getUTCFullYear() * 12 + start.getUTCMonth(); month <= last; month += 1) {
+    folders.push(`${Math.floor(month / 12)}/${String((month % 12) + 1).padStart(2, '0')}`)
+  }
+  return folders
+}
+
 /**
  * Every key a paged listing gives (S3 ListObjectsV2: Contents, IsTruncated, NextContinuationToken).
  * @param page (continuationToken | undefined) -> one page
@@ -103,15 +132,24 @@ export async function pagedKeys(page) {
   return keys
 }
 
+/** The bucket prefixes a person's files are under, from the day before `since` to the day after `until`. */
+export function accountPrefixes({ userId, since, until, dateFolder }) {
+  const prefixes = []
+  for (const folder of dayFoldersBetween(since, until, dateFolder)) prefixes.push(`${folder}/u_${userId}_`, `${folder}/ai_${userId}_`)
+  for (const month of monthFoldersBetween(since, until)) prefixes.push(`${month}/presentation_${userId}_`)
+  return prefixes
+}
+
 /**
- * A person's uploads in a bucket: one prefix per day folder (<day>/u_<userId>_), from the day
- * before the account was made to the day after `until`. Only keys that are that person's
- * (uploadKeyFor) are returned.
+ * A person's files in a bucket: their uploads and the agent's pictures by day folder
+ * (<day>/u_<userId>_, <day>/ai_<userId>_), a presentation's copied pictures by UTC month
+ * (<month>/presentation_<userId>_), from the day before the account was made to the day after
+ * `until`. Only keys that are that person's (accountFileKeyFor) are returned.
  */
-export async function bucketUploadsOf({ userId, since, until, listPrefix, dateFolder, uploadKeyFor }) {
+export async function bucketUploadsOf({ userId, since, until, listPrefix, dateFolder }) {
   const keys = new Set()
-  for (const folder of dayFoldersBetween(since, until, dateFolder)) {
-    for (const key of await listPrefix(`${folder}/u_${userId}_`)) if (uploadKeyFor(key, userId)) keys.add(key)
+  for (const prefix of accountPrefixes({ userId, since, until, dateFolder })) {
+    for (const key of await listPrefix(prefix)) if (accountFileKeyFor(key, userId)) keys.add(key)
   }
   return [...keys]
 }
@@ -145,8 +183,10 @@ export async function referencedKeys(documents, keys) {
 
 /**
  * @param {object} deps
- * @param deps.queue   { put(item), claim({ at, limit, leaseMs }) -> items, done(id), later(id, { dueAt, attempts, failure }) }
+ * @param deps.queue   { put(item), claim({ at, limit, leaseMs }) -> items, done(item), later(item, { dueAt, attempts, failure }) }
  *                     An item: { _id, kind: 'file' | 'account', key?, userId?, since?, dueAt, attempts }.
+ *                     done and later change the row only while it is still the claimed one (same
+ *                     _id and dueAt): a file released again during a run keeps its new wait.
  * @param deps.files   { listUploadsOf(userId, since) -> keys, remove(key) }: the file store.
  * @param deps.isUsed  (Set of keys) -> Set of the keys a stored document still names.
  * @param deps.now     the clock
@@ -173,7 +213,7 @@ export function createUploadRemoval({ queue, files, isUsed, now = Date.now, log 
     const attempts = (item.attempts || 0) + 1
     const failure = failureOf(error)
     log('upload removal failed; it will be retried', { kind: item.kind, attempts, ...failure })
-    await queue.later(item._id, { dueAt: now() + retryDelay(attempts), attempts, failure })
+    await queue.later(item, { dueAt: now() + retryDelay(attempts), attempts, failure })
   }
 
   // Remove the keys nothing names. Returns the keys kept because something still names them.
@@ -190,7 +230,7 @@ export function createUploadRemoval({ queue, files, isUsed, now = Date.now, log 
     // Kept: another slate shows it (a copy, a team slate that stays). Checked again after the grace
     // period, when the snapshots that named it have gone, and kept for as long as anything uses it.
     if (kept.length) await released(kept)
-    await queue.done(item._id)
+    await queue.done(item)
     log('account uploads removed', { removed, kept: kept.length })
   }
 
@@ -205,7 +245,7 @@ export function createUploadRemoval({ queue, files, isUsed, now = Date.now, log 
           removed += 1
         }
         // Still named somewhere: kept. A later save or deletion that releases it queues it again.
-        await queue.done(item._id)
+        await queue.done(item)
       } catch (error) {
         await failed(item, error)
       }
@@ -227,7 +267,7 @@ export function createUploadRemoval({ queue, files, isUsed, now = Date.now, log 
       } else if (item.kind === 'file' && typeof item.key === 'string') {
         fileItems.push(item)
       } else {
-        await queue.done(item._id)
+        await queue.done(item)
       }
     }
     if (fileItems.length) {
