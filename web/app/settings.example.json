@@ -167,10 +167,6 @@
       "enabled": false,
       "websiteToken": ""
     },
-    "analytics": {
-      "//": "Google Analytics. The gtag config is served only when gaId (a G- measurement id) is set.",
-      "gaId": ""
-    },
     "mobile": {
       "//": "Store pages for the Slatebox app for iPhone and Android (com.slatebox.viewer). Leave unset until the app is listed: the phone banner then says it is coming soon and shows no button.",
       "appStoreUrl": "",

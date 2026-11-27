@@ -167,20 +167,6 @@ function appendDefaults(sink) {
   `
   sink.appendToHead(defaultHead)
   if (Meteor.settings.public.env === 'selfhost') return
-  // Google Analytics measurement id is per installation, so it lives in settings:
-  // public.analytics.gaId. Without a well-formed id nothing analytics-related is served.
-  const gaId = Meteor.settings?.public?.analytics?.gaId
-  if (typeof gaId === 'string' && /^G-[A-Z0-9]+$/.test(gaId)) {
-    sink.appendToHead(`<script>
-    window.dataLayer = window.dataLayer || []
-    function gtag() {
-      dataLayer.push(arguments)
-    }
-    gtag('js', new Date())
-
-    gtag('config', ${JSON.stringify(gaId)})
-  </script>`)
-  }
   sink.appendToHead(`  <link
     href="https://unpkg.com/dropzone@6.0.0-beta.1/dist/dropzone.css"
     rel="stylesheet"
