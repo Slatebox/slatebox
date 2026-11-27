@@ -19,6 +19,8 @@
 // the use-case interview's turns and a tile's board drafted, born in the registry; every site before them kept its bytes.
 // Its review (same day) recorded those five again: the agent's earlier questions wrapped as data, each board named in the
 // plan (and that name reaching its draft), single questions, and the money, printable-page and change-the-plan lines.
+// The read-only viewer app (108c91b8, 2026-11-26) added the slates.live action to the action contract, so the three exec
+// sites' generated tool index gained its line (slates.live({shareId}): Watch a slate live); recorded again, no prompt text changed.
 // Every prompt in the registry is asked for by one of those recordings, so every one is proven; and
 // a published version really reaches the request, while no published version (or no snapshot)
 // serves the built-in text. (The recordings no longer carry a provider, model or fallback per call:
