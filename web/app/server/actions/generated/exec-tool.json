@@ -2671,7 +2671,7 @@
     {
       "name": "get_presentation",
       "title": "Read a presentation",
-      "description": "Read a slate's presentation (its slides): its style and each step's layout and caption.\n\nDeck. Read your latest presentation of a slate: its style, and each step's layout (title, overview, dive, hero, treeBuild, trace, sweep, group, bigNumber, quote, split, compare, cover, finale), kicker and caption. The deck plays on the live canvas with Prezi-style camera moves.",
+      "description": "Read a slate's presentation (its slides): its style and each step's layout and caption.\n\nDeck. Read your latest presentation of a slate (or, when you have none, the slate's published one): its style, and each step's layout (title, overview, dive, hero, treeBuild, trace, sweep, group, bigNumber, quote, split, compare, cover, finale), kicker, caption, the notes it shows and what the camera frames (box, fill). The deck plays on the live canvas with Prezi-style camera moves.",
       "inputSchema": {
         "type": "object",
         "properties": {

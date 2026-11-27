@@ -1572,6 +1572,22 @@ declare namespace slatebox.presentations {
       caption: string;
       /** How many of the slate's notes the step shows. */
       notes?: number;
+      /** The notes the step shows (their ids on the slate). */
+      nodeIds?: string[];
+      /** What the camera frames, in canvas units (null when the step frames nothing on the slate as it is now). */
+      box?: {
+        x?: number;
+        y?: number;
+        width?: number;
+        height?: number;
+        [key: string]: unknown;
+      } | null;
+      /** How much of the screen the box fills (0 to 1). */
+      fill?: number;
+      /** Notes of the style hidden on this step (a caption or card of another step). */
+      hide?: string[];
+      /** How long the step usually shows, in milliseconds. */
+      duration?: number;
       [key: string]: unknown;
     }>;
     /** Opens the slate and plays this presentation (null in a preview). */
@@ -1584,7 +1600,7 @@ declare namespace slatebox.presentations {
 }
 
 declare namespace slatebox.presentations {
-  /** Deck. Read your latest presentation of a slate: its style, and each step's layout (title, overview, dive, hero, treeBuild, trace, sweep, group, bigNumber, quote, split, compare, cover, finale), kicker and caption. The deck plays on the live canvas with Prezi-style camera moves. @scope slates:read */
+  /** Deck. Read your latest presentation of a slate (or, when you have none, the slate's published one): its style, and each step's layout (title, overview, dive, hero, treeBuild, trace, sweep, group, bigNumber, quote, split, compare, cover, finale), kicker, caption, the notes it shows and what the camera frames (box, fill). The deck plays on the live canvas with Prezi-style camera moves. @scope slates:read */
   function get(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
     shareId: string;
@@ -1604,6 +1620,22 @@ declare namespace slatebox.presentations {
       caption: string;
       /** How many of the slate's notes the step shows. */
       notes?: number;
+      /** The notes the step shows (their ids on the slate). */
+      nodeIds?: string[];
+      /** What the camera frames, in canvas units (null when the step frames nothing on the slate as it is now). */
+      box?: {
+        x?: number;
+        y?: number;
+        width?: number;
+        height?: number;
+        [key: string]: unknown;
+      } | null;
+      /** How much of the screen the box fills (0 to 1). */
+      fill?: number;
+      /** Notes of the style hidden on this step (a caption or card of another step). */
+      hide?: string[];
+      /** How long the step usually shows, in milliseconds. */
+      duration?: number;
       [key: string]: unknown;
     }>;
     [key: string]: unknown;
@@ -1634,6 +1666,22 @@ declare namespace slatebox.presentations {
       caption: string;
       /** How many of the slate's notes the step shows. */
       notes?: number;
+      /** The notes the step shows (their ids on the slate). */
+      nodeIds?: string[];
+      /** What the camera frames, in canvas units (null when the step frames nothing on the slate as it is now). */
+      box?: {
+        x?: number;
+        y?: number;
+        width?: number;
+        height?: number;
+        [key: string]: unknown;
+      } | null;
+      /** How much of the screen the box fills (0 to 1). */
+      fill?: number;
+      /** Notes of the style hidden on this step (a caption or card of another step). */
+      hide?: string[];
+      /** How long the step usually shows, in milliseconds. */
+      duration?: number;
       [key: string]: unknown;
     }>;
     [key: string]: unknown;

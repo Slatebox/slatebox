@@ -14,6 +14,7 @@ import { sharedSaveConditions } from '../methods/native-slate-save.mjs'
 import { runExpiry } from '../../imports/api/common/slate-operation-runs.mjs'
 import { undoRecord } from './slate-undo-record.mjs'
 import { showAgent } from './slate-operations.mjs'
+import { playableDeck } from '../../imports/ui/components/presentations/presentationBake.mjs'
 
 const hex = { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' }
 
@@ -36,6 +37,15 @@ const deckOutput = {
           kicker: { type: 'string' },
           caption: { type: 'string' },
           notes: { type: 'integer', description: 'How many of the slate\'s notes the step shows.' },
+          nodeIds: { type: 'array', items: { type: 'string' }, description: 'The notes the step shows (their ids on the slate).' },
+          box: {
+            type: ['object', 'null'],
+            description: 'What the camera frames, in canvas units (null when the step frames nothing on the slate as it is now).',
+            properties: { x: { type: 'number' }, y: { type: 'number' }, width: { type: 'number' }, height: { type: 'number' } },
+          },
+          fill: { type: 'number', description: 'How much of the screen the box fills (0 to 1).' },
+          hide: { type: 'array', items: { type: 'string' }, description: 'Notes of the style hidden on this step (a caption or card of another step).' },
+          duration: { type: 'integer', description: 'How long the step usually shows, in milliseconds.' },
         },
         required: ['step', 'layout', 'caption'],
       },
@@ -44,27 +54,71 @@ const deckOutput = {
   required: ['presentationId', 'style', 'steps'],
 }
 
-export const deckSummary = (row) => ({
-  presentationId: row._id,
-  version: row.version ?? 1,
-  name: row.name || '',
-  published: Boolean(row.isPublished),
-  style: row.style?.id ?? null,
-  styles: STYLE_IDS,
-  steps: (row.viewpoints || []).map((step, index) => ({
-    step: index,
-    layout: LAYOUTS.includes(step.layout) ? step.layout : 'group',
-    kicker: step.kicker || '',
-    caption: step.narrative || '',
-    notes: step.nodeIds?.length || 0,
-  })),
-})
+// The camera over each step as the player plays it (presentationBake.playableDeck): a worn style's
+// deck as saved, else the camera over the slate as it is now. One frame per step, or none.
+function framesOf(row, slate) {
+  const points = Array.isArray(row.viewpoints) ? row.viewpoints : []
+  let deck = null
+  try {
+    deck = playableDeck({ deck: row.deck ?? null, viewpoints: points, slateJSON: slate?.nodes ? { options: slate.options || {}, nodes: slate.nodes } : null })
+  } catch {
+    deck = null
+  }
+  return deck?.steps?.length === points.length ? deck.steps : []
+}
+
+const boxOf = (box) =>
+  box && [box.x, box.y, box.width, box.height].every(Number.isFinite) ? { x: box.x, y: box.y, width: box.width, height: box.height } : null
+
+// `slate` (optional): the slate as stored, so a deck that wears no style frames its notes where they are now.
+export const deckSummary = (row, slate = null) => {
+  const frames = framesOf(row, slate)
+  return {
+    presentationId: row._id,
+    version: row.version ?? 1,
+    name: row.name || '',
+    published: Boolean(row.isPublished),
+    style: row.style?.id ?? null,
+    styles: STYLE_IDS,
+    steps: (row.viewpoints || []).map((step, index) => {
+      const frame = frames[index] || null
+      const nodeIds = [step.nodeIds ?? []].flat().filter((id) => id != null).map(String)
+      return {
+        step: index,
+        layout: LAYOUTS.includes(step.layout) ? step.layout : 'group',
+        kicker: step.kicker || '',
+        caption: step.narrative || '',
+        notes: nodeIds.length,
+        nodeIds,
+        box: boxOf(frame?.box),
+        fill: Number.isFinite(frame?.camera?.fill) ? frame.camera.fill : 0.86,
+        hide: Array.isArray(frame?.hide) ? frame.hide.map(String) : [],
+        duration: Math.round(Number(frame?.duration ?? step.duration) || 3200),
+      }
+    }),
+  }
+}
 
 // The caller's latest deck of the slate (an agent's token acts as its owner).
 async function deckOf(deps, shareId, principal) {
   const row = await deps.latestPresentation?.(shareId, principal.userId)
   if (!row) throw problem(404, 'not_found', 'This slate has no presentation yet. Create one (presentations.create), or open the slate and press Present.')
   return row
+}
+
+// The deck a reader plays: their own latest, else the slate's published presentation when it was made
+// by someone who may edit the slate (the deck the web's Present link plays to everyone who opens it).
+async function playedDeckOf(deps, shareId, principal, slate) {
+  const own = await deps.latestPresentation?.(shareId, principal.userId)
+  if (own) return own
+  const published = await deps.publishedPresentation?.(shareId)
+  if (published && Array.isArray(published.viewpoints)) {
+    const author = published.userId
+    if (author && slate?.userId === author) return published
+    const access = author && deps.resolveSlateForUser ? await deps.resolveSlateForUser(shareId, author) : null
+    if (access?.canEdit) return published
+  }
+  return deckOf(deps, shareId, principal)
 }
 
 // Where the person presents a slate's latest deck: the slate, opened in the presenter.
@@ -150,7 +204,7 @@ export const presentationsGet = defineAction({
   id: 'presentations.get',
   title: 'Deck',
   description:
-    'Read your latest presentation of a slate: its style, and each step\'s layout (title, overview, dive, hero, treeBuild, trace, sweep, group, bigNumber, quote, split, compare, cover, finale), kicker and caption. The deck plays on the live canvas with Prezi-style camera moves.',
+    'Read your latest presentation of a slate (or, when you have none, the slate\'s published one): its style, and each step\'s layout (title, overview, dive, hero, treeBuild, trace, sweep, group, bigNumber, quote, split, compare, cover, finale), kicker, caption, the notes it shows and what the camera frames (box, fill). The deck plays on the live canvas with Prezi-style camera moves.',
   toolset: 'slates',
   kind: 'read',
   scope: 'slates:read',
@@ -160,8 +214,8 @@ export const presentationsGet = defineAction({
   output: deckOutput,
   load: loadSlate(false),
   tool: { name: 'get_presentation', title: 'Read a presentation', description: 'Read a slate\'s presentation (its slides): its style and each step\'s layout and caption.' },
-  async handler(principal, input, { deps }) {
-    return deckSummary(await deckOf(deps, input.shareId, principal))
+  async handler(principal, input, { deps, resource }) {
+    return deckSummary(await playedDeckOf(deps, input.shareId, principal, resource), resource)
   },
 })
 
@@ -243,7 +297,7 @@ export const presentationsSetStyle = defineAction({
     if (extra.onApplied) await extra.onApplied({ before, after: worn.slate, revision: saved.revision })
     await showAgent(principal, slate, { message, report: { targets: worn.deck.steps[0]?.nodeIds || [] } }, deps)
     await deps.savePresentation(row._id, worn.change)
-    return deckSummary({ ...row, ...worn.change })
+    return deckSummary({ ...row, ...worn.change }, worn.slate)
   },
 })
 

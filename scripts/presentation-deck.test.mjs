@@ -139,6 +139,86 @@ test('agents read a deck and restyle it in one call: same steps, no AI, saved', 
   await assert.rejects(presentationsGet.handler(principal, { shareId: 'none' }, { deps }), /no presentation yet/)
 })
 
+test('a reader plays the deck the web plays: each step names its notes and what the camera frames', async () => {
+  const { presentationsGet, presentationsSetStyle } = await import('../web/app/server/actions/presentations.mjs')
+  const record = deckRecord({ layout: whatIsSlatebox(), direction: aiDirection(), name: NAME })
+  const row = { _id: 'p1', version: 2, userId: 'u1', name: 'Six ways in.', ...record }
+  const slate = { _id: 's1', shareId: 'abc', userId: 'u1', ...slateOfLayout(whatIsSlatebox(), NAME) }
+  const deps = { latestPresentation: async (shareId, userId) => (shareId === 'abc' && userId === 'u1' ? row : null) }
+  const principal = { kind: 'agent', userId: 'u1' }
+  const read = await presentationsGet.handler(principal, { shareId: 'abc' }, { deps, resource: slate })
+  assert.equal(read.steps.length, record.viewpoints.length)
+  const ids = new Set(slate.nodes.map((node) => node.options.id))
+  read.steps.forEach((step, index) => {
+    assert.deepEqual(step.nodeIds, record.viewpoints[index].nodeIds.map(String))
+    assert.equal(step.notes, step.nodeIds.length)
+    assert.ok(step.nodeIds.every((id) => ids.has(id)), `step ${index} names notes on the slate`)
+    // A deck that wears no style frames its notes where they are on the slate now.
+    assert.ok(step.box && step.box.width > 0 && step.box.height > 0, `step ${index} frames something`)
+    assert.ok(step.fill > 0 && step.fill <= 1)
+    assert.ok(Number.isInteger(step.duration) && step.duration > 0)
+    assert.deepEqual(step.hide, [])
+  })
+  // The dive frames only its three notes: a smaller box than the overview's.
+  const dive = read.steps.find((step) => step.layout === 'dive' || step.nodeIds.join() === 'b5,l9,l10')
+  const overview = read.steps.find((step) => step.layout === 'overview')
+  assert.ok(dive.box.width * dive.box.height < overview.box.width * overview.box.height)
+  // Moved notes are framed where they are now.
+  const moved = { ...slate, nodes: slate.nodes.map((node) => (['b5', 'l9', 'l10'].includes(node.options.id) ? { ...node, options: { ...node.options, xPos: node.options.xPos + 5000 } } : node)) }
+  const again = await presentationsGet.handler(principal, { shareId: 'abc' }, { deps, resource: moved })
+  const diveAgain = again.steps[read.steps.indexOf(dive)]
+  assert.equal(Math.round(diveAgain.box.x - dive.box.x), 5000)
+  // Without the slate (an older caller) the steps still name their notes; the camera is the player's.
+  const bare = await presentationsGet.handler(principal, { shareId: 'abc' }, { deps })
+  assert.deepEqual(bare.steps.map((step) => step.nodeIds), read.steps.map((step) => step.nodeIds))
+  assert.ok(bare.steps.every((step) => step.box === null))
+
+  // A worn style's deck: the boxes are the saved deck's, and a step hides the other steps' cards.
+  const { createSlateSaveCore } = await import('../web/app/server/slate-save-core.mjs')
+  const { memoryMongo } = await import('./memory-mongo.mjs')
+  const slates = memoryMongo()
+  const saveCore = createSlateSaveCore({ slates, events: memoryMongo(), now: () => 1000 })
+  await saveCore.create({ row: slate, actor: { kind: 'person', userId: 'u1' }, source: 'create' })
+  const saved = []
+  const styledDeps = { ...deps, saveCore, savePresentation: async (id, set) => { saved.push([id, set]) } }
+  const styled = await presentationsSetStyle.handler(principal, { shareId: 'abc', style: 'sketch' }, { deps: styledDeps, resource: await slates.findOne({ _id: 's1' }) })
+  const baked = saved[0][1].deck
+  assert.equal(styled.steps.length, baked.steps.length)
+  styled.steps.forEach((step, index) => {
+    assert.deepEqual(step.box, baked.steps[index].box)
+    assert.equal(step.fill, baked.steps[index].camera.fill)
+    assert.deepEqual(step.hide, baked.steps[index].hide)
+  })
+  assert.ok(styled.steps.some((step) => step.hide.length > 0), 'a style\'s card shows on its own step only')
+})
+
+test('a reader with no deck of their own plays the slate\'s published one, when an editor of the slate made it', async () => {
+  const { presentationsGet } = await import('../web/app/server/actions/presentations.mjs')
+  const record = deckRecord({ layout: whatIsSlatebox(), direction: aiDirection(), name: NAME })
+  const slate = { _id: 's1', shareId: 'abc', userId: 'owner', ...slateOfLayout(whatIsSlatebox(), NAME) }
+  const reader = { kind: 'agent', userId: 'reader' }
+  const published = (userId) => ({ _id: `pub-${userId}`, version: 1, userId, isPublished: true, name: 'Six ways in.', ...record })
+  const depsFor = (row, editors = []) => ({
+    latestPresentation: async () => null,
+    publishedPresentation: async (shareId) => (shareId === 'abc' ? row : null),
+    resolveSlateForUser: async (shareId, userId) => (shareId === 'abc' ? { slate, canRead: true, canEdit: editors.includes(userId) } : null),
+  })
+  // The owner's published deck.
+  const fromOwner = await presentationsGet.handler(reader, { shareId: 'abc' }, { deps: depsFor(published('owner')), resource: slate })
+  assert.equal(fromOwner.presentationId, 'pub-owner')
+  assert.equal(fromOwner.published, true)
+  assert.equal(fromOwner.steps.length, record.viewpoints.length)
+  // A teammate who may edit the slate.
+  const fromEditor = await presentationsGet.handler(reader, { shareId: 'abc' }, { deps: depsFor(published('mate'), ['mate']), resource: slate })
+  assert.equal(fromEditor.presentationId, 'pub-mate')
+  // Someone who may not edit it: never played as the slate's deck.
+  await assert.rejects(presentationsGet.handler(reader, { shareId: 'abc' }, { deps: depsFor(published('stranger')), resource: slate }), /no presentation yet/)
+  // The reader's own deck comes first.
+  const own = { _id: 'mine', version: 3, userId: 'reader', name: 'Mine', ...record }
+  const mine = await presentationsGet.handler(reader, { shareId: 'abc' }, { deps: { ...depsFor(published('owner')), latestPresentation: async (shareId, userId) => (userId === 'reader' ? own : null) }, resource: slate })
+  assert.equal(mine.presentationId, 'mine')
+})
+
 // ─── review: spend, licensing, reuse, the publish trust boundary ────────────────────────────────
 
 test('generation is never started without the time it usually takes, and at most two per deck', async () => {
