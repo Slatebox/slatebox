@@ -4,15 +4,28 @@ import { Meteor } from 'meteor/meteor'
 import { Mongo } from 'meteor/mongo'
 import { Slates } from '../imports/api/common/models'
 import { createSlateSaveCore } from './slate-save-core.mjs'
+import { growthStep } from './growth/meteor'
 
 // One row per save: { _id: slateId:revision, slateId, revision, at, source, actor, notes, fields }.
 export const SlateEvents = new Mongo.Collection('slateEvents')
 
-export const slateSaveCore = createSlateSaveCore({
+// A slate a person or guest made counts towards the growth funnel's "first slate" (server/growth,
+// Slatebox Cloud only). Inside a caller's transaction it is left to the account's next report.
+const countingFirstSlate = (core) => ({
+  ...core,
+  async create(request) {
+    const result = await core.create(request)
+    const actor = request?.actor
+    if (result?.created && !request.session && (actor?.kind === 'person' || actor?.kind === 'guest')) growthStep(actor.userId, 'slate')
+    return result
+  },
+})
+
+export const slateSaveCore = countingFirstSlate(createSlateSaveCore({
   slates: Slates.rawCollection(),
   events: SlateEvents.rawCollection(),
   onEventError: (error, row) => console.error('slate event not logged', row.slateId, row.revision, error.message),
-})
+}))
 
 Meteor.startup(async () => {
   await SlateEvents.rawCollection().createIndex({ slateId: 1, revision: 1 }, { unique: true })
@@ -26,7 +39,7 @@ Meteor.startup(async () => {
 // save answered about 100 ms before its watchers had the change. A write inside a caller's
 // transaction stays raw (Meteor's methods take no session). scripts/slate-save-fence.live.test.mjs
 const raw = Slates.rawCollection()
-export const fencedSlateSaveCore = createSlateSaveCore({
+export const fencedSlateSaveCore = countingFirstSlate(createSlateSaveCore({
   slates: {
     findOne: (filter, options) => raw.findOne(filter, options),
     async updateOne(filter, update, options) {
@@ -40,4 +53,4 @@ export const fencedSlateSaveCore = createSlateSaveCore({
   },
   events: SlateEvents.rawCollection(),
   onEventError: (error, row) => console.error('slate event not logged', row.slateId, row.revision, error.message),
-})
+}))

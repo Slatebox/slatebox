@@ -76,6 +76,8 @@ import './methods/images'
 import './metering/meteor'
 // Server admin: admin.status and the admin home's Overview (server/admin/meteor.js)
 import './admin/meteor'
+// The growth funnel (Slatebox Cloud only): the browser's visit reports and the admin Growth page
+import './growth/meteor'
 // The header's Move to Cloud on a self-hosted install: move the team to Slatebox Cloud
 import './selfhost-options/meteor'
 // The "Made with Slatebox" mark's setting (server/made-with/meteor.js)

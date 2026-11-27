@@ -19,7 +19,8 @@ import Box from '@mui/material/Box'
 import CONSTANTS from '../../api/common/constants'
 import { globalMessage } from '../jotai/atoms'
 import useServerAdmin from '../common/useServerAdmin'
-import { ADMIN_SECTIONS, SELF_HOST_SECTIONS, selfHostedServer } from '../../api/common/server-admin.mjs'
+import { ADMIN_SECTIONS, CLOUD_SECTIONS, SELF_HOST_SECTIONS, selfHostedServer } from '../../api/common/server-admin.mjs'
+import { growthOn } from '../../api/common/growth.mjs'
 import AdminOverview from './admin/AdminOverview'
 import FreeBudget from './admin/FreeBudget'
 import TeamImports from './admin/TeamImports'
@@ -102,6 +103,11 @@ export default function AdminTools() {
                 variant={section.id === 'overview' ? 'contained' : 'outlined'} aria-current={section.id === 'overview' ? 'page' : undefined}
                 data-admin-section={section.id}>
                 {section.id === 'overview' ? 'Overview' : section.title}
+              </Button>
+            ))}
+            {growthOn(Meteor.settings) && CLOUD_SECTIONS.map((section) => (
+              <Button key={section.id} component={RouterLink} to={section.to} size="small" disableElevation variant="outlined" data-admin-section={section.id}>
+                {section.title}
               </Button>
             ))}
             {selfHostedServer(Meteor.settings) && SELF_HOST_SECTIONS.map((section) => (

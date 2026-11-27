@@ -251,6 +251,13 @@ const CONSTANTS = {
       shareOfVoice: 'admin.shareOfVoice',
       shareOfVoiceQuestions: 'admin.shareOfVoice.questions',
       shareOfVoiceRun: 'admin.shareOfVoice.run',
+      // Growth (server/growth/meteor.js, Slatebox Cloud only): the funnel by source and by week
+      growth: 'admin.growth',
+    },
+    // The growth funnel's browser reports (server/growth/meteor.js, Slatebox Cloud only)
+    growth: {
+      visit: 'growth.visit',
+      forget: 'growth.forget',
     },
     // The consent page for an app connecting over OAuth (server/oauth/meteor.js)
     oauth: {

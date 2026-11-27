@@ -69,6 +69,11 @@ export const SELF_HOST_SECTIONS = Object.freeze([
   Object.freeze({ id: 'updates', to: '/admin/updates', title: 'Updates', detail: 'New versions from GitHub, when they are applied, and what happened' }),
 ])
 
+/** Pages only Slatebox Cloud has (the growth funnel: imports/api/common/growth.mjs growthOn). */
+export const CLOUD_SECTIONS = Object.freeze([
+  Object.freeze({ id: 'growth', to: '/admin/growth', title: 'Growth', detail: 'Which links bring people, and how far they get' }),
+])
+
 /** Whether these settings are a self-hosted server's (the same rule as the setup link's). */
 export const selfHostedServer = (settings) => settings?.public?.env === 'selfhost' && settings?.public?.edition !== 'cloud'
 

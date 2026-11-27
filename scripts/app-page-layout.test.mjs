@@ -24,6 +24,7 @@ const LAYOUT = {
   LibraryReview: ['pages/LibraryReview.jsx'],
   LibraryIntegrationReview: ['pages/LibraryIntegrationReview.jsx'],
   Updates: ['pages/admin/updates/Updates.jsx'],
+  Growth: ['pages/admin/Growth.jsx'],
   Library: ['pages/Library.jsx'],
   MyLibrary: ['pages/MyLibrary.jsx'],
   LibraryItem: ['pages/LibraryItem.jsx'],

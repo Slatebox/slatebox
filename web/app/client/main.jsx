@@ -25,6 +25,8 @@ import GuestStartGate from '../imports/ui/components/GuestStartGate'
 import PhoneViewGate from '../imports/ui/components/PhoneViewGate'
 import PhoneAppBanner from '../imports/ui/components/PhoneAppBanner'
 import { SsoDone, SsoGate } from '../imports/ui/sso/sso'
+// Slatebox Cloud's first-party growth funnel; nothing on a self-hosted server
+import GrowthBeacon from '../imports/ui/components/GrowthBeacon'
 import { globalMessage } from '../imports/ui/jotai/atoms'
 // Sign out, and a session ending while a page is open, lead to the sign-in page.
 import '../imports/api/client/signOut'
@@ -133,6 +135,7 @@ function AppWrapper() {
         <SsoGate />
         {/* On a phone: viewing only, and the app is where slates are made (once, until dismissed). */}
         <PhoneAppBanner />
+        <GrowthBeacon />
         <Suspense fallback={null}>
         <Routes>
           <Route path="/workshops" element={<Workshops />} />

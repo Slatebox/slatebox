@@ -1,4 +1,5 @@
 import { configureGeneralLink } from './general-slate-link.mjs'
+import { growthStep } from '../growth/meteor'
 // methods.js
 import CONSTANTS from '../../imports/api/common/constants'
 import { SlateAccess, Slates } from '../../imports/api/common/models'
@@ -50,6 +51,8 @@ method[CONSTANTS.methods.slateAccess.configureLink] = async function ({ slateId,
   await changeSharing(slateId, this.userId, store => configureGeneralLink(store, {
     type, permission, initialize, generateKey: () => Random.id(8),
   }))
+  // a link opened to others is a first share in the growth funnel (Slatebox Cloud only)
+  if (!initialize && type !== 'private') growthStep(this.userId, 'share')
 }
 
 method[CONSTANTS.methods.slateAccess.configureMember] = async function ({ slateId, memberId, permission }) {
@@ -72,6 +75,7 @@ method[CONSTANTS.methods.slateAccess.configureMember] = async function ({ slateI
       $setOnInsert: { _id: 'private_' + memberId + '_' + slateId, owningUserId: ownerId, orgId, accessKey: Random.id(8) },
     }, { upsert: true, session })
   })
+  growthStep(ownerId, 'share')
 }
 
 Meteor.methods(method)

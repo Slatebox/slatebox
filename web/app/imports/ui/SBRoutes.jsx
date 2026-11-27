@@ -12,6 +12,7 @@ import Canvas from './pages/Canvas'
 import AIPassthrough from './pages/AIPassthrough'
 import NotFound from './pages/NotFound'
 import { adminRouteState, selfHostedServer } from '../api/common/server-admin.mjs'
+import { growthOn } from '../api/common/growth.mjs'
 import useServerAdmin from './common/useServerAdmin'
 import CONSTANTS from '../api/common/constants'
 import CSSUnicorn from './components/ai/Unicorn'
@@ -34,6 +35,7 @@ const AdminTools = lazy(() => import('./pages/AdminTools'))
 const AIControl = lazy(() => import('./pages/admin/ai/AIControl'))
 // Admin › Updates, on a self-hosted server only (Slatebox Cloud has no such page)
 const Updates = lazy(() => import('./pages/admin/updates/Updates'))
+const Growth = lazy(() => import('./pages/admin/Growth'))
 const TeamSettings = lazy(() => import('./pages/TeamSettings'))
 const BrandingSettings = lazy(() => import('./pages/BrandingSettings'))
 const SimulateUrlAction = lazy(() => import('./components/SimulateUrlAction'))
@@ -208,6 +210,7 @@ export default function SBRoutes() {
       <Route path="/admin/library/review/:itemId" element={<PrivateRoute><AdminRoute><LibraryIntegrationReview /></AdminRoute></PrivateRoute>} />
       <Route path="/admin/ai" element={<PrivateRoute><AdminRoute><AIControl /></AdminRoute></PrivateRoute>} />
       {selfHostedServer(Meteor.settings) && <Route path="/admin/updates" element={<PrivateRoute><AdminRoute><Updates /></AdminRoute></PrivateRoute>} />}
+      {growthOn(Meteor.settings) && <Route path="/admin/growth" element={<PrivateRoute><AdminRoute><Growth /></AdminRoute></PrivateRoute>} />}
       <Route path="/library" element={<Library />} />
       <Route
         path="/library/mine"
