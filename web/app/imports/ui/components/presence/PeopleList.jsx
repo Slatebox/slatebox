@@ -7,7 +7,7 @@ import Popover from '@mui/material/Popover'
 import { agentColor } from '../AgentPresenceListener'
 import { AgentMark, PersonMark } from './marks'
 
-const headSx = (colors) => ({ m: 0, px: 1, pt: 0.75, pb: 0.5, fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: colors.ink2 })
+const headSx = (colors) => ({ m: 0, px: 1, pt: 0.75, pb: 0.5, fontSize: 12, fontWeight: 600, color: colors.ink2 })
 const rowSx = { display: 'flex', alignItems: 'center', gap: 1, px: 1, py: 0.625, fontSize: 13.5 }
 
 export default function PeopleList({ anchorEl, open, onClose, people, rows = [], agents = [], paused = false, colors }) {

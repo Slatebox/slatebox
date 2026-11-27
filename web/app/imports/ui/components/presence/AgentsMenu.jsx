@@ -25,7 +25,7 @@ export default function AgentsMenu({ id, anchorEl, open, onClose, model, agents,
   if (model.rows.length) {
     items.push(
       <ListSubheader key="head" disableSticky
-        sx={{ bgcolor: 'transparent', color: colors.ink2, fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', lineHeight: '28px', px: 1.75 }}>
+        sx={{ bgcolor: 'transparent', color: colors.ink2, fontSize: 12, fontWeight: 600, lineHeight: '28px', px: 1.75 }}>
         Agents on this slate · {model.rows.length}
       </ListSubheader>,
     )

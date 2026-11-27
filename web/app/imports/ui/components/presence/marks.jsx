@@ -18,6 +18,8 @@ export function pillColors(theme) {
     border: shell.border || '#c6d1bf',
     offset: shell.offset || '#edf0e5',
     focus: dark ? '#f2ce8b' : '#223e32',
+    // A hairline inside each mark, so a dark avatar colour still reads on the dark pill.
+    edge: dark ? 'rgb(255 255 255 / 35%)' : 'rgb(0 0 0 / 0%)',
     warn: dark ? '#f0a35e' : '#b5651d',
     warnInk: dark ? '#17251f' : '#fff',
     speaking: dark ? '#7fd1a3' : '#2f8f6b',
@@ -27,7 +29,7 @@ export function pillColors(theme) {
 
 /** A person: a round avatar in their colour with their initials ("Y" for you), ringed while speaking. */
 export function PersonMark({ person, colors, z = 0, size = MARK }) {
-  const ring = `0 0 0 2px ${colors.surface}`
+  const ring = `inset 0 0 0 1px ${colors.edge}, 0 0 0 2px ${colors.surface}`
   return (
     <Box component="span" aria-hidden="true" data-person-mark={person.you ? 'you' : ''} data-speaking={person.speaking ? '' : undefined}
       sx={{
@@ -52,9 +54,10 @@ export function AgentMark({ name, color, colors, z = 0, paused = false, size = M
   return (
     <Box component="span" aria-hidden="true" data-agent-mark=""
       sx={{ position: 'relative', zIndex: z, width: size, height: size, flex: 'none', display: 'grid', placeItems: 'center',
-        ...(paused && { filter: 'grayscale(1)', opacity: 0.55 }) }}>
+        ...(paused && { filter: 'grayscale(1)', opacity: 0.8 }) }}>
       <svg width={size} height={size} viewBox="0 0 24 24" style={{ position: 'absolute', inset: 0 }}>
         <path d="M12 1.6l9 5.2v10.4L12 22.4 3 17.2V6.8z" fill={color} stroke={colors.surface} strokeWidth="2" strokeLinejoin="round" />
+        <path d="M12 3.3l7.5 4.35v8.7L12 20.7l-7.5-4.35v-8.7z" fill="none" stroke={colors.edge} strokeWidth="1" strokeLinejoin="round" />
       </svg>
       <Box component="span" sx={{ position: 'relative', color: '#fff', fontSize: size * 0.42, fontWeight: 700, lineHeight: 1 }}>
         {String(name || '?').trim().charAt(0).toUpperCase()}

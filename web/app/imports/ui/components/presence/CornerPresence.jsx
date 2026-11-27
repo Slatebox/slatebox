@@ -7,7 +7,7 @@
 //
 // On a phone viewing the slate there are no controls: the pill is one button that lists everyone here,
 // agents and who added them included, and it steps aside while Ask Slatebox's sheet is open.
-import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
 import { useTracker } from 'meteor/react-meteor-data'
@@ -27,6 +27,38 @@ import PeopleStack from './PeopleStack'
 import AgentStack, { AgentMarks } from './AgentStack'
 import AgentsMenu from './AgentsMenu'
 import PeopleList from './PeopleList'
+
+// The widest the full pill gets (4 avatars + N, 3 hexagons + N, Paused, the caret and the badge), in px.
+const FULL_PILL = 310
+
+/**
+ * Whether the room from the end of Undo and Redo to the zoom control is short of the full pill. It
+ * follows the window, Ask Slatebox opening or closing (the canvas page writes --sb-canvas-right on the
+ * root's style) and Undo and Redo moving (--sb-undo-redo-end).
+ */
+function useShortRoom(off) {
+  const [short, setShort] = useState(false)
+  useLayoutEffect(() => {
+    if (off || typeof document === 'undefined') return undefined
+    const root = document.documentElement
+    const measure = () => {
+      const css = getComputedStyle(root)
+      const start = (parseFloat(css.getPropertyValue('--sb-undo-redo-end')) || 8) + 8
+      const zoom = document.querySelector('.slatebox-zoom-slider')
+      const box = zoom?.getBoundingClientRect()
+      const end = box && box.width ? box.left : window.innerWidth - (parseFloat(css.getPropertyValue('--sb-canvas-right')) || 0) - 260
+      setShort(end - start - 12 < FULL_PILL)
+    }
+    measure()
+    const watch = new MutationObserver(measure)
+    watch.observe(root, { attributes: true, attributeFilter: ['style'] })
+    window.addEventListener('resize', measure)
+    // The zoom control is drawn by the engine after the board loads.
+    const later = setTimeout(measure, 1500)
+    return () => { watch.disconnect(); window.removeEventListener('resize', measure); clearTimeout(later) }
+  }, [off])
+  return short
+}
 
 export default function CornerPresence({ slate, localCollaborator = null, canEdit = false, phoneView = false, chatOpen = false, embed = false }) {
   const shareId = slate?.shareId
@@ -50,9 +82,10 @@ export default function CornerPresence({ slate, localCollaborator = null, canEdi
     ...others.map((person) => ({ key: person.key, name: person.userName, color: person.color, speaking: Boolean(speaking?.name && speaking.name === person.userName) })),
   ], [others, localCollaborator?.color, speaking])
   const agents = useMemo(() => roster.map((agent) => ({ ...agent, name: agent.label || 'Agent', byline: agentOrigin(agent) })), [roster])
+  const compact = useShortRoom(presenceOnly)
   const model = cornerModel({
     people, agents, tasks: { open: active, needYou: waiting }, paused: Boolean(controls.paused),
-    canEdit, canTasks, canInvite, presenceOnly,
+    canEdit, canTasks, canInvite, presenceOnly, compact,
   })
 
   const [pill, setPill] = useState(null)
@@ -132,7 +165,7 @@ export default function CornerPresence({ slate, localCollaborator = null, canEdi
             {model.agents.show && (
               <>
                 {divider}
-                <AgentStack ref={trigger} agents={model.agents} colors={colors} open={menuOpen} menuId={menuId} onOpen={() => setMenuOpen(true)} />
+                <AgentStack ref={trigger} agents={model.agents} canInvite={model.menu.invite} compact={model.compact} colors={colors} open={menuOpen} menuId={menuId} onOpen={() => setMenuOpen(true)} />
               </>
             )}
           </>

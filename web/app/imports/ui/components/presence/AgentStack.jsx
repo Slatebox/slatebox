@@ -1,12 +1,13 @@
 // The agents on the slate in the corner's pill: up to three hexagons, then "+N", a "Paused" tag and a
 // caret. As a button it opens the agents menu and carries the tasks badge; with no agents yet it reads
-// "+ Agents" in words.
+// "+ Agents" in words where this person can invite one, else "Agents" beside an empty hexagon.
 import React, { forwardRef } from 'react'
 import PropTypes from 'prop-types'
 import Box from '@mui/material/Box'
 import ButtonBase from '@mui/material/ButtonBase'
 import Tooltip from '@mui/material/Tooltip'
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
+import PauseIcon from '@mui/icons-material/Pause'
 import { agentColor } from '../AgentPresenceListener'
 import { AgentMark, MARK, MoreMark, Stack, triggerSx } from './marks'
 
@@ -44,20 +45,27 @@ function Badge({ badge, colors }) {
 Badge.propTypes = { badge: PropTypes.shape({ kind: PropTypes.string, count: PropTypes.number }), colors: PropTypes.objectOf(PropTypes.string).isRequired }
 
 /** The agents menu's trigger. */
-const AgentStack = forwardRef(function AgentStack({ agents, colors, open, menuId, onOpen }, ref) {
+const AgentStack = forwardRef(function AgentStack({ agents, colors, open, menuId, onOpen, canInvite = false, compact = false }, ref) {
   return (
     <Tooltip title="Agents on this slate" placement="top" disableHoverListener={open} describeChild>
       <ButtonBase ref={ref} data-agents-menu-open="" aria-haspopup="menu" aria-expanded={open ? 'true' : 'false'}
         aria-controls={open ? menuId : undefined} aria-label={agents.label} onClick={onOpen} sx={triggerSx(colors)}>
         {agents.empty ? (
           <>
-            <Box component="span" aria-hidden="true"
-              sx={{ width: MARK, height: MARK, boxSizing: 'border-box', display: 'grid', placeItems: 'center', color: colors.ink2,
-                border: `1.5px dashed ${colors.border}`, borderRadius: '7px', fontSize: 15, lineHeight: 1 }}>+</Box>
+            <Box component="span" aria-hidden="true" data-agents-empty={canInvite ? 'invite' : ''}
+              sx={{ width: MARK, height: MARK, display: 'grid', placeItems: 'center', color: colors.ink2, fontSize: 15, fontWeight: 600, lineHeight: 1 }}>
+              {canInvite ? (
+                <Box component="span" sx={{ width: 22, height: 22, borderRadius: '50%', bgcolor: colors.offset, display: 'grid', placeItems: 'center' }}>+</Box>
+              ) : (
+                <svg width={20} height={20} viewBox="0 0 24 24"><path d="M12 2.5l8.2 4.75v9.5L12 21.5l-8.2-4.75v-9.5z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" /></svg>
+              )}
+            </Box>
             <Box component="span" sx={{ fontSize: 12.5, fontWeight: 600 }}>Agents</Box>
           </>
         ) : <AgentMarks agents={agents} colors={colors} />}
-        {agents.paused && <Box component="span" aria-hidden="true" data-agents-paused="" sx={{ fontSize: 11, fontWeight: 700, color: colors.warn }}>Paused</Box>}
+        {agents.paused && (compact
+          ? <PauseIcon aria-hidden="true" data-agents-paused="" sx={{ fontSize: 16, color: colors.warn }} />
+          : <Box component="span" aria-hidden="true" data-agents-paused="" sx={{ fontSize: 11, fontWeight: 700, color: colors.warn }}>Paused</Box>)}
         <ArrowDropDownIcon aria-hidden="true" sx={{ fontSize: 18, color: colors.ink2, mx: '-5px' }} />
         <Badge badge={agents.badge} colors={colors} />
       </ButtonBase>
@@ -70,5 +78,7 @@ AgentStack.propTypes = {
   open: PropTypes.bool,
   menuId: PropTypes.string,
   onOpen: PropTypes.func.isRequired,
+  canInvite: PropTypes.bool,
+  compact: PropTypes.bool,
 }
 export default AgentStack

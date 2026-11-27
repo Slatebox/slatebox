@@ -6,6 +6,10 @@
 
 export const MAX_PEOPLE = 4
 export const MAX_AGENTS = 3
+// Where the room between Undo and Redo and the zoom control is short (a 1024px window with Ask
+// Slatebox open), the pill draws fewer marks so it never runs under the zoom control.
+export const COMPACT_PEOPLE = 2
+export const COMPACT_AGENTS = 2
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`
 
@@ -30,11 +34,14 @@ export function agentStatus(agent, paused) {
  * canEdit: this person may edit (Pause, Keep, Discard). canTasks: may see and ask agent tasks (signed in,
  * may edit). canInvite: the build has enterprise code and this person may invite (AgentsOnSlate says so).
  * presenceOnly: a phone viewing the slate, or an embed: who's here only, no controls.
+ * compact: little room beside the zoom control: two avatars and two hexagons, then "+N".
  */
 export function cornerModel({
   people = [], agents = [], tasks = { open: 0, needYou: 0 }, paused = false,
-  canEdit = false, canTasks = false, canInvite = false, presenceOnly = false,
+  canEdit = false, canTasks = false, canInvite = false, presenceOnly = false, compact = false,
 } = {}) {
+  const maxPeople = compact ? COMPACT_PEOPLE : MAX_PEOPLE
+  const maxAgents = compact ? COMPACT_AGENTS : MAX_AGENTS
   const open = Math.max(0, Number(tasks?.open) || 0)
   const needYou = Math.max(0, Number(tasks?.needYou) || 0)
   const menu = {
@@ -71,9 +78,10 @@ export function cornerModel({
   return {
     hidden,
     presenceOnly,
+    compact: Boolean(compact),
     people: {
-      shown: people.slice(0, MAX_PEOPLE),
-      more: Math.max(0, people.length - MAX_PEOPLE),
+      shown: people.slice(0, maxPeople),
+      more: Math.max(0, people.length - maxPeople),
       count: people.length,
       label: `${plural(people.length, 'person', 'people')} here: ${namesText(people.map((p) => p.name))}`,
     },
@@ -81,8 +89,8 @@ export function cornerModel({
       // Who may not edit sees agents only when there are some; who may edit always has the way in.
       show: agents.length > 0 || (!presenceOnly && anyItem),
       empty: agents.length === 0,
-      shown: agents.slice(0, MAX_AGENTS),
-      more: Math.max(0, agents.length - MAX_AGENTS),
+      shown: agents.slice(0, maxAgents),
+      more: Math.max(0, agents.length - maxAgents),
       count: agents.length,
       paused: Boolean(paused) && agents.length > 0,
       // presenceOnly: the agents are part of who's here (one list); otherwise they open the agents' menu.

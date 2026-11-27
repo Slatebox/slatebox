@@ -60,6 +60,18 @@ test('6 people and 5 agents: 4 avatars + 2, 3 hexagons + 2, all within the one p
   assert.equal(m.rows[2].status, 'needs sign-in')
 })
 
+test('compact (little room beside the zoom control): 2 avatars + 4, 2 hexagons + 3, the same rows and labels', () => {
+  const m = cornerModel({ people: PEOPLE, agents: AGENTS, paused: true, compact: true, ...editor })
+  assert.equal(m.compact, true)
+  assert.deepEqual(m.people.shown.map((p) => p.name), ['You', 'Ana Ruiz'])
+  assert.equal(m.people.more, 4)
+  assert.equal(m.agents.shown.length, 2)
+  assert.equal(m.agents.more, 3)
+  assert.equal(m.rows.length, 5, 'every agent keeps its row in the menu')
+  assert.equal(m.people.label, '6 people here: You, Ana Ruiz, Ben Ott, Chen Li, Dee Park and 1 more')
+  assert.equal(m.agents.label, 'Agents, 5 on this slate, paused')
+})
+
 test('tasks: a count badge when tasks need you, a neutral dot when some are open, never a separate pill', () => {
   const need = cornerModel({ people: [you], agents: AGENTS.slice(0, 2), tasks: { open: 3, needYou: 2 }, ...editor })
   assert.deepEqual(need.agents.badge, { kind: 'count', count: 2 })
