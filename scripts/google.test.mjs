@@ -315,8 +315,8 @@ test('the Google Drive agent: invited like any integration, it reads only the fi
 })
 
 test('the Google card: built in, turned on and off in /admin/ai like a gallery card; off refuses google.*', async () => {
-  assert.deepEqual(liveGallery([], NATIVE_CARDS).map((c) => c.id), ['googledrive'])
-  assert.deepEqual(liveGallery([{ kind: 'outbound-connector', galleryId: 'googledrive', enabled: false }], NATIVE_CARDS), [])
+  assert.deepEqual(liveGallery([], NATIVE_CARDS).map((c) => c.id), ['googledrive', 'slack'])
+  assert.deepEqual(liveGallery([{ kind: 'outbound-connector', galleryId: 'googledrive', enabled: false }], NATIVE_CARDS).map((c) => c.id), ['slack'], 'only Google\'s card is off')
   const off = makeWorld({ enabled: false })
   assert.equal((await off.google.status(off.ada)).enabled, false)
   assert.equal((await off.google.status(off.ada)).clientId, null)

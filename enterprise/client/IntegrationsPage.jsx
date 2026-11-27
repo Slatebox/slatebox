@@ -35,6 +35,7 @@ import InviteWalkthrough from './InviteWalkthrough'
 import { changesOffer, toolSummary } from '../common/integration-words.mjs'
 import { settingsLinkOf } from '../common/gallery.mjs'
 import GoogleIntegration from './GoogleIntegration'
+import { connectSlack } from './slack'
 import SuggestIntegration from './SuggestIntegration'
 import { AppPageHeader } from '/imports/ui/common/AppPage.jsx'
 
@@ -177,12 +178,14 @@ function IntegrationRow({ integration, onChanged, onDisconnected, onReview, onSi
         <Box sx={{ flex: 1, minWidth: 220 }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 750, lineHeight: 1.3 }}>{integration.name}</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
-            {integration.kind === 'google' ? 'Google' : integration.galleryId ? 'Agent from the gallery' : 'Agent (MCP address)'} · {integration.host} · Personal
+            {integration.kind === 'google' ? 'Google' : integration.kind === 'slack' ? `Slack${integration.workspace ? ` · ${integration.workspace}` : ''}` : integration.galleryId ? 'Agent from the gallery' : 'Agent (MCP address)'} · {integration.host} · Personal
           </Typography>
           <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mt: 0.75 }}>
             <Chip size="small" label={INTEGRATION_STATUS[integration.status] || integration.status} color={integration.status === 'active' ? 'success' : 'warning'} variant="outlined" />
+            {integration.kind === 'slack' && <Chip size="small" variant="outlined" label="Every change waits for your approval" data-integration-always-asks="" />}
             {integration.signedIn && <Chip size="small" variant="outlined" label={integration.auth?.kind === 'key' ? 'Signed in with your key' : 'Signed in as you'} />}
           </Box>
+          {integration.statusNote && <Typography variant="body2" sx={{ mt: 0.75 }} data-integration-status-note="">{integration.statusNote}</Typography>}
           <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.75 }} data-integration-tools="">
             {toolSummary(integration)}
             {offer?.kind === 'address' ? ' · Makes no changes at this address' : ''}
@@ -247,7 +250,7 @@ function IntegrationRow({ integration, onChanged, onDisconnected, onReview, onSi
   )
 }
 IntegrationRow.propTypes = {
-  integration: PropTypes.shape({ integrationId: PropTypes.string, name: PropTypes.string, kind: PropTypes.string, host: PropTypes.string, status: PropTypes.string, rule: PropTypes.string, tools: PropTypes.arrayOf(PropTypes.shape({})), slates: PropTypes.arrayOf(PropTypes.shape({})), slateCount: PropTypes.number, signedIn: PropTypes.bool, scopes: PropTypes.arrayOf(PropTypes.string), galleryId: PropTypes.string, colorIndex: PropTypes.number, lastUsedAt: PropTypes.oneOfType([PropTypes.string, PropTypes.instanceOf(Date)]), auth: PropTypes.shape({ kind: PropTypes.string }) }).isRequired,
+  integration: PropTypes.shape({ integrationId: PropTypes.string, name: PropTypes.string, kind: PropTypes.string, host: PropTypes.string, status: PropTypes.string, statusNote: PropTypes.string, workspace: PropTypes.string, rule: PropTypes.string, tools: PropTypes.arrayOf(PropTypes.shape({})), slates: PropTypes.arrayOf(PropTypes.shape({})), slateCount: PropTypes.number, signedIn: PropTypes.bool, scopes: PropTypes.arrayOf(PropTypes.string), galleryId: PropTypes.string, colorIndex: PropTypes.number, lastUsedAt: PropTypes.oneOfType([PropTypes.string, PropTypes.instanceOf(Date)]), auth: PropTypes.shape({ kind: PropTypes.string }) }).isRequired,
   onChanged: PropTypes.func.isRequired,
   onDisconnected: PropTypes.func.isRequired,
   onReview: PropTypes.func.isRequired,
@@ -274,6 +277,16 @@ export default function IntegrationsPage() {
   }).catch((e) => live.current && setError(errorText(e))), [])
   useEffect(() => { refresh() }, [refresh])
   const connect = () => setConnecting(true)
+  // Slack signs in again in one click, inside it (its window opens at once), with no walkthrough.
+  const signInAgain = (row) => {
+    if (row.galleryId !== 'slack') return setReconnect({ address: row.address, name: row.name })
+    setNotice('')
+    return connectSlack().then((outcome) => {
+      if (!live.current) return
+      setNotice(outcome.ok ? 'Slack is connected again.' : outcome.message)
+      refresh()
+    }).catch((e) => live.current && setError(errorText(e)))
+  }
   const mcp = (state.integrations || []).filter((row) => row.kind !== 'google')
   // Its card in the gallery said ✓ Connected · Manage: close the gallery and bring its row into view.
   const manage = (integrationId) => {
@@ -305,7 +318,7 @@ export default function IntegrationsPage() {
       )}
       {mcp.map((integration) => (
         <IntegrationRow key={integration.integrationId} integration={integration} onChanged={refresh}
-          onDisconnected={(text) => { setNotice(text); refresh() }} onReview={setReviewing} onSignIn={(row) => setReconnect({ address: row.address, name: row.name })}
+          onDisconnected={(text) => { setNotice(text); refresh() }} onReview={setReviewing} onSignIn={signInAgain}
           onUpgrade={startUpgrade} onSuggest={setSuggesting} highlight={highlight === integration.integrationId} />
       ))}
       <InviteWalkthrough open={connecting || Boolean(reconnect) || Boolean(upgrade)} reconnect={reconnect} upgrade={upgrade} integrations={mcp} onManageIntegration={manage}

@@ -9,6 +9,8 @@
 //   secret             the client secret sealed with the vault (metering/vault.mjs, the server's
 //                      SLATEBOX_KEY_ENCRYPTION_KEY), bound to its provider; never returned
 //   secretFingerprint  which secret it is (sha256:12345678…WXYZ), the only thing anyone sees of it
+//   signingSecret, signingFingerprint  Slack's signing secret (native-apps.mjs signingSecret), sealed
+//                      the same way under its own field, shown only as its fingerprint
 //   createdAt/By, updatedAt/By
 // The values a document holds win over the settings file's; settings stay the fallback (and keep
 // what admin does not edit: scopes, resources). A secret belongs to its client id: changing the
@@ -18,6 +20,9 @@
 // The connectors read the apps through apps() on every sign-in, token refresh and gallery listing,
 // cached for a few seconds (and dropped at once on this process's own writes), so a pasted secret
 // works without a restart on every pod.
+//
+// Slack is a native app (native-apps.mjs): the same row, plus its signing secret, and
+// connectors.apps.slackManifest gives the manifest to create the app with, this server's addresses in it.
 //
 // Google is not editable here: its MCP servers' app is settings.connectors.oauthApps.google and
 // Drive's is settings.googleDocs.web (google/google.mjs); the list shows it read-only.
@@ -30,6 +35,8 @@ import { requireAIControlAdmin } from '/server/actions/ai-control-get.mjs'
 import { guardControlWrite } from '/server/actions/ai-providers.mjs'
 import { CLIENT_TEXT } from './connector-settings.mjs'
 import { KNOWN_PROVIDERS, redirectUriFor } from './oauth.mjs'
+import { NATIVE_APPS } from './native-apps.mjs'
+import { slackManifest } from './slack/manifest.mjs'
 
 export const CACHE_MS = 5000
 export const NO_MASTER = 'Set SLATEBOX_KEY_ENCRYPTION_KEY on this server to store client secrets.'
@@ -46,9 +53,14 @@ export const VENDOR_CONSOLES = Object.freeze({
   microsoft: { label: 'Microsoft Entra admin center › App registrations', url: 'https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade' },
   google: { label: 'Google Cloud console › Credentials', url: 'https://console.cloud.google.com/apis/credentials' },
 })
-// The providers an administrator may set here: every known one but Google (settings only).
-export const EDITABLE_PROVIDERS = Object.freeze(Object.keys(KNOWN_PROVIDERS).filter((provider) => provider !== 'google'))
+// Every provider listed here: the MCP vendors (oauth.mjs), then the native apps (Slack).
+export const APP_PROVIDERS = Object.freeze([...Object.keys(KNOWN_PROVIDERS), ...Object.keys(NATIVE_APPS).filter((provider) => !KNOWN_PROVIDERS[provider])])
+// The providers an administrator may set here: every one but Google (settings only).
+export const EDITABLE_PROVIDERS = Object.freeze(APP_PROVIDERS.filter((provider) => provider !== 'google'))
 const ownerOf = (provider) => ({ ownerType: 'server', ownerId: 'connector-oauth-app', provider })
+const signingOwnerOf = (provider) => ({ ownerType: 'server', ownerId: 'connector-oauth-app', provider: `${provider}|signing` })
+const hasSigning = (provider) => Boolean(NATIVE_APPS[provider]?.signingSecret)
+const nameOf = (provider) => KNOWN_PROVIDERS[provider]?.name || NATIVE_APPS[provider]?.name || provider
 
 const refuse = (status, code, message) => Object.assign(new Error(message), { status, code })
 
@@ -57,6 +69,7 @@ export function publicApp(doc) {
   if (!doc) return null
   return {
     provider: doc._id, clientId: doc.clientId ?? null, hasSecret: Boolean(doc.secret), secretFingerprint: doc.secret ? doc.secretFingerprint ?? null : null,
+    ...(hasSigning(doc._id) && { hasSigningSecret: Boolean(doc.signingSecret), signingFingerprint: doc.signingSecret ? doc.signingFingerprint ?? null : null }),
     createdAt: doc.createdAt ?? null, createdBy: doc.createdBy ?? null, updatedAt: doc.updatedAt ?? null, updatedBy: doc.updatedBy ?? null,
   }
 }
@@ -88,14 +101,26 @@ export function createIntegrationApps({ rows, master, settingsApps = () => ({}),
     }
   }
 
+  function signingOf(doc) {
+    if (!doc?.signingSecret || !master || !hasSigning(doc._id)) return null
+    try {
+      const value = openSecret({ master, owner: signingOwnerOf(doc._id), cipher: doc.signingSecret })
+      return CLIENT_TEXT.test(value) ? value : null
+    } catch {
+      return null
+    }
+  }
+
   /** The apps the connectors use: the settings file's, with each administrator-entered app on top. */
   function merge(settings, docs) {
     const out = { ...settings }
     for (const doc of docs) {
       if (!EDITABLE_PROVIDERS.includes(doc?._id) || typeof doc.clientId !== 'string' || !CLIENT_TEXT.test(doc.clientId)) continue
-      const { clientSecret: settingsSecret, clientId: settingsId, ...kept } = settings[doc._id] || {}
-      const secret = secretOf(doc) || (settingsId === doc.clientId ? settingsSecret : null) || null
-      out[doc._id] = { ...kept, clientId: doc.clientId, ...(secret && { clientSecret: secret }) }
+      const { clientSecret: settingsSecret, clientId: settingsId, signingSecret: settingsSigning, ...kept } = settings[doc._id] || {}
+      const sameApp = settingsId === doc.clientId
+      const secret = secretOf(doc) || (sameApp ? settingsSecret : null) || null
+      const signing = signingOf(doc) || (sameApp ? settingsSigning : null) || null
+      out[doc._id] = { ...kept, clientId: doc.clientId, ...(secret && { clientSecret: secret }), ...(signing && { signingSecret: signing }) }
     }
     return out
   }
@@ -157,7 +182,7 @@ export function createIntegrationApps({ rows, master, settingsApps = () => ({}),
     }
     return {
       provider,
-      name: KNOWN_PROVIDERS[provider]?.name || provider,
+      name: nameOf(provider),
       editable: EDITABLE_PROVIDERS.includes(provider),
       source,
       clientId: admin ? doc.clientId : fromSettings?.clientId ?? null,
@@ -170,7 +195,19 @@ export function createIntegrationApps({ rows, master, settingsApps = () => ({}),
       updatedAt: doc?.updatedAt ?? null,
       updatedBy: doc?.updatedBy ?? null,
       console: VENDOR_CONSOLES[provider] || null,
+      ...(hasSigning(provider) && { signing: signingRowOf(doc, fromSettings, admin, source) }),
     }
+  }
+
+  // The signing secret, like the client secret: which one is set (a fingerprint), never its value.
+  function signingRowOf(doc, fromSettings, admin, source) {
+    if (admin && doc.signingSecret) {
+      const readable = Boolean(signingOf(doc))
+      return { hasSecret: readable, secretSource: readable ? 'admin' : null, secretFingerprint: readable ? doc.signingFingerprint ?? null : null, ...(!readable && { secretUnreadable: true }) }
+    }
+    if (fromSettings?.signingSecret && (source === 'settings' || fromSettings.clientId === doc?.clientId))
+      return { hasSecret: true, secretSource: 'settings', secretFingerprint: keyFingerprint(fromSettings.signingSecret) }
+    return { hasSecret: false, secretSource: null, secretFingerprint: null }
   }
 
   /** Every known provider: its client id, whether a secret is set (fingerprint), where each comes from. */
@@ -178,7 +215,7 @@ export function createIntegrationApps({ rows, master, settingsApps = () => ({}),
     const settings = settingsNow()
     const docs = new Map(((await rows.all()) || []).map((doc) => [doc._id, doc]))
     return {
-      apps: Object.keys(KNOWN_PROVIDERS).map((provider) => rowOf(provider, docs.get(provider), settings)),
+      apps: APP_PROVIDERS.map((provider) => rowOf(provider, docs.get(provider), settings)),
       redirectUrl: redirectUriFor(origin()),
       secretsAvailable: Boolean(master),
     }
@@ -197,15 +234,17 @@ export function createIntegrationApps({ rows, master, settingsApps = () => ({}),
   }
 
   /**
-   * Saves a provider's client id and/or secret (sealed). A new client id without a new secret
-   * drops the saved secret (it belonged to the old client). → the provider's row
+   * Saves a provider's client id and/or secret (sealed), and Slack's signing secret. A new client id
+   * without a new secret drops the saved secrets (they belonged to the old client). → the provider's row
    */
-  async function set({ actor, provider, clientId, clientSecret }) {
+  async function set({ actor, provider, clientId, clientSecret, signingSecret }) {
     checkProvider(provider)
     const id = checkText(clientId, 'client id')
     const secret = checkText(clientSecret, 'client secret')
-    if (id === undefined && secret === undefined) throw refuse(400, 'invalid_request', 'Enter a client id, a client secret or both.')
-    if (secret !== undefined && !master) throw refuse(503, 'unavailable', NO_MASTER)
+    const signing = checkText(signingSecret, 'signing secret')
+    if (signing !== undefined && !hasSigning(provider)) throw refuse(400, 'invalid_request', `${nameOf(provider)} has no signing secret.`)
+    if (id === undefined && secret === undefined && signing === undefined) throw refuse(400, 'invalid_request', 'Enter a client id, a client secret or both.')
+    if ((secret !== undefined || signing !== undefined) && !master) throw refuse(503, 'unavailable', NO_MASTER)
     const before = await rows.get(provider)
     const nextId = id ?? before?.clientId ?? null
     if (!nextId) throw refuse(400, 'invalid_request', 'Enter the client id too.')
@@ -215,6 +254,7 @@ export function createIntegrationApps({ rows, master, settingsApps = () => ({}),
       clientId: nextId,
       secret: before?.secret ?? null,
       secretFingerprint: before?.secretFingerprint ?? null,
+      ...(hasSigning(provider) && { signingSecret: before?.signingSecret ?? null, signingFingerprint: before?.signingFingerprint ?? null }),
       createdAt: before?.createdAt ?? at,
       createdBy: before?.createdBy ?? actor?.userId ?? null,
       updatedAt: at,
@@ -222,6 +262,8 @@ export function createIntegrationApps({ rows, master, settingsApps = () => ({}),
     }
     if (secret !== undefined) Object.assign(doc, { secret: seal({ master, owner: ownerOf(provider), plaintext: secret }), secretFingerprint: keyFingerprint(secret) })
     else if (before && before.clientId !== nextId) Object.assign(doc, { secret: null, secretFingerprint: null })
+    if (signing !== undefined) Object.assign(doc, { signingSecret: seal({ master, owner: signingOwnerOf(provider), plaintext: signing }), signingFingerprint: keyFingerprint(signing) })
+    else if (hasSigning(provider) && before && before.clientId !== nextId) Object.assign(doc, { signingSecret: null, signingFingerprint: null })
     await rows.put(provider, doc)
     forget()
     await record({ action: 'connectors.apps.set', actor, target: { kind: 'integration-app', id: provider }, before: publicApp(before), after: publicApp(doc) })
@@ -240,14 +282,17 @@ export function createIntegrationApps({ rows, master, settingsApps = () => ({}),
     return rowOf(provider, null, settingsNow())
   }
 
-  return { apps, list, set, clear, forget, hasMaster: () => Boolean(master) }
+  /** The Slack app's manifest for this server: paste it at api.slack.com/apps, install, enter three values here. */
+  const manifest = () => ({ manifest: slackManifest({ origin: origin() }), redirectUrl: redirectUriFor(origin()) })
+
+  return { apps, list, set, clear, forget, manifest, hasMaster: () => Boolean(master) }
 }
 
 const ROW_OUT = {
   type: 'object',
-  description: 'One provider: provider, name, editable (false for Google: settings only), source (admin, settings or none: where the client id in use comes from), clientId (public), settingsClientId, hasSecret, secretSource (admin or settings), secretFingerprint (sha256:12345678…WXYZ, never the secret), secretUnreadable (saved under another key-encryption key: enter it again), adminSaved, updatedAt, updatedBy, console { label, url } (where the vendor\'s apps are registered).',
+  description: 'One provider: provider, name, editable (false for Google: settings only), source (admin, settings or none: where the client id in use comes from), clientId (public), settingsClientId, hasSecret, secretSource (admin or settings), secretFingerprint (sha256:12345678…WXYZ, never the secret), secretUnreadable (saved under another key-encryption key: enter it again), adminSaved, updatedAt, updatedBy, console { label, url } (where the vendor\'s apps are registered), and for Slack signing { hasSecret, secretSource, secretFingerprint } (its signing secret, never the value).',
 }
-const PROVIDER_IN = { type: 'string', pattern: '^[a-z][a-z0-9-]{1,30}$', description: 'The provider, as connectors.apps.list gives it (slack, asana, hubspot, box, zoom, pitch, salesforce, microsoft, github).' }
+const PROVIDER_IN = { type: 'string', pattern: '^[a-z][a-z0-9-]{1,30}$', description: 'The provider, as connectors.apps.list gives it (asana, hubspot, box, zoom, pitch, salesforce, microsoft, github, slack).' }
 const TEXT_IN = (what) => ({ type: 'string', minLength: 1, maxLength: 600, description: `The ${what}, one line.` })
 const personOnly = () => 'Only a person enters or clears an integration app.'
 
@@ -257,7 +302,7 @@ export function integrationAppActions(store) {
     defineAction({
       id: 'connectors.apps.list',
       title: 'Integration apps',
-      description: 'Lists the OAuth app of each known provider (Slack, Asana, HubSpot, Box, Zoom, Pitch, Salesforce, Microsoft, GitHub, and Google read-only): its client id, whether a client secret is set (a fingerprint, never the secret), whether each comes from Admin or the settings file, who changed it and when, where to register the app, and the redirect URL to give the vendor. Administrators only.',
+      description: 'Lists the OAuth app of each known provider (Asana, HubSpot, Box, Zoom, Pitch, Salesforce, Microsoft, GitHub, Slack, and Google read-only): its client id, whether a client secret is set (a fingerprint, never the secret; for Slack its signing secret too), whether each comes from Admin or the settings file, who changed it and when, where to register the app, and the redirect URL to give the vendor. Administrators only.',
       toolset: 'admin',
       kind: 'read',
       scope: 'ai:admin:read',
@@ -285,11 +330,27 @@ export function integrationAppActions(store) {
       idempotency: 'optional',
       replay: 'rerun',
       successStatus: 200,
-      input: { type: 'object', properties: { provider: PROVIDER_IN, clientId: TEXT_IN('client id'), clientSecret: TEXT_IN('client secret') }, required: ['provider'], additionalProperties: false },
+      input: { type: 'object', properties: { provider: PROVIDER_IN, clientId: TEXT_IN('client id'), clientSecret: TEXT_IN('client secret'), signingSecret: { ...TEXT_IN('signing secret (Slack only)'), writeOnly: true } }, required: ['provider'], additionalProperties: false },
       output: ROW_OUT,
       handler: async (principal, input, { deps }) => {
         const actor = await guardControlWrite(principal, deps, { action: 'connectors.apps.set', target: { kind: 'integration-app', id: input.provider }, doing: 'change integration apps', refusal: personOnly })
-        return { status: 200, body: await store().set({ actor, provider: input.provider, clientId: input.clientId, clientSecret: input.clientSecret }) }
+        return { status: 200, body: await store().set({ actor, provider: input.provider, clientId: input.clientId, clientSecret: input.clientSecret, signingSecret: input.signingSecret }) }
+      },
+    }),
+    defineAction({
+      id: 'connectors.apps.slackManifest',
+      title: 'Slack app manifest',
+      description: 'The manifest to create this server\'s Slack app with (api.slack.com/apps › Create New App › From a manifest): this server\'s address in every URL and domain. Then install the app and enter its client id, client secret and signing secret in Integration apps. Read-only. Administrators only.',
+      toolset: 'admin',
+      kind: 'read',
+      scope: 'ai:admin:read',
+      principals: ['person', 'agent'],
+      mounts: { ddp: true },
+      input: { type: 'object', properties: {}, additionalProperties: false },
+      output: { type: 'object', properties: { manifest: { type: 'object' }, redirectUrl: { type: 'string' } } },
+      handler: async (principal, _input, { deps }) => {
+        await requireAIControlAdmin(principal, deps, 'read the Slack app manifest')
+        return { status: 200, body: store().manifest() }
       },
     }),
     defineAction({

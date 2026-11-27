@@ -249,7 +249,7 @@ export function capabilitySummary(tools) {
 // Words a person uses to ask for a change elsewhere ("file the retry bug", "open an issue for this").
 // A clause asks for a change only when it starts with one of these (after "please", "can you",
 // "@Linear" and the like): "list the open issues" and "show open bugs" start with a read verb.
-const ASK_VERBS = /^(file|open|create|add|make|post|comment|reply|update|change|set|move|mark|assign|label|submit|raise|log|report(?!\s+(on|back|about)\b)|send|write|start|track|edit|rename|close|reopen|merge|delete|remove|archive|resolve|complete|finish|schedule|draft|put|attach|link|tag|push|publish|note down|jot|cancel|leave|drop)\b/i
+const ASK_VERBS = /^(file|open|create|add|make|post|comment|reply|react|update|change|set|move|mark|assign|label|submit|raise|log|report(?!\s+(on|back|about)\b)|send|write|start|track|edit|rename|close|reopen|merge|delete|remove|archive|resolve|complete|finish|schedule|draft|put|attach|link|tag|push|publish|note down|jot|cancel|leave|drop)\b/i
 // What may come before a clause's verb without changing what it asks.
 const LEAD = /^(?:(?:@[\w.-]+|please|pls|kindly|can you|could you|would you|will you|go ahead and|let'?s|i want you to|i need you to|i'd like you to|now|also|and|then|just|ok(?:ay)?|hey|so)[\s,:]+)+/i
 // "open" and "add" ask for a change only with what they make right after: "open an issue", "add a
@@ -258,7 +258,7 @@ const NEEDS_OBJECT = /^(open|add|make|start|put|leave|drop)\s+(?!(?:an?|one|anot
 // Things made on the slate itself: notes, lists, summaries and pictures are not a change elsewhere.
 const ON_SLATE = /\b(to|on|onto|into|in) (the|this|my|our) (slate|canvas|board|frame)\b|\bas (a )?(notes?|stick(y|ies)|cards?|a list)\b|^(make|add|write|draw|create|put|jot)\s+(an?\s+|the\s+|some\s+|a couple( of)?\s+|a few\s+)?(\w+\s+){0,2}?(notes?|list|summary|summaries|diagram|chart|table|overview|map|mind ?map|outline|timeline|picture|sketch|stick(y|ies)|board|frame)\b/i
 // Things a tool's name may change, and the words people use for them.
-const SYNONYMS = { issue: ['issue', 'issues', 'bug', 'bugs', 'ticket', 'tickets', 'task', 'tasks', 'todo', 'story'], comment: ['comment', 'comments', 'reply', 'note', 'remark'], pull: ['pr', 'prs', 'pull request', 'pull requests'], status: ['status', 'state', 'done', 'in progress', 'todo', 'backlog'], message: ['message', 'post', 'reply'], page: ['page', 'doc', 'document'], label: ['label', 'tag'], project: ['project'] }
+const SYNONYMS = { issue: ['issue', 'issues', 'bug', 'bugs', 'ticket', 'tickets', 'task', 'tasks', 'todo', 'story'], comment: ['comment', 'comments', 'reply', 'note', 'remark'], pull: ['pr', 'prs', 'pull request', 'pull requests'], status: ['status', 'state', 'done', 'in progress', 'todo', 'backlog'], message: ['message', 'post', 'reply'], reaction: ['reaction', 'reactions', 'react', 'emoji'], page: ['page', 'doc', 'document'], label: ['label', 'tag'], project: ['project'] }
 
 /**
  * The clauses of a request that ask for a change elsewhere: each starts (after a lead such as

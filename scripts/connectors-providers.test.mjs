@@ -110,10 +110,10 @@ test('Zoom: its client secret goes in a Basic header, never the body; everyone e
   const { init } = sent.sent[0]
   assert.equal(init.headers.authorization, 'Basic ' + Buffer.from('id%3A1:se%20cret').toString('base64'))
   assert.ok(!new URLSearchParams(init.body).has('client_secret'))
-  const slack = fakeFetch({})
-  await exchangeCode({ server: { issuer: 'https://mcp.slack.com', tokenEndpoint: 'https://slack.com/api/oauth.v2.user.access' }, client: { clientId: 'a', clientSecret: 'b' }, code: 'x', verifier: 'v', redirectUri: 'r', resource: 'https://mcp.slack.com', fetch: slack.fetch })
-  assert.equal(new URLSearchParams(slack.sent[0].init.body).get('client_secret'), 'b')
-  assert.equal(slack.sent[0].init.headers.authorization, undefined)
+  const asana = fakeFetch({})
+  await exchangeCode({ server: { issuer: 'https://app.asana.com', tokenEndpoint: 'https://app.asana.com/-/oauth_token' }, client: { clientId: 'a', clientSecret: 'b' }, code: 'x', verifier: 'v', redirectUri: 'r', resource: 'https://mcp.asana.com', fetch: asana.fetch })
+  assert.equal(new URLSearchParams(asana.sent[0].init.body).get('client_secret'), 'b')
+  assert.equal(asana.sent[0].init.headers.authorization, undefined)
 })
 
 test('Microsoft 365: every Work IQ tool that changes or sends starts off; its known ask is one of Work IQ\'s own tools', () => {
@@ -160,6 +160,12 @@ test('every known provider sends its sign-in only to its own servers; settings c
   const parsed = connectorSettings({ public: { env: 'prod' }, connectors: { oauthApps: { microsoft: { clientId: 'm', clientSecret: 's' }, google: { clientId: 'g' }, zoom: { clientId: 'z' }, box: { clientId: 'b' }, pitch: { clientId: 'p' }, salesforce: { clientId: 'sf' } } } })
   assert.deepEqual(Object.keys(parsed.oauthApps).sort(), ['box', 'google', 'microsoft', 'pitch', 'salesforce', 'zoom'])
   // the ones that were set up by issuer and resources before keep working: a known provider's own issuer wins
-  const before = connectorSettings({ public: { env: 'prod' }, connectors: { oauthApps: { slack: { clientId: 'x', issuer: 'https://mcp.slack.com', resources: ['https://mcp.slack.com'] } } } })
-  assert.equal(appFor('https://mcp.slack.com', before.oauthApps, 'https://mcp.slack.com').clientId, 'x')
+  const before = connectorSettings({ public: { env: 'prod' }, connectors: { oauthApps: { asana: { clientId: 'x', issuer: 'https://app.asana.com', resources: ['https://mcp.asana.com'] } } } })
+  assert.equal(appFor('https://app.asana.com', before.oauthApps, 'https://mcp.asana.com').clientId, 'x')
+  // Slack is no MCP provider any more (native on its Web API, 2026-11-27): its app is the native
+  // app's, with its signing secret, and no MCP sign-in is ever sent to mcp.slack.com
+  assert.equal(KNOWN_PROVIDERS.slack, undefined)
+  const native = connectorSettings({ public: { env: 'prod' }, connectors: { oauthApps: { slack: { clientId: 'x', clientSecret: 'y', signingSecret: 'z0123456789' } } } })
+  assert.deepEqual(native.oauthApps.slack, { clientId: 'x', clientSecret: 'y', signingSecret: 'z0123456789' })
+  assert.equal(appFor('https://mcp.slack.com', native.oauthApps, 'https://mcp.slack.com'), null)
 })

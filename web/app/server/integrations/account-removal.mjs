@@ -30,6 +30,9 @@ export const INTEGRATION_ROWS = Object.freeze([
 // Drive file) waits there as text for up to 7 days. An action with nothing kept or applied from it
 // goes; one a teammate kept part of stays for that teammate's undo, its waiting items withdrawn.
 export const SUGGESTIONS = 'agentSuggestions'
+// Slack workspaces the person installed Slatebox to (their bot token is the workspace's, kept for its
+// other members): they stop naming the person.
+export const NAMED_ROWS = Object.freeze([Object.freeze(['slackWorkspaces', 'installedBy'])])
 const KEPT_STATES = Object.freeze(['kept', 'applied'])
 
 const hooks = { forgetPerson: null }
@@ -68,6 +71,7 @@ export async function removeIntegrationsOf(userId, { collection, log = console.w
     { $set: { 'items.$[waiting].state': 'discarded', 'items.$[waiting].reason': 'withdrawn', 'items.$[waiting].decidedAt': new Date() } },
     { arrayFilters: [{ 'waiting.state': 'pending' }] },
   )
+  for (const [name, field] of NAMED_ROWS) await collection(name).updateMany({ [field]: userId }, { $set: { [field]: null } })
   const removed = results.reduce((sum, result) => sum + (result?.deletedCount || 0), 0)
   return { removed }
 }

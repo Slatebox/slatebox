@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createConnectorService, memoryStore, profileSource } from '../enterprise/server/service.mjs'
-import { GALLERY } from '../enterprise/common/gallery.mjs'
+import { GALLERY, INVITE_CARDS } from '../enterprise/common/gallery.mjs'
 import { LOOK_LIMITS } from '../enterprise/server/recipes.mjs'
 import { normalizeTools } from '../enterprise/server/tools.mjs'
 
@@ -102,7 +102,9 @@ test('profileSource: names and card ids only, for working MCP integrations whose
   const zapier = GALLERY.find((c) => c.id === 'zapier')
   assert.equal(profileSource({ ...doc, galleryId: 'zapier', address: zapier.url }), null, 'a card with no look-around')
   assert.equal(profileSource({ ...doc, kind: 'google', galleryId: 'googledrive' }), null)
+  // Slack, native on its Web API, reads with its own fixed search (from:me)
+  assert.deepEqual(profileSource({ ...doc, kind: 'slack', galleryId: 'slack', address: 'slack://workspace', name: 'Slack' }), { ref: 'slack', name: 'Slack', kind: 'slack' })
   // the cards Slatebox can read to personalize, the design's six among them
-  const lookable = GALLERY.filter((c) => c.recipe.lookAround).map((c) => c.id)
+  const lookable = INVITE_CARDS.filter((c) => c.recipe.lookAround).map((c) => c.id)
   for (const id of ['github', 'linear', 'notion', 'slack', 'atlassian', 'sentry']) assert.ok(lookable.includes(id), id)
 })

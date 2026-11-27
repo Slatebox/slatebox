@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { test } from 'node:test'
-import { CACHE_MS, EDITABLE_PROVIDERS, createIntegrationApps, integrationAppActions } from '../enterprise/server/integration-apps.mjs'
+import { APP_PROVIDERS, CACHE_MS, EDITABLE_PROVIDERS, createIntegrationApps, integrationAppActions } from '../enterprise/server/integration-apps.mjs'
 import { connectorSettings } from '../enterprise/server/connector-settings.mjs'
 import { chooseRegistration, KNOWN_PROVIDERS } from '../enterprise/server/oauth.mjs'
 import { createVault } from '../enterprise/server/credentials.mjs'
@@ -57,7 +57,8 @@ test('a secret is sealed and never returned: list and set show a fingerprint, th
   assert.ok(!JSON.stringify(audited).includes(SECRET), 'nor does the audit trail')
   assert.equal(listed.redirectUrl, 'https://slate.example.com/connectors/oauth/callback')
   assert.equal(listed.secretsAvailable, true)
-  assert.deepEqual(listed.apps.map((a) => a.provider), Object.keys(KNOWN_PROVIDERS), 'one row per known provider')
+  assert.deepEqual(listed.apps.map((a) => a.provider), [...Object.keys(KNOWN_PROVIDERS), 'slack'], 'one row per known provider, then the native apps (Slack)')
+  assert.deepEqual(APP_PROVIDERS, listed.apps.map((a) => a.provider))
   assert.equal(listed.apps.find((a) => a.provider === 'google').editable, false, 'Google is shown read-only')
   for (const app of listed.apps) assert.ok(app.console?.url?.startsWith('https://'), `${app.provider} links to its vendor console`)
   // the connectors get the opened secret
@@ -137,7 +138,10 @@ test('the same checks as settings: one line of visible characters, known provide
 test('the actions: administrators only read; only a person writes; refusals are audited', async () => {
   const { store } = setup()
   const actions = Object.fromEntries(integrationAppActions(() => store).map((a) => [a.id, a]))
-  assert.deepEqual(Object.keys(actions).sort(), ['connectors.apps.clear', 'connectors.apps.list', 'connectors.apps.set'])
+  assert.deepEqual(Object.keys(actions).sort(), ['connectors.apps.clear', 'connectors.apps.list', 'connectors.apps.set', 'connectors.apps.slackManifest'])
+  // the Slack manifest is read like the list: administrators only, nothing secret in it
+  assert.equal(actions['connectors.apps.slackManifest'].kind, 'read')
+  assert.equal(actions['connectors.apps.slackManifest'].toolset, 'admin')
   for (const id of ['connectors.apps.set', 'connectors.apps.clear']) {
     assert.deepEqual(actions[id].principals, ['person'], id)
     assert.ok(actions[id].mounts.ddp && !actions[id].mounts.http, `${id}: the app's page only`)
@@ -149,6 +153,8 @@ test('the actions: administrators only read; only a person writes; refusals are 
   const controlStore = createControlStore({ collections, newId: (() => { let n = 0; return () => `a${++n}` })(), now: () => new Date('2026-11-26T10:00:00Z') })
   const deps = { aiControlAdmin: async (userId) => userId === 'root', aiControlStore: controlStore }
   await assert.rejects(actions['connectors.apps.list'].handler({ kind: 'person', userId: 'ana' }, {}, { deps }), /Only an administrator of this server can read integration apps/)
+  await assert.rejects(actions['connectors.apps.slackManifest'].handler({ kind: 'person', userId: 'ana' }, {}, { deps }), /Only an administrator of this server can read the Slack app manifest/)
+  assert.equal((await actions['connectors.apps.slackManifest'].handler({ kind: 'person', userId: 'root' }, {}, { deps })).body.manifest.display_information.name, 'Slatebox')
   await assert.rejects(actions['connectors.apps.set'].handler({ kind: 'person', userId: 'ana' }, { provider: 'slack', clientId: 'x' }, { deps }), /Only an administrator/)
   await assert.rejects(actions['connectors.apps.set'].handler({ kind: 'agent', userId: 'root', tokenId: 't' }, { provider: 'slack', clientId: 'x' }, { deps }), /Only a person enters or clears an integration app/)
   await assert.rejects(actions['connectors.apps.clear'].handler({ kind: 'agent', userId: 'root', tokenId: 't' }, { provider: 'slack' }, { deps }), /Only a person/)
@@ -177,23 +183,23 @@ test('the AI control audit trail takes these rows as they are, without the secre
 test('dynamic: the connectors ask for the apps on each use, so a pasted secret works without a restart', async () => {
   const { store } = setup()
   // the sign-in's registration (signin.mjs passes `await apps()` to chooseRegistration)
-  const slackServer = { issuer: KNOWN_PROVIDERS.slack.issuer }
-  const resource = 'https://mcp.slack.com/mcp'
-  assert.equal(chooseRegistration({ server: slackServer, apps: await store.apps(), origin: 'https://slate.example.com', resource }).kind, 'needs_client_id')
+  const asanaServer = { issuer: KNOWN_PROVIDERS.asana.issuer }
+  const resource = 'https://mcp.asana.com/v2/mcp'
+  assert.equal(chooseRegistration({ server: asanaServer, apps: await store.apps(), origin: 'https://slate.example.com', resource }).kind, 'needs_client_id')
+  await store.set({ actor: ADMIN, provider: 'asana', clientId: 'asana-id', clientSecret: SECRET })
+  const registration = chooseRegistration({ server: asanaServer, apps: await store.apps(), origin: 'https://slate.example.com', resource })
+  assert.deepEqual([registration.kind, registration.clientId, registration.clientSecret], ['preregistered', 'asana-id', SECRET], 'this process sees its own write at once')
   await store.set({ actor: ADMIN, provider: 'slack', clientId: 'slack-id', clientSecret: SECRET })
-  const registration = chooseRegistration({ server: slackServer, apps: await store.apps(), origin: 'https://slate.example.com', resource })
-  assert.deepEqual([registration.kind, registration.clientId, registration.clientSecret], ['preregistered', 'slack-id', SECRET], 'this process sees its own write at once')
 
   // the gallery (service.mjs takes a getter): Slack shows once its app is set up, no new service
   const service = createConnectorService({ oauthApps: () => store.apps() })
   const person = { kind: 'person', userId: 'ada', scopes: [] }
   assert.ok((await service.gallery(person)).cards.some((c) => c.id === 'slack'))
-  assert.ok((await service.gallery(person)).notSetUp.some((c) => c.id === 'asana'))
+  assert.ok((await service.gallery(person)).notSetUp.some((c) => c.id === 'hubspot'))
 
   // the vault's refresh and revocation (secretFor is asked each time): the secret goes with the
   // revocation. Asana's is RFC 7009 (the client and its secret in the form); Slack's auth.revoke
-  // takes the token alone (oauth.mjs KNOWN_PROVIDERS.slack.revoke), so it cannot show the secret.
-  await store.set({ actor: ADMIN, provider: 'asana', clientId: 'asana-id', clientSecret: SECRET })
+  // takes the token alone (oauth.mjs revocationOf, style slack), so it cannot show the secret.
   const asana = { issuer: KNOWN_PROVIDERS.asana.issuer, address: 'https://mcp.asana.com/sse' }
   const sent = []
   const fetch = async (url, init) => {
@@ -253,3 +259,47 @@ function memoryCollection() {
     async createIndex() {},
   }
 }
+
+test('Slack\'s signing secret: sealed under its own field, shown only as a fingerprint, given to the Slack routes; dropped with its client id', async () => {
+  const SIGNING = 'signing-secret-0123456789abcdef'
+  const { rows, store, audited } = setup({ settings: { slack: { clientId: 'settings-id', clientSecret: 'settings-secret', signingSecret: 'settings-signing-9999' } } })
+  // from the settings file first (a fingerprint only)
+  let slack = (await store.list()).apps.find((a) => a.provider === 'slack')
+  assert.deepEqual([slack.editable, slack.signing.hasSecret, slack.signing.secretSource], [true, true, 'settings'])
+  assert.equal((await store.apps()).slack.signingSecret, 'settings-signing-9999')
+  const row = await store.set({ actor: ADMIN, provider: 'slack', clientId: 'slack-id', clientSecret: SECRET, signingSecret: SIGNING })
+  assert.deepEqual([row.signing.hasSecret, row.signing.secretSource], [true, 'admin'])
+  assert.match(row.signing.secretFingerprint, /^sha256:[0-9a-f]{8}…cdef$/)
+  const doc = rows.docs.get('slack')
+  assert.equal(doc.signingSecret.v, 1)
+  assert.ok(!JSON.stringify(doc).includes(SIGNING), 'the database never holds it in clear')
+  assert.ok(!JSON.stringify(await store.list()).includes(SIGNING), 'the list never carries it')
+  assert.ok(!JSON.stringify(audited).includes(SIGNING), 'nor does the audit trail')
+  assert.equal(audited.at(-1).after.hasSigningSecret, true)
+  assert.equal((await store.apps()).slack.signingSecret, SIGNING)
+  // a new client id without new secrets drops both (they belonged to the old app)
+  await store.set({ actor: ADMIN, provider: 'slack', clientId: 'another-app' })
+  slack = (await store.list()).apps.find((a) => a.provider === 'slack')
+  assert.equal(slack.signing.hasSecret, false)
+  assert.equal((await store.apps()).slack.signingSecret, undefined)
+  // only Slack has one
+  await assert.rejects(store.set({ actor: ADMIN, provider: 'asana', clientId: 'a', signingSecret: SIGNING }), /has no signing secret/)
+  assert.ok(EDITABLE_PROVIDERS.includes('slack'))
+})
+
+test('the Slack manifest: this server\'s address in every URL and domain, the least scopes, no MCP, no token rotation', () => {
+  const { store } = setup()
+  const { manifest, redirectUrl } = store.manifest()
+  assert.equal(redirectUrl, 'https://slate.example.com/connectors/oauth/callback')
+  assert.deepEqual(manifest.oauth_config.redirect_urls, [redirectUrl])
+  assert.deepEqual(manifest.features.unfurl_domains, ['slate.example.com'])
+  assert.equal(manifest.settings.event_subscriptions.request_url, 'https://slate.example.com/integrations/slack/events')
+  assert.equal(manifest.settings.interactivity.request_url, 'https://slate.example.com/integrations/slack/interactive')
+  assert.equal(manifest.features.slash_commands[0].url, 'https://slate.example.com/integrations/slack/commands')
+  assert.deepEqual(manifest.settings.event_subscriptions.bot_events, ['link_shared', 'app_uninstalled', 'tokens_revoked'])
+  assert.deepEqual(manifest.oauth_config.scopes.bot, ['links:read', 'links:write', 'commands'])
+  assert.equal(manifest.oauth_config.scopes.user.length, 10)
+  assert.ok(!manifest.oauth_config.scopes.user.some((s) => /^search:read\.|canvases/.test(s)), 'no MCP search scopes, no canvases')
+  assert.deepEqual([manifest.settings.token_rotation_enabled, manifest.settings.is_mcp_enabled, manifest.oauth_config.pkce_enabled, manifest.settings.socket_mode_enabled], [false, false, false, false])
+  assert.doesNotMatch(JSON.stringify(manifest), /\bAI\b|colour|organis/)
+})

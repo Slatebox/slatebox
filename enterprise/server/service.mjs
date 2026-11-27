@@ -53,14 +53,14 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { sameAgentName } from '/imports/api/common/agent-mention.mjs'
 import { secretInPath, secretInPathSentence } from '/imports/api/common/library-model.mjs'
-import { canonicalAddress, cardFor, DEAD_HOSTS, GALLERY, lookalikeHost, retiredFor, writesAddress } from '../common/gallery.mjs'
+import { canonicalAddress, cardFor, DEAD_HOSTS, GALLERY, INVITE_CARDS, lookalikeHost, retiredFor, writesAddress } from '../common/gallery.mjs'
 import { checkMcpUrl, McpFetchRefused } from './mcp-fetch.mjs'
 import { SignInNeeded } from './credentials.mjs'
 import { SignInProblem } from './oauth.mjs'
 import { KEY_PATTERN } from './signin.mjs'
 import { asksForChange, capabilitySummary, defaultPolicy, destructiveArgs, normalizeTools, plainText, POLICIES, reconcile } from './tools.mjs'
 import { quarantine } from './results.mjs'
-import { actsWithoutAsking, APPROVERS, CARD_LIMITS, cardLabel, cardText, failureOf, fitsOnCard, isApiToken, linkOf, previewOf, publicCard } from './outside.mjs'
+import { actsWithoutAsking as actsByChoice, APPROVERS, CARD_LIMITS, cardLabel, cardText, failureOf, fitsOnCard, isApiToken, linkOf, previewOf, publicCard } from './outside.mjs'
 import { CONTEXT_LEVELS, packContext } from './context.mjs'
 // The plan and layout words: the registry's (a version an administrator published, else the code's).
 import { promptText } from '/server/ai-control/prompts/index.mjs'
@@ -143,6 +143,10 @@ export function publicIntegration(doc, { slates = [], cards = GALLERY } = {}) {
     galleryId: doc.galleryId || cardFor(doc.address, cards)?.id || null,
     owner: 'personal',
     status: doc.status,
+    // Why it needs sign-in, when its vendor ended it (Slack: the app was removed, or Slack moved off MCP).
+    ...(typeof doc.statusNote === 'string' && doc.statusNote && doc.status !== 'active' && { statusNote: doc.statusNote }),
+    // Slack: which workspace (its name only; one per person).
+    ...(doc.kind === 'slack' && typeof doc.account?.teamName === 'string' && { workspace: doc.account.teamName }),
     rule: RULES.includes(doc.rule) ? doc.rule : 'ask',
     defaultContextLevel: doc.defaultContextLevel || 'request',
     signedIn: Boolean(doc.auth),
@@ -181,12 +185,21 @@ export function profileIntegration(doc, cards = GALLERY) {
  * ref is its card's id (one per person: the switch personalSettings.sources['integration:<ref>']).
  * Names only, like profileIntegration: never an address, a token or a tool. → { ref, name, kind } | null
  */
-export function profileSource(doc, cards = GALLERY) {
-  if (!doc || (doc.kind || 'mcp') !== 'mcp' || doc.status !== 'active') return null
+export function profileSource(doc, cards = INVITE_CARDS) {
+  // An MCP integration, or Slack (native, on its Web API): Google Drive reads only picked files.
+  if (!doc || !['mcp', 'slack'].includes(doc.kind || 'mcp') || doc.status !== 'active') return null
   const card = (doc.galleryId && cards.find((c) => c.id === doc.galleryId)) || cardFor(doc.address, cards)
   if (!card || !checkRecipe(card.recipe)?.lookAround) return null
-  return { ref: card.id, name: String(doc.name || card.name || ''), kind: 'mcp' }
+  return { ref: card.id, name: String(doc.name || card.name || ''), kind: doc.kind || 'mcp' }
 }
+
+/**
+ * Whether an agent acts without asking here: its inviter's and the slate's choice (outside.mjs), never
+ * for an integration whose card always asks (Slack: Slack's rule that a person reviews every
+ * consequential action). Read from the built-in cards, which an administrator's edit cannot change.
+ */
+export const alwaysAsks = (doc) => Boolean(cardFor(doc?.address, INVITE_CARDS)?.alwaysAsk)
+export const actsWithoutAsking = (connection, integration, slate = null) => !alwaysAsks(connection) && actsByChoice(connection, integration, slate)
 
 /** The principal an invited agent's work runs as: the inviter's account, named after the agent. */
 export const connectorPrincipal = (connection, runId) => ({
@@ -264,7 +277,7 @@ export function createConnectorService({
   audit = () => {},
   promptOf = promptText, // (id, values) -> the prompt's text (the registry)
   oauthApps = {}, // the pre-registered apps, or an async getter of them (integration-apps.mjs): a card with needsApp shows only once its vendor app is set up
-  gallery = async () => GALLERY, // the live gallery (aiAgents, edited in /admin/ai), else the built-in cards
+  gallery = async () => INVITE_CARDS, // the live gallery (aiAgents, edited in /admin/ai), else the built-in cards (Slack's native card among them)
   integrations = memoryStore(), // { insert, findOne, find, update, remove }: each person's connected agent servers, apart from any slate
   slateSettings = memoryStore(), // { findOne({ _id: slateId }), insert, update }: a slate owner's outsideAgents choice
   slateList = async () => [], // async (slateIds, viewerId) -> [{ slateId, shareId, name }]: those slates the viewer can still open
@@ -841,6 +854,15 @@ export function createConnectorService({
         await setStatus(doc, 'needs_sign_in')
         refuse(401, 'needs_sign_in', `${doc.name} needs you to sign in to ${doc.host} again.`)
       }
+      // Its vendor's limit (Slack: a channel or thread once a minute while Slatebox is unlisted): this
+      // call answers nothing, the others' answers still land, and its words are what the agent says.
+      if (problem?.code === 'rate_limited') {
+        const clean = { isError: true, text: '', links: [], structured: null, left: [] }
+        audit({ kind: 'call', userId: principal.userId, host: doc.host, tool, ok: false, limited: true, chars: 0 })
+        const entry = { tool, args, result: clean, notice: plainText(problem.message, 300), ...extra }
+        entries.push(entry)
+        return { raw: { isError: true, content: [] }, entry }
+      }
       throw problem
     }
     const clean = quarantine(raw, { outputSchema: toolOf.get(tool)?.outputSchema })
@@ -1056,6 +1078,7 @@ export function createConnectorService({
           if (!proposals.length) say = say || planned.say || `${doc.name} needs more to make that change. Say what it should be called and where it goes.`
         }
         if (!entries.length) return { groups: [], say: say || (proposals.length ? '' : `${doc.name} had nothing to look up for that.`), entries, proposals }
+        if (entries.every((entry) => entry.notice)) return { groups: [], say: entries[0].notice, entries, proposals }
         await presence.step(agent, slate, 1, 'doing').catch(() => {})
         // One output per ask: the recipe's notes, else a drawing by the Excalidraw recipe, else the
         // translator over the last step's answers (never a read-me tool's text).
@@ -1091,7 +1114,10 @@ export function createConnectorService({
         const cut = cutWords(trimmed.cut, budget)
         if (cut) left.push(cut)
         const errors = entries.filter((entry) => entry.result.isError)
-        if (!trimmed.groups.length && errors.length) say = say || `${doc.name} couldn't find results for that.`
+        // A limit that stopped a read is said in its own words, whatever else landed.
+        const notice = entries.find((entry) => entry.notice)?.notice
+        if (notice) say = notice
+        else if (!trimmed.groups.length && errors.length) say = say || `${doc.name} couldn't find results for that.`
         return { groups: trimmed.groups, say, entries, left, proposals }
       }, { userId: principal.userId, shareId: slate.shareId })
       const left = [...new Set([...result.entries.flatMap((entry) => entry.result.left), ...(result.left || [])])]
@@ -1518,6 +1544,7 @@ export function createConnectorService({
     const set = {}
     if (actWithoutAsking !== undefined) {
       if (!['on', 'off', 'inherit'].includes(actWithoutAsking)) refuse(400, 'invalid_request', 'Choose on, off or inherit.')
+      if (actWithoutAsking === 'on' && alwaysAsks(doc)) refuse(403, 'always_asks', `${doc.name} always asks first: each change waits on a card you approve.`)
       const ownersSlate = found.slate.userId === doc.ownerId
       const wider = actWithoutAsking === 'on' || (actWithoutAsking === 'inherit' && ownersSlate && integration?.actWithoutAsking === true)
       if (actWithoutAsking === 'on' && !inviter) refuse(403, 'inviter_only', `Only ${doc.inviterName || 'the person who invited it'} can let ${doc.name} act without asking.`)
@@ -1547,6 +1574,7 @@ export function createConnectorService({
     if (!principal?.userId || principal.kind !== 'person') refuse(403, 'person_required', 'Only a signed-in person changes how an agent acts.')
     const doc = await ownIntegration(principal, integrationId)
     if (typeof actWithoutAsking !== 'boolean') refuse(400, 'invalid_request', 'Send actWithoutAsking true or false.')
+    if (actWithoutAsking && alwaysAsks(doc)) refuse(403, 'always_asks', `${doc.name} always asks first: each change waits on a card you approve.`)
     await integrations.update(doc._id, { actWithoutAsking, updatedAt: new Date(now()) })
     doc.actWithoutAsking = actWithoutAsking
     audit({ kind: 'integration_act_without_asking', userId: principal.userId, integrationId: doc._id, actWithoutAsking })
@@ -1880,9 +1908,10 @@ export function createConnectorService({
    * a card a teammate's agent made at this person's request (it is the teammate's).
    * Best effort per step: nothing here throws, and a step that fails is recorded (never a token);
    * the caller removes the rows that are left whatever happened (server/integrations).
-   * credentialRows(userId) -> [{ ownerId, address }]
+   * credentialRows(userId) -> [{ ownerId, address }]; natives(userId): what a native integration
+   * kept about the person beyond their own rows (Slack: the workspaces they installed stop naming them)
    */
-  async function forgetPerson(userId, { credentialRows = async () => [] } = {}) {
+  async function forgetPerson(userId, { credentialRows = async () => [], natives = async () => {} } = {}) {
     const out = { disconnected: 0, signIns: 0, agents: 0, cards: 0, failed: [] }
     if (typeof userId !== 'string' || !userId) return out
     const principal = { kind: 'person', userId }
@@ -1924,6 +1953,7 @@ export function createConnectorService({
         out.cards++
       }
     }
+    await step('natives', () => natives(userId))
     audit({ kind: 'account_integrations_removed', userId, disconnected: out.disconnected, signIns: out.signIns, agents: out.agents, cards: out.cards, ...(out.failed.length && { failed: out.failed }) })
     return out
   }
@@ -2126,9 +2156,28 @@ export function createConnectorService({
     await resumeEverywhere(integration, integration.tools || [])
   }
 
+  /**
+   * An MCP integration that became native (Slack, 2026-11-27) moves in place: set is the native
+   * integration's row (its address, kind, tools, sign-in). Its name, colour, rule and slates stay,
+   * each slate's copy moves with it (a tool turned off on one slate stays off there), and the old
+   * MCP sign-in is revoked and forgotten. → the integration as it is now
+   */
+  async function moveNative(old, set) {
+    const agents = await agentsOf(old)
+    const from = old.address
+    const { name: _name, colorIndex: _color, rule: _rule, ...moved } = set
+    await integrations.update(old._id, { ...moved, movedFrom: from })
+    const doc = Object.assign(old, moved, { movedFrom: from })
+    await resumeEverywhere(doc, doc.tools || [], { agents, move: { address: doc.address, host: doc.host, auth: doc.auth || null, galleryId: doc.galleryId || null } })
+    const signedOut = vault ? (await vault.remove(doc.ownerId, doc.movedFrom).catch(() => ({ removed: false }))).removed : false
+    audit({ kind: 'integration_moved', userId: doc.ownerId, host: doc.host, integrationId: doc._id, from: doc.movedFrom, slates: agents.length, signedOut })
+    return doc
+  }
+
   return {
     lookAround,
     resumeIntegration,
+    moveNative,
     startSignIn,
     signInStatus,
     useKey,

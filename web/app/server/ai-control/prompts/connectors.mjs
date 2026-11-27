@@ -196,7 +196,7 @@ export default definePrompts([
     slot: 'recipeSlack',
     title: "Invited agents: what to know about Slack",
     // Appended to connectors.plan.system for an agent invited from its gallery card.
-    body: "For Slack: search messages with a few plain words from the request, adding in:#channel when it names a channel and after:yyyy-mm-dd for a time like this week. Read a channel or a thread only when the request names it. Ask for at most 10 messages.",
+    body: "For Slack: prefer search_messages, with a few plain words from the request, its channel when it names one, and after (yyyy-mm-dd) for a time like this week. Read a channel or a thread only when the request names one (read_channel, or read_thread with the message link it pastes). At most 15 messages.",
   },
   {
     id: 'connectors.recipe.granola',

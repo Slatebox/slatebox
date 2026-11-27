@@ -9,10 +9,11 @@
 //   userAgent    the User-Agent sent to outside servers (default MCP_USER_AGENT).
 //   oauthApps    apps Slatebox registered with a vendor ahead of time, per provider:
 //                { "github": { "clientId": "...", "clientSecret": "..." } }
-//                A known provider (oauth.mjs KNOWN_PROVIDERS: github, slack, asana, hubspot, box,
+//                A known provider (oauth.mjs KNOWN_PROVIDERS: github, asana, hubspot, box,
 //                zoom, pitch, salesforce, microsoft, google) brings its own issuer, its scopes and
 //                the only MCP servers its sign-in is sent to; "scopes" overrides the scopes,
-//                "resources" (https origins) adds servers. Any other
+//                "resources" (https origins) adds servers. A native app (native-apps.mjs: slack)
+//                needs no issuer; Slack's also takes "signingSecret". Any other
 //                provider name must also give "issuer" (https; a devOrigins origin in local
 //                development only) and "resources", or its sign-in is never used. The client id
 //                is public; the secret is never in code. An administrator can also enter a known
@@ -25,6 +26,7 @@
 // need sign-in are not offered.
 import { MCP_USER_AGENT } from './mcp-fetch.mjs'
 import { KNOWN_PROVIDERS } from './oauth.mjs'
+import { NATIVE_APPS } from './native-apps.mjs'
 
 const ORIGIN = /^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):\d{2,5}$/
 const PROVIDER = /^[a-z][a-z0-9-]{1,30}$/
@@ -52,7 +54,8 @@ function appsOf(raw, devOrigins) {
       if (resources.length) entry.resources = resources
     }
     if (Array.isArray(app.scopes)) entry.scopes = app.scopes.filter((s) => typeof s === 'string' && /^[\x21-\x7e]{1,100}$/.test(s)).slice(0, 24)
-    if (!KNOWN_PROVIDERS[name]) {
+    if (NATIVE_APPS[name]?.signingSecret && typeof app.signingSecret === 'string' && CLIENT_TEXT.test(app.signingSecret)) entry.signingSecret = app.signingSecret
+    if (!KNOWN_PROVIDERS[name] && !NATIVE_APPS[name]) {
       let issuer = null
       try {
         issuer = typeof app.issuer === 'string' ? new URL(app.issuer) : null

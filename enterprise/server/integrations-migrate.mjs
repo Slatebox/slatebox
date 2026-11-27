@@ -96,3 +96,28 @@ export async function resumeLapsedIntegrations({ connections, integrations, now 
   }
   return { resumed }
 }
+
+// Slack's MCP server, where Slack was connected before it became native (2026-11-27). Slack lets
+// only Marketplace-listed or internal apps use it, so those integrations no longer work there.
+export const RETIRED_SLACK_MCP = 'https://mcp.slack.com/mcp'
+
+/**
+ * Slack moved to its Web API: each integration (and agent) still at Slack's MCP address asks its
+ * owner to connect Slack again, which moves it in place with its slates (slack.mjs finishInstall).
+ * Run at every server start and idempotent. → { marked }
+ */
+export async function retireSlackMcp({ connections, integrations, now = Date.now }) {
+  let marked = 0
+  const at = () => new Date(now())
+  for (const doc of await integrations.find({ address: RETIRED_SLACK_MCP })) {
+    if (doc.status === 'needs_sign_in' && doc.statusNote) continue
+    await integrations.update(doc._id, { status: 'needs_sign_in', statusNote: 'Slack moved. Connect it again on Integrations.', updatedAt: at() })
+    marked++
+  }
+  for (const doc of await connections.find({ address: RETIRED_SLACK_MCP, status: { $ne: 'removed' } })) {
+    if (doc.status === 'needs_sign_in') continue
+    await connections.update(doc._id, { status: 'needs_sign_in', updatedAt: at() })
+    marked++
+  }
+  return { marked }
+}

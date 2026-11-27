@@ -8,7 +8,7 @@
 // Run: node --import ./scripts/enterprise-resolve.mjs --test scripts/connectors-gallery-wide.test.mjs
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { GALLERY, canonicalAddress, cardFor, writesAddress } from '../enterprise/common/gallery.mjs'
+import { GALLERY, INVITE_CARDS, NATIVE_CARDS, canonicalAddress, cardFor, writesAddress } from '../enterprise/common/gallery.mjs'
 import { KNOWN_PROVIDERS } from '../enterprise/server/oauth.mjs'
 import { checkLookAround, checkRecipe, LOOK_LIMITS, matchIntent, requestValues } from '../enterprise/server/recipes.mjs'
 import { classifyTool } from '../enterprise/server/tools.mjs'
@@ -18,7 +18,7 @@ import { PROMPT_IDS } from '../web/app/server/ai-control/prompts/index.mjs'
 // server is added here on purpose, with its vendor: the gallery lists first-party servers only.
 const VENDOR = {
   huggingface: 'huggingface.co', github: 'githubcopilot.com', linear: 'linear.app', deepwiki: 'deepwiki.com', context7: 'context7.com', wolfram: 'wolfram.com',
-  firecrawl: 'firecrawl.dev', exa: 'exa.ai', notion: 'notion.com', atlassian: 'atlassian.com', slack: 'slack.com', granola: 'granola.ai', asana: 'asana.com',
+  firecrawl: 'firecrawl.dev', exa: 'exa.ai', notion: 'notion.com', atlassian: 'atlassian.com', granola: 'granola.ai', asana: 'asana.com',
   monday: 'monday.com', clickup: 'clickup.com', trello: 'trello.com', airtable: 'airtable.com', zapier: 'zapier.com', hubspot: 'hubspot.com', stripe: 'stripe.com',
   posthog: 'posthog.com', sentry: 'sentry.dev', jina: 'jina.ai', parallel: 'parallel.ai',
   gitlab: 'gitlab.com', vercel: 'vercel.com', netlify: 'netlify.app', supabase: 'supabase.com', neon: 'neon.tech', cloudflare: 'cloudflare.com',
@@ -59,9 +59,15 @@ test('every card is its vendor\'s own server, at the vendor\'s own host (aliases
       assert.equal(cardFor(url).id, card.id, `${url} is ${card.id}'s`)
     }
   }
-  // The owner's list, each with a card (Microsoft and Google through their own remote servers).
+  // The owner's list, each with a card (Microsoft and Google through their own remote servers; Slack
+  // native on its Web API, offered in the same gallery).
   for (const id of ['github', 'linear', 'notion', 'atlassian', 'slack', 'sentry', 'microsoft365', 'gmail', 'googlecalendar', 'miroboard', 'figma', 'canva', 'adobeaem', 'replit', 'lovable'])
-    assert.ok(GALLERY.some((c) => c.id === id), id)
+    assert.ok(INVITE_CARDS.some((c) => c.id === id), id)
+  // Slack is no MCP server any more (2026-11-27): its card is native, nothing points at mcp.slack.com.
+  assert.equal(GALLERY.some((c) => c.id === 'slack'), false)
+  assert.equal(cardFor('https://mcp.slack.com/mcp', INVITE_CARDS), null)
+  assert.equal(NATIVE_CARDS.find((c) => c.id === 'slack').url, 'slack://workspace')
+  assert.equal(cardFor('slack://workspace', INVITE_CARDS).id, 'slack')
   // Excalidraw stays retired; tldraw (a canvas of its own) is not listed.
   assert.equal(cardFor('https://mcp.excalidraw.com/mcp'), null)
   assert.ok(!GALLERY.some((c) => /tldraw/.test(c.url)))
@@ -150,14 +156,20 @@ test('a look-around is fixed lookups only: no planner, at most a few steps, noth
 test('a card\'s example ask runs one of its known asks (unless it asks for a change), and a broad ask never catches a request for a change', () => {
   // the example asks that are changes, or that only the planner answers well
   const planned = ['cloudflare', 'lovable', 'v0', 'wix']
-  for (const card of GALLERY) {
+  for (const card of INVITE_CARDS) {
     const recipe = checkRecipe(card.recipe)
     if (!recipe.intents.length || planned.includes(card.id)) continue
     assert.ok(matchIntent(recipe, card.try, requestValues(card.try)), `${card.id}: "${card.try}"`)
   }
-  const ask = (id, words) => matchIntent(checkRecipe(GALLERY.find((c) => c.id === id).recipe), words, requestValues(words))?.key || null
-  assert.equal(ask('slack', 'What did #launch decide about the pricing page this week?'), 'channel')
+  const ask = (id, words) => matchIntent(checkRecipe(INVITE_CARDS.find((c) => c.id === id).recipe), words, requestValues(words))?.key || null
+  // Slack searches first (search.messages is not limited for an unlisted app); it reads a channel only
+  // when the request names one and says read or latest, and a thread only by its link.
+  assert.equal(ask('slack', 'What did #launch decide about the pricing page this week?'), 'search')
+  assert.equal(ask('slack', 'Read #launch'), 'channel')
+  assert.equal(ask('slack', 'What is the latest in #launch?'), 'channel')
+  assert.equal(ask('slack', 'Summarize https://acme.slack.com/archives/C0123ABCD/p1700000000123456'), 'thread')
   assert.equal(ask('slack', 'Post in #launch that the pricing page ships Friday'), null)
+  assert.equal(ask('slack', 'React with a thumbsup to the last message in #launch'), null)
   assert.equal(ask('trello', 'Create a card for the retry bug'), null)
   assert.equal(ask('airtable', 'Add a row for each note'), null)
   assert.equal(ask('hubspot', 'Update the Acme contact to closed won'), null)

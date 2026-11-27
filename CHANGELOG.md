@@ -20,6 +20,13 @@ shipped early. The next release is 2.0.0, which is above both lines.
 
 ## [Unreleased]
 
+- **integrations:** Slack is built in, on Slack's Web API (Slack lets only Marketplace-listed or
+  internal apps use its MCP server). Connect it in one click: Allow on Slack, done. Its agent searches
+  the messages you can see first, reads a channel or a thread when you name one (once a minute until
+  Slatebox is listed in the Slack Marketplace), and every message or reaction it would post waits on a
+  card you approve. In Slack, links to public slates show a preview, Send to slate puts a message on a
+  slate, and `/slatebox` finds your slates. Self-hosters create their own Slack app from the manifest
+  in Admin › Integration apps and enter its client id, client secret and signing secret there.
 - **slate style:** the Background control takes a gradient or a picture again, as part of the slate's
   style. Gradients: one to start from per style, or your own (two or three colors, linear at an angle
   or radial). Pictures: upload your own, or search where the server has picture search; fill, fit or

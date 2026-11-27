@@ -69,7 +69,7 @@ The last column says whether About you can use the tool to personalize Slatebox 
 | Work | Todoist | `https://ai.todoist.net/mcp` | Todoist | Yes |
 | Work | Make | `https://mcp.make.com` | Make |  |
 | Docs, chat and meetings | Notion | `https://mcp.notion.com/mcp` | Notion | Yes |
-| Docs, chat and meetings | Slack | `https://mcp.slack.com/mcp` | Slack (needs the operator's slack app, see below) | Yes |
+| Docs, chat and meetings | Slack | built in (Slack's Web API, see [Slack](#slack)) | Slack app from the manifest in Admin › Integration apps (needs the operator's slack app, see below) | Yes |
 | Docs, chat and meetings | Granola | `https://mcp.granola.ai/mcp` | Granola | Yes |
 | Docs, chat and meetings | Microsoft 365 | `https://workiq.svc.cloud.microsoft/mcp` | Microsoft (needs the operator's microsoft app, see below) |  |
 | Docs, chat and meetings | Microsoft Entra directory | `https://mcp.svc.cloud.microsoft/enterprise` | Microsoft (needs the operator's microsoft app, see below) | Yes |
@@ -194,7 +194,7 @@ administrator does, for their own install. Each one needs:
 
 | Provider (`oauthApps.<provider>`) | Cards | Where to register | Scopes Slatebox asks for |
 | --- | --- | --- | --- |
-| `slack` | Slack | api.slack.com/apps: a Slack app whose *User Token Scopes* are exactly the 14 on the right ([`slack-app-manifest.json`](slack-app-manifest.json) has them; create the app from it with your own redirect URL, or match an existing app to it; Slack's MCP server access is turned on in the app's settings; a test checks the manifest against `SLACK_SCOPES`), distributed or installed to the workspace; a workspace admin may need to approve it | `canvases:read canvases:write channels:history channels:read chat:write groups:history groups:read im:history mpim:history search:read.public search:read.private search:read.im search:read.mpim users:read` (what the Slack card reads, searches and, after you approve its card, posts; `oauth.mjs` `SLACK_SCOPES` says which feature needs each). Slack's metadata lists 30; Slatebox never asks for the other 16. A scope the app lacks makes Slack's permission screen fail for everyone, so change the app and `scopes` together |
+| `slack` | Slack | api.slack.com/apps › Create New App › From a manifest: paste the manifest Admin › Integration apps › Slack shows (this server's address is already in it), install it to your workspace, then enter its client id, client secret and **signing secret** (settings: `oauthApps.slack.signingSecret`). A workspace admin may need to approve it | user: `search:read channels:read groups:read channels:history groups:history im:history mpim:history users:read chat:write reactions:write`; bot: `links:read links:write commands` |
 | `asana` | Asana | Asana developer console: an app for MCP V2 (confidential client) | what the server names (`default`) |
 | `hubspot` | HubSpot | HubSpot: Development › MCP Auth Apps | what the server names |
 | `box` | Box | Box Developer Console: an OAuth 2.0 app with the *Manage AI Requests* scope (or the admin's predefined *Box MCP Server* integration) | what the server names |
@@ -327,6 +327,37 @@ for it.
 Your Google sign-in is kept encrypted on the server for you alone. It never reaches your browser,
 another person, an agent's prompt or a log.
 
+## Slack
+
+Slack is built in, on Slack's Web API (not an MCP server: Slack lets only apps listed in its
+Marketplace, or a workspace's own internal apps, use its MCP server). Connect it in one click: pick
+Slack in the gallery (or **Sign in again** on its row), choose **Allow** on Slack's own page, and it
+is connected. One Slack workspace per person; connecting another replaces the first. Then:
+
+- **Slack as an agent**: ask it on a slate, for example "What did #launch decide about the pricing
+  page?". It searches the messages you can see first; it reads a channel only when you name one and
+  say read or latest, and a thread when you paste a link to a message in it. Its answers land as
+  suggested notes with links back to the messages.
+- **Posting and reactions** always wait on a card you approve on the slate. Slack never acts without
+  asking, whatever the integration's or the slate's choice.
+- **In Slack**: a link to one of this server's slates or presentations shows a preview with its name
+  and picture only if the slate is public (or the presentation published); any other shows only
+  *Private slate · Open in Slatebox*. **Send to slate** (a message's **…** menu) puts that message on
+  a slate you can edit, as one suggestion with a link back. `/slatebox [words]` lists up to five of
+  your slates whose names match, only to you.
+
+**Limits while unlisted.** Until Slatebox is listed in the Slack Marketplace, Slack lets it read a
+channel or a thread only once a minute per workspace, 15 messages at a time. Slatebox says so, with
+the seconds left, and searching is not limited. A self-hosted install's own internal Slack app is not
+held to this: set `settings.connectors.slack.listed` to `true` to lift the once-a-minute wait
+(`historyPerMinute` and `historyLimit` set it otherwise).
+
+**What Slatebox keeps.** Your Slack sign-in is kept encrypted for you alone, and the workspace's bot
+token encrypted for that workspace. Messages are kept only as the suggestions they become (removed
+after 7 days unless someone keeps them) and as cards you approve. Slatebox stores nothing from a
+link preview and never trains models on Slack data. Disconnecting revokes the sign-in at Slack;
+deleting your account does too; removing the app in Slack ends every member's sign-in here.
+
 ## Use your tools to personalize (About you)
 
 Profile › About you › **Use your tools to personalize** lists the tools you connected that Slatebox can
@@ -423,3 +454,18 @@ Slatebox may already open (ones it made, or ones picked before).
 5. `SLATEBOX_KEY_ENCRYPTION_KEY` must be set (the same key that seals agents' sign-ins).
 
 /admin/ai › Gallery shows each of these as set or missing, and turns Google on or off.
+
+## Self-hosting: setting up Slack
+
+1. In Admin › AI control › Integration apps › Slack, choose **Show the Slack app manifest** and copy
+   it. It already has this server's address in every URL and domain.
+2. At api.slack.com/apps choose **Create New App › From a manifest**, pick your workspace, and paste
+   it. Slack checks the events address, so this server must be reachable from the internet over https.
+3. Install the app to your workspace.
+4. Back in Integration apps, enter the app's **client id**, **client secret** and **signing secret**
+   (Slack shows all three under *Basic Information*) and save. The Slack card then shows in the
+   gallery.
+5. `SLATEBOX_KEY_ENCRYPTION_KEY` must be set (it seals the secrets and every Slack sign-in).
+
+An internal app installed only to your own workspace is not held to Slack's limits for unlisted
+apps: set `settings.connectors.slack.listed` to `true`.

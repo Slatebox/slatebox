@@ -1,17 +1,16 @@
 // Integration sign-in hygiene (review, 2026-11-27): deleting an account removes the person's
 // integration sign-ins and rows (only theirs); Disconnect revokes at each vendor, its own way, and
 // counts it done only when the vendor says so (Slack answers 200 with {"ok":false}); sign-ins saved
-// before Slatebox kept a revocation endpoint fall back to the known vendor's; Slack is asked for
-// exactly the scopes the Slack card uses, the same list as the Slack app manifest.
+// before Slatebox kept a revocation endpoint fall back to the known vendor's (a Slack sign-in made
+// when Slack was an MCP server too). Slack's own scopes and manifest: scripts/slack.test.mjs (Slack is
+// native on its Web API since 2026-11-27).
 // Every vendor here is a fake behind fetch: nothing touches the network.
 // Run: node --import ./scripts/enterprise-resolve.mjs --test scripts/integration-signin-hygiene.test.mjs
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import {
-  appFor, chooseScopes, discoverSignIn, KNOWN_PROVIDERS, OAUTH_LIMITS, revocationOf, revokeToken, SLACK_SCOPES,
-} from '../enterprise/server/oauth.mjs'
+import { discoverSignIn, KNOWN_PROVIDERS, revocationOf, revokeToken } from '../enterprise/server/oauth.mjs'
 import { createVault, credentialId } from '../enterprise/server/credentials.mjs'
 import { createConnectorService, memoryStore } from '../enterprise/server/service.mjs'
 import { FORGET_LIMITS, INTEGRATION_ROWS, removeIntegrationsOf, setAccountIntegrations, SUGGESTIONS } from '../web/app/server/integrations/account-removal.mjs'
@@ -20,11 +19,6 @@ import { sanitizeClientName } from '../web/app/imports/api/common/agent-label.mj
 
 const read = (path) => readFileSync(new URL('../' + path, import.meta.url), 'utf8')
 const newMaster = () => loadMasterKey({ SLATEBOX_KEY_ENCRYPTION_KEY: randomBytes(32).toString('base64') })
-
-// Slack's MCP metadata, as served 2026-11-27 (30 scopes, no revocation_endpoint).
-const SLACK_METADATA_SCOPES = ['canvases:read', 'canvases:write', 'channels:history', 'channels:read', 'channels:write', 'chat:write', 'emoji:read', 'files:read', 'files:write',
-  'groups:history', 'groups:read', 'groups:write', 'im:history', 'im:read', 'im:write', 'lists:read', 'lists:write', 'mpim:history', 'mpim:read', 'mpim:write', 'reactions:read',
-  'reactions:write', 'search:read.files', 'search:read.im', 'search:read.mpim', 'search:read.private', 'search:read.public', 'search:read.users', 'users:read', 'users:read.email']
 
 // A fake vendor: records every request, answers with respond(url, init).
 function vendor(respond) {
@@ -40,57 +34,9 @@ function vendor(respond) {
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 const form = (init) => new URLSearchParams(init.body)
 
-// ---------- (3) Slack scopes ----------
-
-test('Slack: Slatebox asks for exactly the 14 scopes the Slack card uses, never the metadata\'s 30 cut at 24', () => {
-  assert.deepEqual([...SLACK_SCOPES], ['canvases:read', 'canvases:write', 'channels:history', 'channels:read', 'chat:write', 'groups:history', 'groups:read', 'im:history',
-    'mpim:history', 'search:read.public', 'search:read.private', 'search:read.im', 'search:read.mpim', 'users:read'])
-  assert.equal(KNOWN_PROVIDERS.slack.scopes, SLACK_SCOPES)
-  assert.ok(Object.isFrozen(SLACK_SCOPES))
-  // Every one is a scope Slack's server has, and the list fits the cap whole.
-  for (const scope of SLACK_SCOPES) assert.ok(SLACK_METADATA_SCOPES.includes(scope), scope)
-  assert.ok(SLACK_SCOPES.length <= OAUTH_LIMITS.scopes)
-  // The app from settings carries no scopes: the sign-in asks for the 14, search and users:read included.
-  const app = appFor('https://mcp.slack.com', { slack: { clientId: 'slack-client', clientSecret: 's' } }, 'https://mcp.slack.com')
-  assert.deepEqual(app.scopes, [...SLACK_SCOPES])
-  const asked = chooseScopes({ app, scopes: { challenge: [], resource: SLACK_METADATA_SCOPES }, server: { offlineAccess: false }, resource: 'https://mcp.slack.com' })
-  assert.deepEqual(asked, [...SLACK_SCOPES])
-  for (const needed of ['search:read.public', 'search:read.private', 'search:read.im', 'search:read.mpim', 'users:read']) assert.ok(asked.includes(needed), needed)
-  for (const dropped of ['channels:write', 'files:read', 'files:write', 'groups:write', 'im:write', 'mpim:write', 'reactions:write', 'users:read.email', 'lists:write', 'emoji:read'])
-    assert.ok(!asked.includes(dropped), dropped)
-  // An operator's own `scopes` still replaces it on purpose.
-  assert.deepEqual(appFor('https://mcp.slack.com', { slack: { clientId: 'x', scopes: ['search:read.public'] } }, 'https://mcp.slack.com').scopes, ['search:read.public'])
-})
-
-test('Slack: each scope names the feature that needs it, and the Slack app manifest and the docs list the same set', () => {
-  const source = read('enterprise/server/oauth.mjs')
-  const block = source.slice(source.indexOf('export const SLACK_SCOPES'), source.indexOf('])', source.indexOf('export const SLACK_SCOPES')))
-  for (const scope of SLACK_SCOPES) assert.match(block, new RegExp(`'${scope.replace('.', '\\.')}', // \\S.{10,}`), `${scope} has a reason`)
-  const manifest = JSON.parse(read('docs/slack-app-manifest.json'))
-  assert.deepEqual([...manifest.oauth_config.scopes.user].sort(), [...SLACK_SCOPES].sort())
-  assert.equal(manifest.oauth_config.scopes.bot, undefined, 'no bot scopes: Slatebox acts as the signed-in person only')
-  assert.ok(manifest.oauth_config.redirect_urls.every((url) => url.startsWith('https://') && url.endsWith('/connectors/oauth/callback')))
-  const row = read('docs/integrations.md').split('\n').find((line) => line.startsWith('| `slack` |'))
-  assert.ok(row.includes('`' + SLACK_SCOPES.join(' ') + '`'), 'docs/integrations.md lists the same scopes')
-  // The Slack card calls only tools these scopes cover (the recipe's tools).
-  const card = read('enterprise/common/gallery.mjs')
-  const slack = card.slice(card.indexOf("id: 'slack'"), card.indexOf("id: 'granola'"))
-  const tools = [...new Set(slack.match(/slack_[a-z_]+/g))].sort()
-  assert.deepEqual(tools, ['slack_create_canvas', 'slack_read_canvas', 'slack_read_channel', 'slack_read_user_profile', 'slack_search_public', 'slack_search_public_and_private', 'slack_send_message'])
-})
-
 // ---------- (2) revocation, each vendor its own way ----------
 
-test('discovery: the metadata\'s revocation_endpoint wins; Slack, Zoom and GitHub (none advertised) get their documented ones; Microsoft has none', async () => {
-  const slack = vendor((url) => {
-    if (url === 'https://mcp.slack.com/.well-known/oauth-protected-resource/mcp') return json({ resource: 'https://mcp.slack.com', authorization_servers: ['https://mcp.slack.com'], scopes_supported: SLACK_METADATA_SCOPES })
-    if (url === 'https://mcp.slack.com/.well-known/oauth-authorization-server')
-      return json({ issuer: 'https://mcp.slack.com', authorization_endpoint: 'https://slack.com/oauth/v2_user/authorize', token_endpoint: 'https://slack.com/api/oauth.v2.user.access', code_challenge_methods_supported: ['S256'], scopes_supported: SLACK_METADATA_SCOPES })
-    return new Response('no', { status: 404 })
-  })
-  const found = await discoverSignIn({ address: 'https://mcp.slack.com/mcp', fetch: slack.fetch })
-  assert.equal(found.server.revocationEndpoint, 'https://slack.com/api/auth.revoke')
-  assert.equal(found.server.revocation, 'slack')
+test('discovery: the metadata\'s revocation_endpoint wins; Zoom and GitHub (none advertised) get their documented ones; Microsoft has none; Slack\'s are read its way', async () => {
   const asana = vendor((url) => {
     if (url.startsWith('https://mcp.asana.com/.well-known/oauth-protected-resource')) return json({ resource: 'https://mcp.asana.com/v2', authorization_servers: ['https://app.asana.com'] })
     if (url === 'https://app.asana.com/.well-known/oauth-authorization-server')
@@ -107,6 +53,10 @@ test('discovery: the metadata\'s revocation_endpoint wins; Slack, Zoom and GitHu
     else assert.match(known.revoke.url, /^https:\/\/[a-z0-9.-]+\//, provider)
   }
   assert.equal(revocationOf({ issuer: KNOWN_PROVIDERS.microsoft.issuer, tokenEndpoint: 'https://login.microsoftonline.com/organizations/oauth2/v2.0/token' }), null)
+  // Slack is native now (no MCP provider): its sign-ins, and one made when it was an MCP server, end at auth.revoke
+  assert.equal(KNOWN_PROVIDERS.slack, undefined)
+  assert.deepEqual(revocationOf({ issuer: 'https://slack.com', tokenEndpoint: 'https://slack.com/api/oauth.v2.access' }), { url: 'https://slack.com/api/auth.revoke', style: 'slack' })
+  assert.deepEqual(revocationOf({ issuer: 'https://mcp.slack.com', tokenEndpoint: 'https://slack.com/api/oauth.v2.user.access' }), { url: 'https://slack.com/api/auth.revoke', style: 'slack' })
 })
 
 test('Slack: auth.revoke gets the token alone; HTTP 200 with {"ok":false} is a failure, only {"ok":true} is success', async () => {
@@ -200,7 +150,7 @@ const oldSlackSignIn = (vault, userId = 'ada') => vault.save({
   kind: 'oauth',
   registration: { kind: 'preregistered', clientId: 'slack-client', provider: 'slack' },
   server: { issuer: 'https://mcp.slack.com', tokenEndpoint: 'https://slack.com/api/oauth.v2.user.access' },
-  tokens: { accessToken: 'xoxp-secret-access', refreshToken: 'xoxe-secret-refresh', expiresAt: Date.now() + 3600000, scopes: [...SLACK_SCOPES] },
+  tokens: { accessToken: 'xoxp-secret-access', refreshToken: 'xoxe-secret-refresh', expiresAt: Date.now() + 3600000, scopes: ['search:read.public', 'users:read'] },
 })
 
 test('a Slack sign-in saved before Slatebox kept a revocation endpoint is still revoked at auth.revoke, and forgotten', async () => {
@@ -444,7 +394,9 @@ test('removeIntegrationsOf: the enterprise hook first, then every integration co
     { _id: 'samWaiting', ownerId: 'sam', items: [{ state: 'pending' }] },
   ]
   assert.deepEqual(rows.filter((row) => matchesRemoval(filter, row)).map((row) => row._id), ['adaWaiting'])
-  assert.equal(db.updates.length, 1)
+  // and the Slack workspaces she installed stop naming her (their bot stays for the other members)
+  assert.equal(db.updates.length, 2)
+  assert.deepEqual(db.updates[1].slice(0, 3), ['slackWorkspaces', { installedBy: 'ada' }, { $set: { installedBy: null } }])
   const [updated, which, change, options] = db.updates[0]
   assert.equal(updated, SUGGESTIONS)
   assert.deepEqual(which, { ownerId: 'ada', 'items.state': 'pending' })

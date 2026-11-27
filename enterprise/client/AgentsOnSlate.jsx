@@ -373,7 +373,7 @@ export function AgentChanges({ c, shareId, canEdit, waiting }) {
             inputProps={{ 'data-agent-acting': '' }}
             onChange={(e) => run(() => Meteor.callAsync('connectors.setActing', { connectionId: c._id, actWithoutAsking: e.target.value }))()}>
             <MenuItem value="off">Ask first: each waits on a card</MenuItem>
-            <MenuItem value="on" disabled={!c.mine || agent.lockedByOwner}>Act without asking (not deleting, closing or merging)</MenuItem>
+            <MenuItem value="on" disabled={!c.mine || agent.lockedByOwner || Boolean(cardOf(c)?.alwaysAsk)}>{cardOf(c)?.alwaysAsk ? `${c.name} always asks first` : 'Act without asking (not deleting, closing or merging)'}</MenuItem>
             {owner && agent.lockedByOwner && <MenuItem value="inherit">Let {c.inviterName || 'its inviter'} choose again</MenuItem>}
           </TextField>
           {agent.lockedByOwner && <Typography variant="caption" color="text.secondary" component="div" data-agent-acting-locked="">{owner ? `You turned acting without asking off here; ${c.inviterName || 'its inviter'} cannot turn it back on until you let them.` : 'This slate\'s owner turned acting without asking off here.'}</Typography>}

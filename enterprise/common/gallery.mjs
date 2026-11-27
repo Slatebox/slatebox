@@ -262,24 +262,6 @@ const LISTED = [
     },
   },
   {
-    id: 'slack', needsApp: 'slack', group: 'workspace', name: 'Slack', url: 'https://mcp.slack.com/mcp', job: 'Team chat',
-    lands: 'Brings messages, threads and canvases onto the slate so decisions made in chat become notes, and posts messages you approve.',
-    try: 'What did #launch decide about the pricing page this week?', signIn: 'oauth', cost: 'Uses your Slack account',
-    recipe: {
-      rounds: 1, calls: 2,
-      intents: [
-        ask('channel', 'From the channel', ['^\\s*(what|which|who|when|where|how|why|show|list|bring|get|summari[sz]e|pull|read)\\b.*#[a-z0-9]'], ['slack_read_channel']),
-        ask('canvas', 'Slack canvas', ['\\bcanvas(es)?\\b'], ['slack_read_canvas']),
-        ask('search', 'From Slack', [ASK_WORDS], ['slack_search_public_and_private', 'slack_search_public']),
-      ],
-      writes: [
-        { key: 'post', label: 'Post in Slack', tool: ['slack_send_message'], keywords: ['^(post|send|message|tell|announce|share)\\b'], fields: { body: ['message', 'text'], target: ['channel_id', 'channel'] } },
-        { key: 'canvas', label: 'Create Slack canvas', tool: ['slack_create_canvas'], keywords: ['^(create|make|write|draft|start)\\b.*\\bcanvas\\b'], fields: { title: ['title'], body: ['content'] } },
-      ],
-      lookAround: { steps: [{ tool: 'slack_read_user_profile', args: {} }, { tool: ['slack_search_public', 'slack_search_public_and_private'], args: { query: 'from:me', limit: 5 } }] },
-    },
-  },
-  {
     id: 'granola', group: 'workspace', name: 'Granola', url: 'https://mcp.granola.ai/mcp', job: 'Meeting notes',
     lands: 'Brings the notes and transcripts of your meetings onto the slate for retros and decision maps. It only reads.',
     try: 'Put the action items from yesterday\'s planning call on the slate', signIn: 'oauth', cost: 'Uses your Granola account',
@@ -964,7 +946,17 @@ export const groupsIn = (cards = []) => GROUPS.filter((g) => cards.some((card) =
 // invited onto slates like any agent. Administrators turn one on or off and edit its words in
 // /admin/ai › Gallery (its address never changes). Google Drive reads only the files a person picks
 // for a slate (drive.file scope: enterprise/server/google/google.mjs).
-export const NATIVE_ADDRESSES = Object.freeze({ googledrive: 'google://drive' })
+// Slack is native too (owner, 2026-11-27: "if web api is the expected integration, then let's pivot
+// to that instead of MCP"): Slack lets only Marketplace-listed or internal apps use its MCP server,
+// so Slatebox reads and writes Slack through its Web API as the person (enterprise/server/slack/).
+// Its tools are fixed (their hashes never move), every change it proposes always waits on a card
+// (alwaysAsk: acting without asking is refused for it), and it is offered in the invite gallery
+// (invite) with its own one-click sign-in (signIn 'slack': Connect, Allow on Slack, done).
+export const NATIVE_ADDRESSES = Object.freeze({ googledrive: 'google://drive', slack: 'slack://workspace' })
+// Asks Slack's agent knows: a thread by its permalink, a channel only when the request names one and
+// says read or latest, anything else a search (search.messages is not limited for unlisted apps;
+// reading a channel or a thread is, once a minute: enterprise/server/slack/slack.mjs).
+const SLACK_LINK = 'https://[a-z0-9-]+\\.(enterprise\\.)?slack\\.com/archives/'
 export const NATIVE_CARDS = Object.freeze([
   {
     id: 'googledrive',
@@ -978,7 +970,43 @@ export const NATIVE_CARDS = Object.freeze([
     cost: 'Uses your Google account',
     recipe: { rounds: 1, calls: 2, intents: [] },
   },
+  {
+    id: 'slack',
+    kind: 'native',
+    needsApp: 'slack',
+    group: 'workspace',
+    name: 'Slack',
+    url: NATIVE_ADDRESSES.slack,
+    job: 'Team chat',
+    lands: 'Brings Slack messages and threads onto the slate so decisions made in chat become notes, and posts messages and reactions you approve.',
+    try: 'What did #launch decide about the pricing page this week?',
+    signIn: 'slack',
+    cost: 'Uses your Slack account',
+    invite: true,
+    alwaysAsk: true,
+    recipe: {
+      rounds: 1, calls: 2,
+      intents: [
+        ask('thread', 'Slack thread', [SLACK_LINK], ['read_thread']),
+        ask('channel', 'From the channel', ['\\b(read|latest)\\b.*#[a-z0-9]', '#[a-z0-9][a-z0-9_-]*.*\\b(read|latest)\\b'], ['read_channel']),
+        ask('search', 'From Slack', [ASK_WORDS], ['search_messages']),
+      ],
+      writes: [
+        { key: 'react', label: 'React in Slack', tool: ['add_reaction'], keywords: ['^(react|add (a |an )?(reaction|emoji))\\b'], fields: { body: ['name'], target: ['channel'], item: ['timestamp'] } },
+        { key: 'post', label: 'Post in Slack', tool: ['post_message'], keywords: ['^(post|send|message|tell|announce|share|reply)\\b'], fields: { body: ['text'], target: ['channel'], item: ['thread_ts'] } },
+      ],
+      tools: { search_messages: 'lookup', list_channels: 'lookup', read_channel: 'lookup', read_thread: 'lookup', post_message: 'change', add_reaction: 'change' },
+      lookAround: { steps: [{ tool: 'search_messages', args: { query: 'from:me', limit: 5 } }] },
+    },
+  },
 ])
+
+// The cards the invite gallery offers: the MCP cards, and the native ones that are invited from it
+// (Slack; Google Drive has its own place on the Integrations page), in the gallery's order.
+export const INVITE_CARDS = Object.freeze([...LISTED, ...NATIVE_CARDS.filter((card) => card.invite)]
+  .map((card, at) => ({ card: KEYWORDS[card.id] ? { ...card, keywords: KEYWORDS[card.id] } : card, at }))
+  .sort((a, b) => rank(a.card) - rank(b.card) || a.at - b.at)
+  .map(({ card }) => card))
 
 // Card words the built-in cards said before agents read and write (owner, 2026-11-24). A saved edit
 // that is still one of these is the old default, not an administrator's choice: the card's current

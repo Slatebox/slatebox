@@ -16,6 +16,9 @@
 //           browser must be the one that began, and the one that began must be the flow's owner, `iss` is checked, the code is exchanged with the
 //           verifier and the resource, and the tokens go into the vault (credentials.mjs)
 //   status  the walkthrough's poll: pending, done or failed (with plain words)
+//   startNative  a native integration's own sign-in (Slack's OAuth v2): the same flow, state,
+//           binding cookie and callback, with no MCP discovery; its callback hands the code to the
+//           integration's own finisher (natives[kind]) instead of exchanging it here
 //
 // Flows expire after 10 minutes and are used once; a used or unknown state is refused.
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
@@ -60,7 +63,10 @@ export async function probe(address, fetch) {
  *   integration-apps.mjs), or a promise of them: asked again on every plan, start and callback
  * origin(): this Slatebox's own origin
  */
-export function createSignIn({ flows, clients, vault, master, fetch, apps = () => ({}), origin, devOrigins = [], now = Date.now, random = randomBytes }) {
+// natives: { [kind]: async (flow, code) -> { host } }: a native integration's callback (Slack's
+//   finishInstall), which exchanges the code and saves what it issued itself; it throws
+//   SignInProblem with plain words when it refuses.
+export function createSignIn({ flows, clients, vault, master, fetch, apps = () => ({}), origin, devOrigins = [], natives = {}, now = Date.now, random = randomBytes }) {
   const sealed = (owner, text) => seal({ master, owner, plaintext: text })
   const opened = (owner, cipher) => open({ master, owner, cipher })
   const flowOwner = (flow) => ({ ownerType: 'mcp-flow', ownerId: flow.userId, provider: flow._id })
@@ -171,6 +177,39 @@ export function createSignIn({ flows, clients, vault, master, fetch, apps = () =
   }
 
   /**
+   * A native integration's sign-in flow (Slack): authorize(state, redirectUri) builds the vendor's
+   * own sign-in address. Single use, 10 minutes, tied to the browser that begins it, like any flow.
+   * → { flowId, authHost }
+   */
+  async function startNative({ userId, kind, issuer, authorize }) {
+    if (!vault.available()) fail('vault_off', 'Agents that need sign-in are not available on this server.')
+    if (typeof natives[kind] !== 'function' || typeof authorize !== 'function') fail('not_configured', 'That sign-in is not set up on this server.')
+    const state = newState(random)
+    const flowId = 'f' + random(24).toString('base64url')
+    const redirectUri = redirectUriFor(origin())
+    const authorizeUrl = authorize(state, redirectUri)
+    const flow = {
+      _id: flowId,
+      kind,
+      userId,
+      issuer,
+      issParameter: false,
+      redirectUri,
+      stateHash: hash(state),
+      status: 'created',
+      authorizeUrl,
+      createdAt: new Date(now()),
+      expiresAt: new Date(now() + OAUTH_LIMITS.flowMinutes * 60000),
+    }
+    await flows.insert(flow)
+    let authHost = ''
+    try {
+      authHost = new URL(authorizeUrl).host
+    } catch {}
+    return { flowId, authHost }
+  }
+
+  /**
    * The start route: once per flow, and only by the person it belongs to (userId: whoever the
    * request's login token signs in, or null). → { authorizeUrl, binding } (binding goes in an
    * HttpOnly cookie)
@@ -209,6 +248,13 @@ export function createSignIn({ flows, clients, vault, master, fetch, apps = () =
       if (!binding || !sameHash(hash(binding), flow.bindingHash)) fail('unverified', 'Sign-in couldn\'t be verified. Finish it in the window Slatebox opened.')
       if (!flow.openedBy || flow.openedBy !== flow.userId) fail('unverified', 'Sign-in couldn\'t be verified. Start again from Slatebox.')
       const { code } = checkCallback(query, flow, now())
+      // A native integration finishes its own sign-in (Slack: oauth.v2.access, both tokens sealed).
+      if (flow.kind && flow.kind !== 'mcp') {
+        if (typeof natives[flow.kind] !== 'function') fail('not_configured', 'That sign-in is not set up on this server.')
+        const done = await natives[flow.kind](flow, code)
+        await flows.update(flow._id, { status: 'done', doneAt: new Date(now()) })
+        return { ok: true, flowId: flow._id, host: done?.host || '' }
+      }
       const verifier = opened(flowOwner(flow), flow.verifier)
       const app = flow.registration.kind === 'preregistered' ? ((await apps()) || {})[flow.registration.provider] : null
       const clientSecret = app?.clientSecret || (flow.clientSecret ? opened(flowOwner(flow), flow.clientSecret) : null)
@@ -246,7 +292,7 @@ export function createSignIn({ flows, clients, vault, master, fetch, apps = () =
     return { status: 'pending', opened: flow.status !== 'created' }
   }
 
-  return { plan, start, begin, finish, status }
+  return { plan, start, startNative, begin, finish, status }
 }
 
 export { parseChallenge }

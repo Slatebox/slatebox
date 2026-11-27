@@ -26,6 +26,9 @@
 // is remembered for this browser session only. A custom server connected from the Integrations page
 // ends on a success step that offers "Suggest for the Slatebox library" (SuggestIntegration: the
 // library's review queue, kind integration; free, reviewed before anyone sees it).
+// Slack's card (native, on Slack's Web API) is one click: its window opens on Slack's own page, Allow
+// there connects it (slack.js), and on a slate it is invited at once. No consent step: its tools are
+// fixed, and every change it proposes waits on a card you approve.
 import React, { useEffect, useRef, useState } from 'react'
 import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
@@ -60,6 +63,7 @@ import { enterpriseSlots } from '/imports/api/client/enterprise-slots.mjs'
 import { GALLERY, addressProblem, cardFor, filterCards, groupsIn, lookalikeHost, settingsLinkOf } from '../common/gallery.mjs'
 import { cardState, connectedAction, STATUS_WORDS } from '../common/integration-words.mjs'
 import { followSignIn, openSignInWindow } from './signin'
+import { connectSlack, SLACK_ADMIN_NOTE } from './slack'
 import SuggestIntegration from './SuggestIntegration'
 
 // The walkthrough's look, light and dark (the app's palette: greens on warm neutrals, sticky
@@ -267,6 +271,37 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
+
+  // Slack (native): Connect, Allow on Slack, done. Inside the click (the window opens at once).
+  async function slackConnect() {
+    setError('')
+    setStep('slack')
+    try {
+      const outcome = await connectSlack({ onPending: (cancel) => { pending.current = { cancel } } })
+      pending.current = null
+      if (!live.current) return
+      if (!outcome.ok) {
+        setStep('choose')
+        setError(outcome.message)
+        return
+      }
+      if (integrationMode) {
+        onConnected?.()
+        onClose()
+        return
+      }
+      // On a slate: invited here at once, with no new sign-in.
+      const listed = await Meteor.callAsync('integrations.list', {})
+      const slack = (listed?.integrations || []).find((row) => row.galleryId === 'slack' && row.status === 'active')
+      if (slack) return inviteIntegration(slack)
+      setStep('choose')
+    } catch (e) {
+      pending.current = null
+      if (!live.current) return
+      setStep('choose')
+      setError(errorText(e))
+    }
+  }
 
   // One of this person's integrations onto this slate: no sign-in, no consent again.
   async function inviteIntegration(integration) {
@@ -565,6 +600,7 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
                       if (next?.act === 'manage-agent') return onManage?.(state.here.agentId)
                       if (next?.act === 'manage-integration') return onManageIntegration?.(state.linked.integrationId)
                       if (next?.act === 'invite') return inviteIntegration(state.linked)
+                      if (item.signIn === 'slack') return slackConnect()
                       setAddress(item.url)
                       return discover(item.url)
                     }
@@ -657,6 +693,14 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
                 <Typography variant="caption" color="text.secondary" component="p" sx={{ m: 0, lineHeight: 1.5 }} data-invite-custom-footer="">Open servers connect straight away; others after you sign in on their own page or paste a key. Only public https addresses work. Once it works, you can suggest it for the Slatebox library.</Typography>
               </Box>
             )}
+          </Box>
+        )}
+        {step === 'slack' && (
+          <Box aria-live="polite" sx={(t) => ({ ...section(t), py: 3, px: 3, textAlign: 'center', display: 'grid', gap: 1 })} data-invite-slack-waiting="">
+            <Hexagon color={MARK} size={34} style={{}} />
+            <Typography variant="body1" sx={{ fontWeight: 650 }}>Allow Slatebox in the Slack window that opened.</Typography>
+            <Typography variant="body2" color="text.secondary">Slatebox reads Slack as you, only what you can see, and each message it would post waits on a card you approve. {SLACK_ADMIN_NOTE}</Typography>
+            <LinearProgress sx={{ mt: 1, height: 6, borderRadius: 3 }} />
           </Box>
         )}
         {step === 'discovering' && (

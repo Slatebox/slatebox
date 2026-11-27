@@ -18,6 +18,8 @@ import { connectorActions, integrationActions } from './actions.mjs'
 import { galleryActions } from './gallery-admin.mjs'
 import { integrationAppActions } from './integration-apps.mjs'
 import { googleActions } from './google/actions.mjs'
+import { slackActions } from './slack/actions.mjs'
+import { slackRoutes } from './slack/routes.mjs'
 import { signInRoutes } from './routes.mjs'
 import { registerTeamAddresses } from '../team-addresses/index.mjs'
 
@@ -47,6 +49,12 @@ export function register(api, context) {
     if (!started) throw starting()
     return started.google
   }))
+  // Slack, native on its Web API: connect in one click (slack.connect, slack.status). Its agent is asked
+  // like any (connectors.call); its changes wait on cards.
+  api.addActions(slackActions(() => {
+    if (!started) throw starting()
+    return started.slack
+  }))
   // /admin/ai › Gallery: the invite gallery's cards, order and recipes (aiAgents, audited), the
   // Community cards (suggested integrations approved in the library's review queue) among them.
   api.addActions(galleryActions(() => {
@@ -68,6 +76,16 @@ export function register(api, context) {
     origin: () => (started ? started.origin() : ''),
     userFor: async (req) => (started ? started.userFor(req) : null),
     log: (entry) => console.log('[connectors]', JSON.stringify(entry)),
+  })) api.addRoute(route)
+  // What Slack calls (signed by its signing secret, checked first): events, the Send to slate
+  // shortcut and /slatebox (slack/routes.mjs).
+  for (const route of slackRoutes({
+    slack: () => {
+      if (!started) throw starting()
+      return started.slack
+    },
+    events: { claim: (id, expiresAt) => (started ? started.slackEvents.claim(id, expiresAt) : Promise.resolve(false)) },
+    log: (entry) => console.log('[slack]', JSON.stringify(entry)),
   })) api.addRoute(route)
   api.onStartup(async () => {
     const { startConnectors } = await import('./meteor.js')

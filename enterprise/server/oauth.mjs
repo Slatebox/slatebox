@@ -29,28 +29,6 @@ export const START_PATH = '/connectors/oauth/start'
 export const CLIENT_DOCUMENT_PATH = '/oauth/mcp-client.json'
 export const OAUTH_LIMITS = Object.freeze({ flowMinutes: 10, metadataChars: 64 * 1024, tokenChars: 8192, scopes: 24, scopeChars: 1000 })
 
-// What Slatebox asks Slack for: exactly what the Slack card's features call, nothing more (the
-// Slack app's User Token Scopes must list these same 14: docs/slack-app-manifest.json).
-// Slack's MCP metadata lists 30, more than OAUTH_LIMITS.scopes, and asking for all of them cut
-// the list at 24 in Slack's order, which dropped search and users:read (review, 2026-11-27).
-// Each scope and the feature it serves (enterprise/common/gallery.mjs, the Slack card):
-export const SLACK_SCOPES = Object.freeze([
-  'canvases:read', // "Slack canvas" ask: slack_read_canvas brings a canvas onto the slate
-  'canvases:write', // "Create Slack canvas" write: slack_create_canvas, after the person approves its card
-  'channels:history', // "From the channel" ask: slack_read_channel (and its threads) in a public channel
-  'channels:read', // finding the public channel a person names ("#launch") for a read or a post
-  'chat:write', // "Post in Slack" write: slack_send_message, after the person approves its card
-  'groups:history', // "From the channel" ask in a private channel the person is in
-  'groups:read', // finding the private channel a person names
-  'im:history', // reading a direct message a search found, as the person who is in it
-  'mpim:history', // reading a group direct message a search found, as a person who is in it
-  'search:read.public', // "From Slack" ask (slack_search_public), and About you's `from:me` look-around
-  'search:read.private', // "From Slack" ask over private channels (slack_search_public_and_private)
-  'search:read.im', // the same search over the person's own direct messages
-  'search:read.mpim', // the same search over the person's group direct messages
-  'users:read', // About you's look-around (slack_read_user_profile), and naming who said what
-])
-
 // Apps Slatebox registers with a vendor ahead of time (vendors with no CIMD and no DCR). The
 // client id and secret come from Admin › Integration apps (integration-apps.mjs, the secret sealed)
 // or settings.connectors.oauthApps.<provider>, never from code.
@@ -99,15 +77,6 @@ export const KNOWN_PROVIDERS = Object.freeze({
   //   resourceParam   false: its token service refuses RFC 8707 `resource` (Microsoft identity v2)
   //   tokenAuth       'basic': the client secret goes in an Authorization header (Zoom accepts nothing else)
   //   authorizeParams fixed extra words on the sign-in address (Google: a refresh token needs offline access)
-  // Slack: the explicit list above, never the metadata's 30 (settings' `scopes` may still change it
-  // on purpose, and then the Slack app has to list the same scopes).
-  slack: Object.freeze({
-    issuer: 'https://mcp.slack.com',
-    name: 'Slack',
-    resources: Object.freeze(['https://mcp.slack.com']),
-    scopes: SLACK_SCOPES,
-    revoke: Object.freeze({ url: 'https://slack.com/api/auth.revoke', style: 'slack' }),
-  }),
   asana: Object.freeze({ issuer: 'https://app.asana.com', name: 'Asana', resources: Object.freeze(['https://mcp.asana.com']), revoke: Object.freeze({ url: 'https://app.asana.com/-/oauth_revoke' }) }),
   hubspot: Object.freeze({ issuer: 'https://mcp.hubspot.com', name: 'HubSpot', resources: Object.freeze(['https://mcp.hubspot.com']), revoke: Object.freeze({ url: 'https://mcp.hubspot.com/oauth/v3/token/revoke' }) }),
   box: Object.freeze({ issuer: 'https://api.box.com/', metadataIssuer: 'https://api.box.com', name: 'Box', resources: Object.freeze(['https://mcp.box.com']), revoke: Object.freeze({ url: 'https://api.box.com/oauth2/revoke' }) }),
@@ -607,9 +576,15 @@ export function refreshTokens({ server, client, refreshToken, resource, scopes, 
  * provider's at sign-in), else the known provider's (a sign-in saved before Slatebox kept one).
  * → { url, style } or null (the server offers none).
  */
+// Slack is native on its Web API now (enterprise/server/slack/, 2026-11-27), not a known MCP
+// provider; its sign-ins are still ended at auth.revoke, read Slack's way: those it saves name it,
+// and one saved when Slack was an MCP server (issuer mcp.slack.com) falls back to it.
+const SLACK_REVOKE = Object.freeze({ url: 'https://slack.com/api/auth.revoke', style: 'slack' })
+const OTHER_REVOCATION = Object.freeze({ 'https://slack.com': SLACK_REVOKE, 'https://mcp.slack.com': SLACK_REVOKE })
+
 export function revocationOf(server) {
   if (!server || typeof server !== 'object') return null
-  const known = knownOf(server.issuer)?.revoke
+  const known = knownOf(server.issuer)?.revoke || OTHER_REVOCATION[server.issuer] || null
   if (typeof server.revocationEndpoint === 'string' && server.revocationEndpoint) {
     // The vendor's own endpoint named in its metadata (or saved without its style) is still read
     // the vendor's way: Slack's auth.revoke answers 200 when it fails, wherever the URL came from.

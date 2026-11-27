@@ -191,16 +191,17 @@ export function createVault({ store, master, fetch, secretFor = () => null, log 
    * Forgets a sign-in, revoking it at its server first. The server's endpoint is the one saved with
    * the sign-in, else (a sign-in saved before Slatebox kept one, or one whose server's metadata names
    * none) the known provider's (oauth.mjs revocationOf). revokeFailed: the server did not confirm
-   * that the sign-in ended, or it offers no way to end it.
+   * that the sign-in ended, or it offers no way to end it. revoke: false when the server already
+   * ended it (Slack said the app was removed or the token revoked): forgotten here, nothing sent.
    */
-  async function remove(userId, address) {
+  async function remove(userId, address, { revoke = true } = {}) {
     const doc = await store.get(credentialId(userId, address))
     if (!doc) return { removed: false, revoked: false }
     let revoked = false
     let failed = false
     // Telling the server to end the sign-in is best effort: a refusal, a timeout or a broken
     // client never keeps the sign-in here.
-    if (doc.kind === 'oauth') {
+    if (revoke && doc.kind === 'oauth') {
       const revocation = revocationOf(doc.server)
       const refresh = master ? openQuietly(doc, 'refresh') : null
       let access = master ? openQuietly(doc, 'access') : null

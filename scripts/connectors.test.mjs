@@ -16,7 +16,7 @@ import { excalidrawGroup } from '../enterprise/server/excalidraw.mjs'
 import { promptText } from '../web/app/server/ai-control/prompts/index.mjs'
 import { connectorPrincipal, createConnectorService } from '../enterprise/server/service.mjs'
 import { connectorSettings } from '../enterprise/server/connector-settings.mjs'
-import { canonicalAddress, cardFor, filterCards, GALLERY, GROUPS, groupsIn, NATIVE_CARDS, RETIRED } from '../enterprise/common/gallery.mjs'
+import { canonicalAddress, cardFor, filterCards, GALLERY, GROUPS, groupsIn, INVITE_CARDS, NATIVE_CARDS, RETIRED } from '../enterprise/common/gallery.mjs'
 import { EDITABLE } from '../enterprise/server/gallery-admin.mjs'
 import { matchIntent } from '../enterprise/server/recipes.mjs'
 import { readFileSync } from 'node:fs'
@@ -279,7 +279,9 @@ test('gallery: curated by what an agent adds that Slatebox cannot do; drawing an
   assert.equal(cardFor('https://mcp.excalidraw.com/mcp'), null)
   assert.equal(cardFor('https://mcp.apexcharts.com/mcp'), null)
   assert.deepEqual(RETIRED.map((c) => c.id), ['excalidraw', 'apexcharts'])
-  assert.deepEqual(GALLERY.map((c) => c.id), [
+  // The invite gallery's order; Slack's card is native (its Web API), every other one an MCP server.
+  assert.deepEqual(GALLERY.map((c) => c.id), INVITE_CARDS.map((c) => c.id).filter((id) => id !== 'slack'))
+  assert.deepEqual(INVITE_CARDS.map((c) => c.id), [
     'huggingface', 'github', 'linear', 'deepwiki', 'context7', 'wolfram', 'firecrawl', 'exa',
     // the agents the owner named (2026-11-26: "GitHub, Linear, Notion, Jira, Slack, Sentry, Microsoft, google,
     // also Miro, Figma, Canva, Adobe, Replit, Lovable") come next
@@ -908,16 +910,19 @@ test('the gallery: the enabled cards, whether this person may invite (anyone sig
 test('the gallery: Slack, Asana and HubSpot appear once their vendor app is set up (they have no automatic registration)', async () => {
   const world = makeWorld()
   // and, since 2026-11-26, the other vendors with no automatic registration (docs/integrations.md says what each operator registers)
-  assert.deepEqual(GALLERY.filter((c) => c.needsApp).map((c) => c.id).sort(), ['asana', 'box', 'gmail', 'googlecalendar', 'googlechat', 'googledocs', 'googlesheets', 'hubspot',
+  // (Slack's card is native now: its Slack app, entered in Admin › Integration apps, the same way)
+  assert.deepEqual(INVITE_CARDS.filter((c) => c.needsApp).map((c) => c.id).sort(), ['asana', 'box', 'gmail', 'googlecalendar', 'googlechat', 'googledocs', 'googlesheets', 'hubspot',
     'microsoft365', 'microsoftdirectory', 'pitch', 'salesforce', 'slack', 'zoom'])
   const before = await world.service.gallery(world.ada)
   assert.ok(!before.cards.some((c) => ['slack', 'asana', 'hubspot'].includes(c.id)))
   // still named, so a search for one says it is not set up here: words only, no address to invite
-  assert.deepEqual(before.notSetUp.map((c) => c.id).sort(), GALLERY.filter((c) => c.needsApp).map((c) => c.id).sort())
+  assert.deepEqual(before.notSetUp.map((c) => c.id).sort(), INVITE_CARDS.filter((c) => c.needsApp).map((c) => c.id).sort())
   for (const card of before.notSetUp) assert.deepEqual(Object.keys(card).filter((k) => !['id', 'name', 'job', 'lands', 'group', 'keywords'].includes(k)), [], card.id)
   const withSlack = createConnectorService({ ...world.serviceOptions, oauthApps: { slack: { clientId: 'slack-app' }, asana: {} } })
   const after = await withSlack.gallery(world.ada)
   assert.ok(after.cards.some((c) => c.id === 'slack'), 'Slack shows once its app has a client id')
+  // its own one-click sign-in, never an MCP address to discover
+  assert.deepEqual(['url', 'signIn'].map((k) => after.cards.find((c) => c.id === 'slack')[k]), ['slack://workspace', 'slack'])
   assert.ok(!after.notSetUp.some((c) => c.id === 'slack') && after.notSetUp.some((c) => c.id === 'asana'))
   assert.ok(!after.cards.some((c) => c.id === 'asana'), 'an app entry without a client id is not set up')
 })

@@ -165,6 +165,13 @@ Single sign-on with the bundled Keycloak is free too. Set
 `SLATEBOX_SETTINGS='{"connectors":{"off":true}}'` to turn integrations off for
 everyone on this server. **Admin tools** shows whether they are on.
 
+Slack is built in too: create your own Slack app from the manifest in
+**Admin › AI control › Integration apps › Slack**, install it to your workspace,
+and enter three values there: its client id, client secret and signing secret.
+Your own internal app is not held to Slack's limits for unlisted apps, so also set
+`SLATEBOX_SETTINGS='{"connectors":{"slack":{"listed":true}}}'`. See
+[docs/integrations.md](../docs/integrations.md#self-hosting-setting-up-slack).
+
 This server also fetches the Community integrations Slatebox reviewed from
 `app.slatebox.com` every six hours, so people here can pick them in the
 gallery. To stop it, set

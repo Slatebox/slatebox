@@ -26,7 +26,8 @@ import req from '/server/methods/ai/req'
 import { runAIAction } from '/server/metering/context.mjs'
 import { presence } from '/server/presence/meteor'
 import { firstNameOf, sanitizeClientName } from '/imports/api/common/agent-label.mjs'
-import { AIAgents, LibraryItems, Slates } from '/imports/api/common/models'
+import { AIAgents, LibraryItems, SlatePresentations, Slates } from '/imports/api/common/models'
+import { slateShareImage, slateShareText } from '/server/common/share-image.mjs'
 import { setLibraryIntegrations } from '/server/library/integration-hooks.mjs'
 import { setProfileIntegrations } from '/server/profile/integration-hooks.mjs'
 import { setAccountIntegrations } from '/server/integrations/account-removal.mjs'
@@ -41,13 +42,14 @@ import { communityCard, liveGallery } from './gallery-admin.mjs'
 import { CLOUD_LIBRARY_LIMITS, CLOUD_ORIGIN, cloudLibraryOn, createCloudCatalog } from './cloud-library.mjs'
 import { createVault } from './credentials.mjs'
 import { createSignIn, probe } from './signin.mjs'
-import { migrateIntegrations, resumeLapsedIntegrations } from './integrations-migrate.mjs'
+import { migrateIntegrations, resumeLapsedIntegrations, retireSlackMcp } from './integrations-migrate.mjs'
 import { itemsFromLayout } from './translate.mjs'
 import { createGoogleService, googleConfiguration, googleSettings, GOOGLE_ADDRESS } from './google/google.mjs'
-import { NATIVE_CARDS } from '../common/gallery.mjs'
+import { createSlackService, slackOnlyFetch, slackSettings, SLACK_ADDRESS } from './slack/slack.mjs'
+import { INVITE_CARDS, NATIVE_CARDS } from '../common/gallery.mjs'
 import { randomBytes } from 'node:crypto'
 import sharp from 'sharp'
-import { deleteStoredFile, storeImage, storedFileKey } from '/server/common/fileStore'
+import { deleteStoredFile, storedFileBase, storeImage, storedFileKey } from '/server/common/fileStore'
 
 export const McpConnections = new Mongo.Collection('mcpConnections')
 // Never published: sealed tokens, sign-in flows and registrations stay on the server.
@@ -69,6 +71,13 @@ const CloudCatalog = new Mongo.Collection('connectorCloudCatalog')
 // The OAuth apps an administrator entered (Admin › AI control › Integration apps): one row per
 // provider, the client secret sealed. Never published: read through connectors.apps.list.
 const ConnectorOAuthApps = new Mongo.Collection('connectorOAuthApps')
+// Slack (native, on its Web API): each workspace's bot token (sealed; link previews, the Send to
+// slate shortcut, /slatebox), Slack's event ids already handled (hashed, an hour), and the read gate
+// every server process shares (a channel or thread once a minute per workspace while unlisted).
+// Never published.
+const SlackWorkspaces = new Mongo.Collection('slackWorkspaces')
+const SlackEvents = new Mongo.Collection('slackEvents')
+const SlackReadGates = new Mongo.Collection('slackReadGates')
 const oauthAppRows = {
   get: (provider) => ConnectorOAuthApps.findOneAsync({ _id: provider }),
   all: () => ConnectorOAuthApps.find({}).fetchAsync(),
@@ -195,6 +204,67 @@ const connectionsStore = {
   remove: (id) => McpConnections.removeAsync({ _id: id }),
 }
 
+const workspacesStore = {
+  get: (id) => SlackWorkspaces.findOneAsync({ _id: id }),
+  put: ({ _id, ...doc }) => SlackWorkspaces.upsertAsync({ _id }, { $set: doc }),
+  find: (query) => SlackWorkspaces.find(query).fetchAsync(),
+  remove: (id) => SlackWorkspaces.removeAsync({ _id: id }),
+}
+
+// Taken once per period: the row's next time moves only when it has passed (or the row is new; two
+// processes inserting at once: one wins, the other is told no).
+const gatesStore = {
+  async claim(id, at, until) {
+    const raw = SlackReadGates.rawCollection()
+    const moved = await raw.updateOne({ _id: id, nextAt: { $lte: at } }, { $set: { nextAt: until } })
+    if (moved.modifiedCount > 0) return true
+    try {
+      await raw.insertOne({ _id: id, nextAt: until })
+      return true
+    } catch (error) {
+      if (error?.code === 11000) return false
+      throw error
+    }
+  },
+  get: (id) => SlackReadGates.findOneAsync({ _id: id }),
+  hold: (id, until) => SlackReadGates.rawCollection().updateOne({ _id: id }, { $max: { nextAt: until } }, { upsert: true }),
+}
+
+const slackEventsStore = {
+  async claim(id, expiresAt) {
+    try {
+      await SlackEvents.rawCollection().insertOne({ _id: id, expiresAt })
+      return true
+    } catch (error) {
+      if (error?.code === 11000) return false
+      throw error
+    }
+  },
+}
+
+// The slates a person may put a Slack message on (their own, newest first), by name: the Send to slate
+// modal and /slatebox. The modal's answer checks the person's rights again (forUser).
+async function editableSlates(userId, { query = '', limit = 100 } = {}) {
+  const words = String(query || '').trim().slice(0, 80)
+  const named = words ? { 'options.name': { $regex: words.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } } : {}
+  const rows = await Slates.find({ userId, ...named }, { sort: { lastSaved: -1 }, limit: Math.min(100, limit), fields: { shareId: 1, 'options.name': 1, creative: 1, nativeCanvasDrawing: 1 } }).fetchAsync()
+  return rows.filter(drawable).map((slate) => ({ shareId: slate.shareId, name: String(slate.options?.name || 'Untitled slate').slice(0, 80) }))
+}
+
+// A link's preview in Slack, by the slate's own visibility (the rule of its social preview, startup.js):
+// a public slate's name and picture, a published presentation's; anything else null ("Private slate").
+async function publicPreview(kind, id) {
+  if (kind === 'present') {
+    const deck = await SlatePresentations.findOneAsync({ slateShareId: id, isPublished: true }, { fields: { name: 1, description: 1, imageUrl: 1 } })
+    return deck?.name ? { title: deck.name, description: deck.description || '', imageUrl: deck.imageUrl || null } : null
+  }
+  const slate = await Slates.findOneAsync({ shareId: id, 'options.isPublic': true, 'options.isPrivate': { $ne: true }, 'options.isUnlisted': { $ne: true } },
+    { fields: { 'options.id': 1, 'options.name': 1, 'options.description': 1, 'options.isPublic': 1, 'options.isPrivate': 1, 'options.isUnlisted': 1, 'options.staticImage': 1 } })
+  if (!slate) return null
+  const text = slateShareText(slate)
+  return { title: text?.title || 'A slate on Slatebox', description: text?.description || '', imageUrl: slateShareImage(slate, storedFileBase()) }
+}
+
 const storeOf = (collection) => ({
   insert: (doc) => collection.insertAsync(doc),
   findOne: (query) => collection.findOneAsync(query),
@@ -236,24 +306,28 @@ let communitySource = async () => []
 let galleryCache = { at: 0, cards: null }
 async function gallery() {
   if (galleryCache.cards && Date.now() - galleryCache.at < 5000) return galleryCache.cards
-  const cards = liveGallery(await findGallery().catch(() => []), undefined, { extra: await communitySource().catch(() => []) })
+  const cards = liveGallery(await findGallery().catch(() => []), INVITE_CARDS, { extra: await communitySource().catch(() => []) })
   galleryCache = { at: Date.now(), cards }
   return cards
 }
 
-// Whether the Google card is on (/admin/ai › Gallery), read through the same cache as the gallery.
-async function googleEnabled() {
+// Whether a native card is on (/admin/ai › Gallery): Google Drive's, Slack's.
+async function nativeEnabled(id) {
   const docs = await findGallery().catch(() => [])
-  return liveGallery(docs, NATIVE_CARDS).some((card) => card.id === 'googledrive')
+  return liveGallery(docs, NATIVE_CARDS).some((card) => card.id === id)
 }
+const googleEnabled = () => nativeEnabled('googledrive')
 
 export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
   const settings = connectorSettings(Meteor.settings, { development: Meteor.isDevelopment })
   const google = () => googleSettings(Meteor.settings, { development: Meteor.isDevelopment })
+  const slackConfig = () => slackSettings(Meteor.settings, { development: Meteor.isDevelopment })
   const fetch = createMcpFetch({ devOrigins: settings.devOrigins, userAgent: settings.userAgent })
   // Sign-in's own fetch: the same checks, may GET metadata, follows no redirect, small answers.
   // DELETE: GitHub ends a sign-in with one (oauth.mjs KNOWN_PROVIDERS.github.revoke).
-  const signInFetch = createMcpFetch({ devOrigins: [...settings.devOrigins, ...google().devOrigins], userAgent: settings.userAgent, methods: ['GET', 'POST', 'DELETE'], maxRedirects: 0, maxBytes: 256 * 1024, timeoutMs: 10000 })
+  const signInFetch = createMcpFetch({ devOrigins: [...settings.devOrigins, ...google().devOrigins, ...slackConfig().devOrigins], userAgent: settings.userAgent, methods: ['GET', 'POST', 'DELETE'], maxRedirects: 0, maxBytes: 256 * 1024, timeoutMs: 10000 })
+  // Slack's Web API: the same address checks, Slack's own hosts only, no redirects.
+  const slackFetch = slackOnlyFetch(createMcpFetch({ devOrigins: slackConfig().devOrigins, userAgent: settings.userAgent, methods: ['POST'], maxRedirects: 0, maxBytes: 2 * 1024 * 1024, timeoutMs: 15000 }), { devOrigins: slackConfig().devOrigins })
   // Google's APIs: the same address checks; uploads are larger, downloads follow Google's own redirects.
   const googleFetch = createMcpFetch({ devOrigins: google().devOrigins, userAgent: settings.userAgent, methods: ['GET', 'POST', 'PATCH', 'DELETE'], maxBytes: 4 * 1024 * 1024, timeoutMs: 30000 })
   // The app's existing master key (never generated here). Without it, sign-in servers are not offered.
@@ -281,6 +355,8 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     // Hosts and a reason only (credentials.mjs): never a token.
     log: (entry) => console.warn('[connectors]', JSON.stringify({ ...entry, at: new Date().toISOString() })),
   })
+  // A native integration's sign-in callback (Slack's OAuth v2), set once its service exists.
+  const natives = {}
   const signIn = createSignIn({
     flows: flowsStore,
     clients: clientsStore,
@@ -290,6 +366,7 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     apps: () => integrationApps.apps(),
     origin: appOrigin,
     devOrigins: settings.devOrigins,
+    natives,
   })
   // Google tells the connector service when it is connected again (set once the service exists).
   let resumeGoogle = async () => {}
@@ -318,10 +395,39 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     itemsFromLayout,
     audit: (entry) => console.log('[google]', JSON.stringify({ ...entry, at: new Date().toISOString() })),
   })
-  // The Drive agent is a native session beside the MCP one: the same service asks both.
+  // Slack tells the connector service when it is connected again, and moves an MCP Slack integration
+  // in place (both set once the service exists).
+  let resumeSlack = async () => {}
+  let moveToNative = async () => null
+  const slackService = createSlackService({
+    vault,
+    integrations: integrationsStore,
+    connections: connectionsStore,
+    workspaces: workspacesStore,
+    gates: gatesStore,
+    signIn,
+    fetch: slackFetch,
+    config: slackConfig,
+    apps: () => integrationApps.apps(),
+    origin: appOrigin,
+    enabled: () => nativeEnabled('slack'),
+    master,
+    access: { forUser },
+    editableSlates,
+    publicPreview,
+    applyOperations: agentSave,
+    presence,
+    itemsFromLayout,
+    onConnected: (integration) => resumeSlack(integration),
+    moveNative: (old, set) => moveToNative(old, set),
+    audit: (entry) => console.log('[slack]', JSON.stringify({ ...entry, at: new Date().toISOString() })),
+  })
+  natives.slack = (flow, code) => slackService.finishInstall(flow, code)
+  // The Drive and Slack agents are native sessions beside the MCP one: the same service asks them all.
+  const nativeSession = (address) => (address === GOOGLE_ADDRESS ? googleService.driveSession : address === SLACK_ADDRESS ? slackService.slackSession : null)
   const session = {
-    discover: (address, f, options) => (address === GOOGLE_ADDRESS ? googleService.driveSession.discover(address, f, options) : discover(address, f, options)),
-    callTool: (address, f, call, options) => (address === GOOGLE_ADDRESS ? googleService.driveSession.callTool(address, f, call, options) : callTool(address, f, call, options)),
+    discover: (address, f, options) => (nativeSession(address) ? nativeSession(address).discover(address, f, options) : discover(address, f, options)),
+    callTool: (address, f, call, options) => (nativeSession(address) ? nativeSession(address).callTool(address, f, call, options) : callTool(address, f, call, options)),
   }
   const service = createConnectorService({
     oauthApps: () => integrationApps.apps(),
@@ -349,7 +455,7 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     slateSettings: slateSettingsStore,
     slateList,
     // Google's card off in /admin/ai (or its client or key gone): Drive agents stop, and none joins.
-    nativeOn: (address) => (address === GOOGLE_ADDRESS ? googleService.usable() : true),
+    nativeOn: (address) => (address === GOOGLE_ADDRESS ? googleService.usable() : address === SLACK_ADDRESS ? slackService.usable() : true),
     // Async for every integration: the service awaits it (a plain null here once failed every non-Google disconnect).
     forget: async (integration) => (integration.address === GOOGLE_ADDRESS ? googleService.forget(integration.ownerId) : null),
     outside: outsideStore,
@@ -400,12 +506,16 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
   // first (only while enterprise code is unlocked; a locked server has no cards).
   deps.suggestionGate = (principal, slate, choice) => (isUnlocked() ? service.gate(principal, slate, choice) : null)
   resumeGoogle = (integration) => service.resumeIntegration(integration)
+  resumeSlack = (integration) => service.resumeIntegration(integration)
+  moveToNative = (old, set) => service.moveNative(old, set)
   // A removed account (users.delete, a team deleted, a member removed): its integrations are
   // disconnected and each sign-in revoked at its vendor, whether or not enterprise code is unlocked
-  // (a privacy promise); the app then removes every row the person owns (server/integrations).
+  // (a privacy promise); the app then removes every row the person owns (server/integrations). The
+  // Slack workspaces it installed no longer name it (their bot token is the workspace's).
   setAccountIntegrations({
     forgetPerson: (userId) => service.forgetPerson(userId, {
       credentialRows: (id) => McpCredentials.find({ ownerId: id }, { fields: { ownerId: 1, address: 1 } }).fetchAsync(),
+      natives: (id) => slackService.forgetPerson(id),
     }),
   })
   Meteor.startup(async () => {
@@ -420,6 +530,10 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     await OutsideActions.rawCollection().createIndex({ slateId: 1, actionId: 1 })
     await OutsideActions.rawCollection().createIndex({ connectionId: 1 })
     await OutsideActions.rawCollection().createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
+    await OutsideActions.rawCollection().createIndex({ ownerId: 1 })
+    await Integrations.rawCollection().createIndex({ kind: 1, slackTeamId: 1, slackUserId: 1 })
+    await SlackWorkspaces.rawCollection().createIndex({ teamId: 1 })
+    await SlackEvents.rawCollection().createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
     // Connect once: each person's agents already on slates become their integrations (idempotent).
     const moved = await migrateIntegrations({ connections: connectionsStore, integrations: integrationsStore }).catch((error) => {
       console.warn('[connectors] integrations migration failed', error?.message)
@@ -431,6 +545,12 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
       return null
     })
     if (resumed?.resumed) console.log('[connectors]', JSON.stringify({ kind: 'integrations_resumed', ...resumed }))
+    // Slack moved to its Web API: integrations still at its MCP address ask to connect again.
+    const retired = await retireSlackMcp({ connections: connectionsStore, integrations: integrationsStore }).catch((error) => {
+      console.warn('[connectors] retiring Slack MCP failed', error?.message)
+      return null
+    })
+    if (retired?.marked) console.log('[connectors]', JSON.stringify({ kind: 'slack_mcp_retired', ...retired }))
   })
   // Hourly: forget (and revoke) sign-ins no agent uses any more.
   const sweep = () => !isUnlocked() ? Promise.resolve() : service.sweep(() => McpCredentials.find({}, { fields: { ownerId: 1, address: 1, createdAt: 1 } }).fetchAsync())
@@ -473,7 +593,7 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     google: googleConfiguration(google(), { vaultKey: Boolean(master) }),
     ...(cloud && { cloudLibrary: await cloud.catalog.status() }),
   })
-  return { service, google: googleService, signIn, origin: appOrigin, userFor, findGallery, configured, community: () => communitySource(), integrationApps }
+  return { service, google: googleService, slack: slackService, slackEvents: slackEventsStore, signIn, origin: appOrigin, userFor, findGallery, configured, community: () => communitySource(), integrationApps }
 }
 
 // Slatebox Cloud's Community cards on a self-hosted install: pulled at start and every few hours by one
