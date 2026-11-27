@@ -16,11 +16,70 @@ const PASS_THROUGH = Object.freeze({ getValidator: () => (input) => ({ valid: tr
 export const SESSION_LIMITS = Object.freeze({ requestMs: 20000, tools: 64 })
 
 export class McpProblem extends Error {
-  constructor(code, message) {
+  // details: safe fields a page may show (settingsUrl, checked by settingsLinkOf). status: the
+  // server's HTTP status, for the audit line only.
+  constructor(code, message, { details, status } = {}) {
     super(message)
     this.name = 'McpProblem'
     this.code = code
+    if (details !== undefined) this.details = details
+    if (Number.isInteger(status)) this.status = status
   }
+}
+
+// Hosting domains anyone can put a site under: two hosts there are not the same owner.
+const SHARED_SITES = new Set(['github.io', 'githubusercontent.com', 'vercel.app', 'netlify.app', 'pages.dev', 'workers.dev', 'herokuapp.com', 'onrender.com', 'fly.dev', 'ngrok.io', 'ngrok-free.app', 'ngrok.app', 'trycloudflare.com', 'azurewebsites.net', 'cloudfront.net', 'amazonaws.com', 'appspot.com', 'web.app', 'firebaseapp.com', 'glitch.me', 'replit.app', 'repl.co', 'railway.app', 'deno.dev', 'run.app', 'modal.run', 'blogspot.com'])
+const SECOND_LEVEL = new Set(['co', 'com', 'net', 'org', 'gov', 'ac', 'edu', 'ne', 'or', 'go'])
+
+/** The registrable domain of a host (mcp.slack.com → slack.com; x.co.uk → keeps three), or null for an IP, a single label or a shared host. */
+export function siteOf(host) {
+  const name = String(host || '').toLowerCase().replace(/:\d+$/, '').replace(/\.$/, '')
+  if (!name || name.startsWith('[') || /^[\d.]+$/.test(name) || !/^[a-z0-9.-]+$/.test(name)) return null
+  const labels = name.split('.')
+  if (labels.length < 2 || labels.some((label) => !label)) return null
+  const take = labels.length >= 3 && labels.at(-1).length === 2 && SECOND_LEVEL.has(labels.at(-2)) ? 3 : 2
+  const site = labels.slice(-take).join('.')
+  return SHARED_SITES.has(site) ? null : site
+}
+
+// The JSON-RPC error a server sent with an HTTP refusal ({ code, message }), or null. The SDK keeps
+// the body as data.text (and, on a POST, in its message after "endpoint: ").
+const rpcErrorIn = (body) => {
+  if (typeof body !== 'string' || body.length > 16384) return null
+  try {
+    const parsed = JSON.parse(body)
+    const rpc = parsed?.error
+    return parsed?.jsonrpc === '2.0' && rpc && Number.isInteger(rpc.code) && typeof rpc.message === 'string' ? { code: rpc.code, message: rpc.message } : null
+  } catch {
+    return null
+  }
+}
+export function rpcErrorOf(error) {
+  const candidates = [error, error?.data?.cause, error?.cause].filter((candidate) => candidate && typeof candidate === 'object')
+  const bodies = candidates.flatMap((candidate) => [candidate.data?.text, String(candidate.message || '').match(/endpoint: (\{[\s\S]*\})\s*$/)?.[1]])
+  return bodies.map(rpcErrorIn).find(Boolean) || null
+}
+
+/**
+ * A settings page the refusing server named, only when it is an https link on the server's own
+ * registrable domain (api.slack.com for mcp.slack.com): shown as a link, never as the server's words.
+ */
+export function settingsLinkOf(message, host) {
+  const site = siteOf(host)
+  if (!site) return null
+  const match = String(message || '').match(/https:\/\/[^\s"'<>()[\]{}`]+/)
+  if (!match) return null
+  const raw = match[0].replace(/[.,;:!?]+$/, '')
+  if (raw.length > 300) return null
+  let url
+  try {
+    url = new URL(raw)
+  } catch {
+    return null
+  }
+  if (url.protocol !== 'https:' || url.username || url.password || url.port) return null
+  if (siteOf(url.hostname) !== site) return null
+  return url.href
 }
 
 // What a person is told, by what went wrong. Never the server's own error text.
@@ -31,9 +90,20 @@ export function problemOf(error, host, { signedIn = false } = {}) {
   if (cause) return new McpProblem(cause.code, cause.message)
   const text = String(error?.message || '')
   const status = Number(error?.status ?? error?.code ?? error?.data?.status)
-  if (/insufficient_scope/i.test(text) || (status === 403 && signedIn)) return new McpProblem('needs_more_access', `${host} needs more access to do that. Sign in again to allow it.`)
+  if (/insufficient[_ ]scope/i.test(text) || error?.name === 'InsufficientScopeError') return new McpProblem('needs_more_access', `${host} needs more access to do that. Sign in again to allow it.`)
   if (status === 401 || /\b401\b|Unauthorized|invalid_token/i.test(text)) return new McpProblem('needs_sign_in', `${host} needs you to sign in.`)
-  if (/\b404\b|\b405\b|\b406\b|\b415\b|not\s+found|unexpected content type|Unexpected token|JSON/i.test(text))
+  // An MCP server that answered, in JSON-RPC, that it will not take this app (Slack's "App is not
+  // enabled for Slack MCP server access"): its words are not shown, only a link to its settings on
+  // its own domain when it named one.
+  const rpc = status === 400 || status === 403 ? rpcErrorOf(error) : null
+  if (rpc) {
+    const settingsUrl = settingsLinkOf(rpc.message, host)
+    return new McpProblem('app_refused', `${host} refused this connection. Its owner may need to allow this app.`, { status, ...(settingsUrl && { details: { settingsUrl } }) })
+  }
+  if (status === 403 && signedIn) return new McpProblem('needs_more_access', `${host} needs more access to do that. Sign in again to allow it.`)
+  // Not an MCP server: no such path, or a reply that is not MCP at all (a web page, broken JSON).
+  // A JSON-RPC error is an MCP server answering, so the word "JSON" alone is not a sign.
+  if ([404, 405, 406, 415].includes(status) || /\b404\b|\b405\b|\b406\b|\b415\b|not\s+found|unexpected content type|Unexpected token|unusable reply|in JSON at position|is not valid JSON|JSON\.parse|Unexpected end of JSON/i.test(text))
     return new McpProblem('not_mcp', `That address didn't answer like an MCP server. Is there a /mcp path?`)
   if (status === 403 || status === 429 || /\b1010\b|\b429\b|blocked|forbidden/i.test(text)) return new McpProblem('blocked', `${host} blocked the connection.`)
   if (/timed? ?out|timeout/i.test(text)) return new McpProblem('timeout', `${host} took too long to answer.`)

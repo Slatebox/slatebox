@@ -348,7 +348,12 @@ export function createConnectorService({
 
   const fromProblem = (error) => {
     if (error instanceof ConnectorRefused) return error
-    if (error?.code && typeof error.message === 'string' && error.name === 'McpProblem') return new ConnectorRefused(422, error.code, error.message)
+    if (error?.code && typeof error.message === 'string' && error.name === 'McpProblem') {
+      const refusal = new ConnectorRefused(422, error.code, error.message, error.details)
+      // The server's own HTTP status, for the audit line (never sent to the page).
+      if (Number.isInteger(error.status)) Object.defineProperty(refusal, 'upstreamStatus', { value: error.status })
+      return refusal
+    }
     return error
   }
 
@@ -421,6 +426,16 @@ export function createConnectorService({
   async function discoverNow(principal, { shareId, address: raw }) {
     const slate = await requirePerson(principal, shareId)
     const { address, host } = checkAddress(raw)
+    try {
+      return await discoverAt(principal, slate, address, host)
+    } catch (error) {
+      // Why a discovery failed, for whoever reads the logs: the code and the server's status, never its words.
+      audit({ kind: 'discover_failed', userId: principal.userId, host, code: typeof error?.code === 'string' ? error.code : 'unknown', status: error?.upstreamStatus ?? (Number.isInteger(error?.status) ? error.status : null) })
+      throw error
+    }
+  }
+
+  async function discoverAt(principal, slate, address, host) {
     const cards = await gallery()
     const card = cardFor(address, cards)
     // Already on this slate as this person's agent: the page says so and offers Manage (connect
@@ -1269,7 +1284,7 @@ export function createConnectorService({
       const known = fromSignIn(error)
       problem = known instanceof ConnectorRefused || known?.name === 'McpProblem' ? known.message : 'The server could not be reached.'
       // The server refused before doing anything (signed out, blocked, no access): a plain failure.
-      if (error instanceof ConnectorRefused || ['needs_sign_in', 'needs_more_access', 'blocked', 'not_mcp'].includes(error?.code)) sent = false
+      if (error instanceof ConnectorRefused || ['needs_sign_in', 'needs_more_access', 'blocked', 'not_mcp', 'app_refused'].includes(error?.code)) sent = false
     }
     const at = new Date(now())
     const failed = problem || raw?.isError === true

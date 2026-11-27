@@ -57,7 +57,7 @@ import LockOutlined from '@mui/icons-material/LockOutlined'
 import WarningAmberRounded from '@mui/icons-material/WarningAmberRounded'
 import Hexagon from '/imports/ui/components/AgentMark.jsx'
 import { enterpriseSlots } from '/imports/api/client/enterprise-slots.mjs'
-import { GALLERY, addressProblem, cardFor, filterCards, groupsIn, lookalikeHost } from '../common/gallery.mjs'
+import { GALLERY, addressProblem, cardFor, filterCards, groupsIn, lookalikeHost, settingsLinkOf } from '../common/gallery.mjs'
 import { cardState, connectedAction, STATUS_WORDS } from '../common/integration-words.mjs'
 import { followSignIn, openSignInWindow } from './signin'
 import SuggestIntegration from './SuggestIntegration'
@@ -138,10 +138,20 @@ Callout.propTypes = { kind: PropTypes.oneOf(['info', 'warning', 'error']), child
 function Lookalike() {
   return <Callout kind="warning">This address looks like it stands for another site. Check it before you go on.</Callout>
 }
-function Problem({ text }) {
-  return <Callout kind="error" role="alert">{text}</Callout>
+// link: a refusing server's own settings page (settingsLinkOf), opened in a new tab; the text is ours.
+function Problem({ text, link = null }) {
+  return (
+    <Callout kind="error" role="alert">
+      {text}
+      {link && (
+        <Box component="span" sx={{ display: 'block', mt: 0.5 }}>
+          <Box component="a" href={link} target="_blank" rel="noopener noreferrer" data-invite-problem-settings="" sx={{ color: 'inherit', fontWeight: 600 }}>Open settings</Box>
+        </Box>
+      )}
+    </Callout>
+  )
 }
-Problem.propTypes = { text: PropTypes.string.isRequired }
+Problem.propTypes = { text: PropTypes.string.isRequired, link: PropTypes.string }
 
 
 const RULE_CHOICES = [
@@ -210,7 +220,10 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
   const [allowed, setAllowed] = useState({})
   const [sees, setSees] = useState('request')
   const [showAll, setShowAll] = useState(false)
-  const [error, setError] = useState('')
+  // The problem shown in the dialog, and a link to the refusing server's settings when it named one.
+  const [problem, setProblem] = useState({ text: '', link: null })
+  const error = problem.text
+  const setError = (text, link = null) => setProblem({ text: text || '', link })
   // A problem with the address pasted under Custom, shown under that field.
   const [addressError, setAddressError] = useState('')
   // A pasted address (or a card) for an agent of yours already here: { agentId, name, text }.
@@ -314,12 +327,14 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
     } catch (e) {
       if (!live.current) return
       setStep('choose')
-      if (fromCustom) {
+      // A server that refused this app, with its settings page: the dialog's problem, with the link.
+      const link = settingsLinkOf(e)
+      if (fromCustom && !link) {
         enterpriseSlots.lockIfRefused(e)
         setAddressError(addressProblem(e))
         return
       }
-      setError(errorText(e))
+      setError(errorText(e), link)
     }
   }
 
@@ -439,7 +454,7 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
       <DialogContent sx={{ px: { xs: 2, sm: 3 }, py: { xs: 2, sm: 2.5 }, borderTop: 'none' }}>
         {step === 'choose' && upgrade && (
           <Box sx={{ display: 'grid', gap: 1.5 }} data-invite-upgrade-problem="">
-            {error ? <Problem text={error} /> : <Typography variant="body2">Close this and try again from the Integrations page.</Typography>}
+            {error ? <Problem text={error} link={problem.link} /> : <Typography variant="body2">Close this and try again from the Integrations page.</Typography>}
           </Box>
         )}
         {step === 'choose' && !upgrade && (
@@ -481,7 +496,7 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
                 ))}
               </Tabs>
             </Box>
-            {error && <Problem text={error} />}
+            {error && <Problem text={error} link={problem.link} />}
             {already && (
               <Box role="status" data-invite-already={already.name} sx={(t) => ({ ...section(t), display: 'flex', alignItems: 'center', gap: 1 })}>
                 <Typography variant="body2" sx={{ flex: 1 }}>✓ {already.text || `${already.name} is already on this slate.`}</Typography>
@@ -700,7 +715,7 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
                 )}
               </Box>
             )}
-            {error && <Problem text={error} />}
+            {error && <Problem text={error} link={problem.link} />}
           </Box>
         )}
         {step === 'reconnected' && found && (
@@ -837,7 +852,7 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
                 <span>Try: “{card.try}”</span>
               </Box>
             )}
-            {error && <Problem text={error} />}
+            {error && <Problem text={error} link={problem.link} />}
           </Box>
         )}
       </DialogContent>

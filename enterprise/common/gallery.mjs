@@ -1059,6 +1059,19 @@ const ADDRESS_HELP = Object.freeze({
   private_address: 'Slatebox only connects public servers, not ones on a private network or this computer. Use the server\'s public https address.',
   dead_listing: 'This address points to a service that shut down.',
 })
+// A refusing server's settings page (app_refused: the server checked it is https on its own domain),
+// shown as an "Open settings" link. Checked again here: only an https link, never anything else.
+export function settingsLinkOf(error) {
+  if ((error?.error || error?.code) !== 'app_refused') return null
+  const raw = error?.details?.settingsUrl
+  if (typeof raw !== 'string' || raw.length > 300) return null
+  try {
+    const url = new URL(raw)
+    return url.protocol === 'https:' && !url.username && !url.password ? url.href : null
+  } catch {
+    return null
+  }
+}
 export function addressProblem(error) {
   const code = error?.error || error?.code
   const said = error?.reason || error?.message || ''

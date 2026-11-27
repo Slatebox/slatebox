@@ -33,6 +33,7 @@ import { agentColor } from '/imports/ui/components/AgentPresenceListener.jsx'
 import { enterpriseSlots } from '/imports/api/client/enterprise-slots.mjs'
 import InviteWalkthrough from './InviteWalkthrough'
 import { changesOffer, toolSummary } from '../common/integration-words.mjs'
+import { settingsLinkOf } from '../common/gallery.mjs'
 import GoogleIntegration from './GoogleIntegration'
 import SuggestIntegration from './SuggestIntegration'
 import { AppPageHeader } from '/imports/ui/common/AppPage.jsx'
@@ -66,6 +67,8 @@ function ReviewDialog({ integration, onClose, onDone, onUpgrade }) {
   const [review, setReview] = useState(null)
   const [allowed, setAllowed] = useState({})
   const [error, setError] = useState('')
+  // The refusing server's settings page, when it named one on its own domain (settingsLinkOf).
+  const [errorLink, setErrorLink] = useState(null)
   const [saving, setSaving] = useState(false)
   useEffect(() => {
     let live = true
@@ -73,7 +76,11 @@ function ReviewDialog({ integration, onClose, onDone, onUpgrade }) {
       if (!live) return
       setReview(answer)
       setAllowed(Object.fromEntries((answer.tools || []).map((tool) => [tool.name, tool.policy === 'allow'])))
-    }).catch((e) => live && setError(errorText(e)))
+    }).catch((e) => {
+      if (!live) return
+      setError(errorText(e))
+      setErrorLink(settingsLinkOf(e))
+    })
     return () => { live = false }
   }, [integration.integrationId])
   const lookups = (review?.tools || []).filter((tool) => tool.group === 'lookup')
@@ -89,6 +96,7 @@ function ReviewDialog({ integration, onClose, onDone, onUpgrade }) {
   const save = async () => {
     setSaving(true)
     setError('')
+    setErrorLink(null)
     try {
       await Meteor.callAsync('integrations.connect', { address: review.address, name: integration.name, tools: review.tools.map(({ name, hash }) => ({ name, hash, policy: allowed[name] ? 'allow' : 'off' })) })
       onDone()
@@ -126,7 +134,12 @@ function ReviewDialog({ integration, onClose, onDone, onUpgrade }) {
             <Typography variant="caption" color="text.secondary">Saving resumes {integration.name} on every slate it is on. A tool you turned off on one slate stays off there.</Typography>
           </Box>
         )}
-        {error && <Typography role="alert" color="error" variant="body2" sx={{ mt: 1 }}>{error}</Typography>}
+        {error && (
+          <Typography role="alert" color="error" variant="body2" sx={{ mt: 1 }}>
+            {error}
+            {errorLink && <> <a href={errorLink} target="_blank" rel="noopener noreferrer" data-review-problem-settings="">Open settings</a></>}
+          </Typography>
+        )}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
