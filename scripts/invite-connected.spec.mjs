@@ -2,7 +2,8 @@
 // should be quicker to invite an already connected mcp to the slate - they can just connect here without
 // 'asking' first"). A fresh person (no cookies, no storage) connects a test MCP server on the
 // Integrations page, opens a new slate, and:
-//   1. "+ Invite agent" opens the quick panel (no dialog) with the connected agent at the top and Add;
+//   1. "+ Invite agent" in the agents menu (the corner's presence pill, beside Undo and Redo) opens the
+//      quick panel (no dialog) with the connected agent at the top and Add;
 //   2. one click on Add puts it on the slate: its named cursor greets, its chip opens, no dialog ever
 //      opened on the way, and its changes outside Slatebox still say Ask first;
 //   3. the panel then says ✓ On this slate, and More agents still opens the full walkthrough.
@@ -65,8 +66,17 @@ test('a connected agent is added to a slate with one click on Add: cursor and ch
   await page.goto(ORIGIN + '/new?empty=1')
   await page.getByRole('button', { name: 'Start with an empty slate' }).click({ timeout: 15000 }).catch(() => {})
   await page.waitForURL(/\/canvas\/[A-Za-z0-9]+$/, { timeout: 120000 })
-  const open = page.locator('[data-invite-agent-open]')
-  await expect(open).toBeVisible({ timeout: 60000 })
+  // + Invite agent lives in the agents menu on the corner's presence pill: open the menu, then choose it.
+  const agentsMenu = page.locator('[data-agents-menu-open]')
+  await expect(agentsMenu).toBeVisible({ timeout: 60000 })
+  const open = {
+    click: async () => {
+      await agentsMenu.click()
+      const invite = page.getByRole('menuitem', { name: 'Invite agent' })
+      await expect(invite).toHaveAttribute('data-invite-agent-open', '')
+      await invite.click()
+    },
+  }
   // Count every dialog that opens from here on.
   await page.evaluate(() => {
     window.__dialogs = 0

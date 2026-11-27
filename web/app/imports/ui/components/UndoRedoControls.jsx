@@ -26,12 +26,12 @@ export default function UndoRedoControls({ slate, narrow = false }) {
       if (outcome?.message) setSaid({ key: Date.now(), text: outcome.message })
     })
   }, [slate])
-  // From a tablet up the pill sits in the bottom-left corner, where other bottom-left controls (Agent
-  // tasks) would cover it: they start right of where it ends (--sb-undo-redo-end, in the viewport).
+  // The pill sits in the bottom-left corner (a column on a phone), where the presence pill
+  // (CornerPresence) would cover it: that starts right of where it ends (--sb-undo-redo-end, in the viewport).
   const pill = React.useRef(null)
   React.useLayoutEffect(() => {
     const node = pill.current
-    if (!node || narrow || typeof document === 'undefined') return undefined
+    if (!node || typeof document === 'undefined') return undefined
     const root = document.documentElement
     const place = () => root.style.setProperty('--sb-undo-redo-end', `${Math.round(node.getBoundingClientRect().right)}px`)
     place()

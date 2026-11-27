@@ -87,7 +87,7 @@ export function agentChatReply(name, result = {}) {
     : `${waiting === 1 ? 'One suggestion is' : `${waiting} suggestions are`} on the slate: Keep all or Discard all on its frame.`)
   if (saved && (what || !cards.length)) parts.push(what ? `Added ${what} to the slate.` : `Added ${saved === 1 ? 'one change' : `${saved} changes`} to the slate.`)
   // Saved directly (no suggestion to keep): its cards are decided on the agent's chip.
-  if (saved && !waiting && cards.length) parts.push(`${decide} on ${name}'s chip under the canvas.`)
+  if (saved && !waiting && cards.length) parts.push(`${decide} in Agents under the canvas (${name}).`)
   if (!waiting && !saved && !said) parts.push(`${name} had nothing to suggest for that.`)
   for (const line of Array.isArray(result.left) ? result.left : []) if (typeof line === 'string' && line.trim()) parts.push(line.trim())
   return parts.join(' ')
@@ -104,7 +104,7 @@ export function agentErrorReply(name, error = {}) {
   switch (code) {
     case 'needs_sign_in': return { text: `${name} needs you to sign in again before it can look anything up.`, next: 'signIn' }
     case 'tools_changed': return { text: `${name}'s tools changed since you invited it. Invite it again from + Invite agent to look at them, then ask again.`, next: null }
-    case 'agents_paused': return { text: `Agents are paused on this slate. Resume agents on the roster under the canvas, then ask ${name} again.`, next: 'chip' }
+    case 'agents_paused': return { text: `Agents are paused on this slate. Resume agents in Agents under the canvas, then ask ${name} again.`, next: 'chip' }
     case 'busy': return { text: `${name} is still working on your last ask. Wait for it to finish, then ask again.`, next: null }
     case 'not_found': return { text: `${name} is not on this slate any more. Invite it again with + Invite agent.`, next: null }
     case 'inviter_only': return { text: reason || `Only the person who invited ${name} can ask it.`, next: null }

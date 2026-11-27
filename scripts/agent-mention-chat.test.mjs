@@ -69,7 +69,7 @@ test('a failed ask says why and what to do next, never a bare error', async () =
   assert.deepEqual(agentErrorReply('GitHub', { error: 'pro', reason: 'Get Slatebox Pro.', details: { pay: { action: 'pro', wallet: null } } }), { text: 'Get Slatebox Pro.', next: 'pay' })
   assert.equal(agentErrorReply('GitHub', { error: 'pro', reason: 'Get Slatebox Pro.', details: { status: 402, details: { pay: { action: 'pro', wallet: null } } } }).next, 'pay', 'as the registry sends it over DDP')
   assert.equal(agentErrorReply('GitHub', { error: 'pro_required' }).next, 'retry', 'no plan refusal is known any more')
-  assert.equal(agentErrorReply('GitHub', { error: 'agents_paused' }).text, 'Agents are paused on this slate. Resume agents on the roster under the canvas, then ask GitHub again.')
+  assert.equal(agentErrorReply('GitHub', { error: 'agents_paused' }).text, 'Agents are paused on this slate. Resume agents in Agents under the canvas, then ask GitHub again.')
   assert.equal(agentErrorReply('GitHub', { error: 'upstream', reason: 'Bad credentials.' }).text, 'GitHub couldn\'t do that: Bad credentials. Try asking in other words.')
   assert.equal(agentErrorReply('GitHub', { error: 'x', reason: 'Internal server error' }).text, 'GitHub couldn\'t do that. Try asking in other words.')
 })
@@ -134,7 +134,7 @@ test('a turn that made an action card says Approve or decline that card, never K
     'Approve or decline the GitHub change card on the slate.')
   // saved directly (no suggestion to keep): decided on the agent's chip
   assert.equal(agentChatReply('Linear', { items: 1, actions: [], saved: 1, added: { notes: 1, lines: 0 }, cards: [card] }),
-    "Approve or decline the Linear issue card on Linear's chip under the canvas.")
+    "Approve or decline the Linear issue card in Agents under the canvas (Linear).")
   // a card already done (the agent acts without asking) is a note like any other
   assert.equal(agentChatReply('Linear', { items: 1, actions: ['a'], added: { notes: 1, lines: 0 }, cards: [{ ...card, state: 'done' }] }),
     'Added 1 note as one suggestion: Keep all or Discard all on its frame, or point at a note to keep it alone.')

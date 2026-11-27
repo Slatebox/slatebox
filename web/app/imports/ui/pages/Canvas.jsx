@@ -106,7 +106,7 @@ import PresentSlateDialogue from '../components/PresentSlateDialogue'
 import SlateOperationListener from '../components/SlateOperationListener'
 import LineToolStatus from '../components/stylebar/LineToolStatus'
 import AgentPresenceListener from '../components/AgentPresenceListener'
-import AgentTasksPanel from '../components/AgentTasksPanel'
+import CornerPresence from '../components/presence/CornerPresence'
 import EnterpriseSlot from '../common/EnterpriseSlot'
 import { CreativeStates, livePresentationTicket, NativePresentationStates } from '../../api/client/creativeSlateStates'
 import { presentPeople } from '../../api/common/presence.mjs'
@@ -1674,10 +1674,13 @@ export default function Canvas() {
       )}
       {slate.current && <SlateOperationListener slate={slate.current} revision={loadedRevision.current} />}
       {slate.current && <AgentPresenceListener slate={slate.current} canEdit={!viewOnly && !commentOnly} />}
-      {slate.current && !asEmbed && Meteor.userId() && (
-        <AgentTasksPanel shareId={slate.current.shareId} canEdit={!viewOnly && !commentOnly && !Meteor.user()?.isAnonymous} />
+      {/* Who's on the slate, beside Undo and Redo: people, agents, the agents menu (their details, Agent tasks,
+          + Invite agent, Pause all agents) and a badge when tasks wait. A phone viewing only sees who's here. */}
+      {slate.current && (
+        <CornerPresence slate={slate.current} localCollaborator={collaborator.current} canEdit={!viewOnly && !commentOnly}
+          phoneView={phoneView} embed={Boolean(asEmbed)} chatOpen={Boolean(sheetOpen)} />
       )}
-      {/* Outside agents invited onto this slate (enterprise code: Slatebox Cloud and every self-hosted install whose build carries it): their chips and "+ Invite agent". Empty where the build has no enterprise code. */}
+      {/* Outside agents invited onto this slate (enterprise code: Slatebox Cloud and every self-hosted install whose build carries it): they join the corner's agents, and "+ Invite agent" there opens its panel. Empty where the build has no enterprise code. */}
       {slate.current && !asEmbed && (
         <EnterpriseSlot name="canvas.agents" slate={slate.current} canEdit={!viewOnly && !commentOnly}
           readSelection={() => selectedOwnNotes().map((n) => n.options?.id).filter(Boolean)}

@@ -2,10 +2,13 @@
 // waiting for a person, and each task's shared log (agentTasks.forSlate). Anyone who can edit asks
 // the Slatebox agent here, and approves or cancels what it held. The same tasks are on the API,
 // the CLI, exec and every MCP client (agentTasks.*), so outside agents see and take them too.
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
 import { useTracker } from 'meteor/react-meteor-data'
+import { atom, useAtom } from 'jotai'
+import ClickAwayListener from '@mui/material/ClickAwayListener'
+import Popper from '@mui/material/Popper'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
@@ -23,11 +26,15 @@ const STATUS = {
   canceled: 'Canceled',
 }
 
-export default function AgentTasksPanel({ shareId, canEdit }) {
-  const [open, setOpen] = useState(false)
-  const [text, setText] = useState('')
-  const [error, setError] = useState('')
-  // Task text and logs are for people who can edit the slate; the server publishes nothing to others.
+// Open the tasks panel (true) or close it (false). The corner's agents menu opens it; it sits above the
+// corner's presence pill (CornerPresence passes the pill as its anchor).
+export const agentTasksOpenAtom = atom(false)
+
+/**
+ * This slate's agent tasks for someone who may see them (signed in, may edit; the server publishes
+ * nothing to others): the list, how many are open, how many wait for this person.
+ */
+export function useAgentTasks(shareId, canEdit) {
   const tasks = useTracker(() => {
     if (!shareId || !canEdit) return []
     Meteor.subscribe('agentTasks.forSlate', shareId)
@@ -35,7 +42,22 @@ export default function AgentTasksPanel({ shareId, canEdit }) {
   }, [shareId, canEdit])
   const waiting = tasks.filter((task) => task.status === 'input-required').length
   const active = tasks.filter((task) => ['submitted', 'working', 'input-required'].includes(task.status)).length
-  if (!canEdit) return null
+  return { tasks, waiting, active }
+}
+
+export default function AgentTasksPanel({ shareId, canEdit, tasks = [], anchorEl = null }) {
+  const [open, setOpen] = useAtom(agentTasksOpenAtom)
+  const [text, setText] = useState('')
+  const [error, setError] = useState('')
+  // Opened from the menu: focus moves into the panel, and back to the agents trigger when it closes.
+  const paper = useRef(null)
+  const shown = Boolean(canEdit && open && anchorEl)
+  useEffect(() => { if (shown) setTimeout(() => paper.current?.focus(), 0) }, [shown])
+  if (!shown) return null
+  const close = () => {
+    setOpen(false)
+    anchorEl.querySelector?.('[data-agents-menu-open]')?.focus?.()
+  }
 
   const call = async (method, input) => {
     setError('')
@@ -54,17 +76,14 @@ export default function AgentTasksPanel({ shareId, canEdit }) {
   }
 
   return (
-    // Right of the canvas's Undo and Redo when they sit in the same corner (UndoRedoControls sets the variable).
-    <Box data-agent-tasks sx={{ position: 'fixed', left: 'calc(var(--sb-undo-redo-end, 8px) + 8px)', bottom: 16, zIndex: 1200, maxWidth: 'calc(100vw - var(--sb-undo-redo-end, 8px) - 24px)' }}>
-      {!open ? (
-        <Button variant="contained" size="small" data-agent-tasks-open onClick={() => setOpen(true)}>
-          Agent tasks{active ? ` · ${active}` : ''}{waiting ? ' · needs you' : ''}
-        </Button>
-      ) : (
-        <Paper elevation={6} sx={{ width: 360, maxWidth: '100%', maxHeight: '60vh', overflow: 'auto', p: 1.5 }}>
+    // Above the corner's presence pill, where Agent tasks was opened from (the agents menu).
+    <Popper open anchorEl={anchorEl} placement="top-start" sx={{ zIndex: 1300 }} modifiers={[{ name: 'offset', options: { offset: [0, 8] } }]}>
+      <ClickAwayListener onClickAway={(event) => { if (!anchorEl.contains(event.target)) setOpen(false) }}>
+        <Paper elevation={6} ref={paper} tabIndex={-1} data-agent-tasks="" role="region" aria-label="Agent tasks" onKeyDown={(e) => { if (e.key === 'Escape') close() }}
+          sx={{ width: 360, maxWidth: 'calc(100vw - 32px)', maxHeight: '60vh', overflow: 'auto', p: 1.5, borderRadius: 2.5 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-            <Typography variant="subtitle2">Agent tasks</Typography>
-            <Button size="small" onClick={() => setOpen(false)}>Close</Button>
+            <Typography variant="subtitle2" component="h2">Agent tasks</Typography>
+            <Button size="small" onClick={close} data-agent-tasks-close="">Close</Button>
           </Box>
           {canEdit && (
             <Box component="form" onSubmit={ask} sx={{ display: 'flex', gap: 1, mb: 1 }}>
@@ -105,12 +124,16 @@ export default function AgentTasksPanel({ shareId, canEdit }) {
             </Box>
           ))}
         </Paper>
-      )}
-    </Box>
+      </ClickAwayListener>
+    </Popper>
   )
 }
 
 AgentTasksPanel.propTypes = {
   shareId: PropTypes.string,
   canEdit: PropTypes.bool,
+  // eslint-disable-next-line react/forbid-prop-types
+  tasks: PropTypes.array,
+  // eslint-disable-next-line react/forbid-prop-types
+  anchorEl: PropTypes.object,
 }

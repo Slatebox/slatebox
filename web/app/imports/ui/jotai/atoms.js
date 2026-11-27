@@ -192,6 +192,9 @@ export const nodeShapeDetails = atom({
 })
 
 export const collaborationUsers = atom([])
+// Who is speaking in the slate's huddle call now (the huddle sets it): { you } for this person, { name }
+// for someone else, null when nobody is or no call is on. The corner's people group rings them.
+export const huddleSpeaking = atom(null)
 
 // The style bar over a selection: colours used lately on each slate (per viewer), the style
 // copied with More → Copy style, and the note(s) "Ask Slatebox" was opened about.

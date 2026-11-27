@@ -1,20 +1,19 @@
 // Agents on the canvas. The server publishes a record for each agent run saving to this slate
 // (agentPresence.forSlate); the engine draws each one as a named pointer with its plan
 // (createAgentPresence). People's cursors come from the relay and look different: nothing a page
-// sets there can draw an agent here. The roster shows an agent chip with the full plan.
+// sets there can draw an agent here. The corner's agents menu lists each agent; its details show the full plan.
 //
 // What an agent suggests is published too (agentSuggestions.forSlate) and drawn live, in place, as
 // ghosts on every screen (the engine's createAgentSuggestions): each answer is one framed group with
 // Keep all / Discard all on it, a ghost's own Keep and Discard show under the pointer for people who
 // may edit, and Keep all, Discard all, the agent's activity with Undo, and
-// Edit directly sit on its chip. Each choice calls suggestions.decide or agents.control, the same
+// Edit directly sit in its details (AgentDetails, opened from the corner's agents menu). Each choice calls suggestions.decide or agents.control, the same
 // actions a token calls; the server checks the edit right again.
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
 import { useTracker } from 'meteor/react-meteor-data'
-import { atom, useAtom, useAtomValue, useSetAtom } from 'jotai'
-import Chip from '@mui/material/Chip'
+import { atom, useAtomValue, useSetAtom } from 'jotai'
 import Popover from '@mui/material/Popover'
 import Typography from '@mui/material/Typography'
 import Box from '@mui/material/Box'
@@ -22,7 +21,7 @@ import Button from '@mui/material/Button'
 import Switch from '@mui/material/Switch'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Snackbar from '@mui/material/Snackbar'
-import { visibleAgents, agentStepText, agentChecklist, agentName, agentOrigin, AGENT_PALETTE, compat } from 'slateboxjs'
+import { visibleAgents, agentStepText, agentChecklist, agentOrigin, AGENT_PALETTE, compat } from 'slateboxjs'
 import { AgentPresence, AgentSuggestions } from '../../api/common/models'
 import { clockOffset, onScreenClock } from '../../api/common/agent-clock.mjs'
 import { activityLine, agentsOnRoster, pendingCount, withWaiting } from '../../api/common/agent-roster.mjs'
@@ -35,8 +34,15 @@ export const agentControlsAtom = atom(false)
 // Agents that stay on the roster while they are on the slate, working or not: invited agents
 // (enterprise/ fills it; empty where enterprise code is locked). Each is one chip, like every agent.
 export const rosterExtrasAtom = atom([])
-// Open one agent's chip (its agentId), e.g. right after it was invited.
+// Open one agent's details (its agentId), e.g. right after it was invited: from its row in the corner's
+// agents menu when that is open, else from the agent trigger on the corner's pill (CornerPresence).
 export const openAgentAtom = atom(null)
+// "+ Invite agent" in the corner's agents menu: the element to open the invite panel at, or null. The
+// menu sets it; enterprise/ (AgentsOnSlate) opens its quick panel or walkthrough there.
+export const inviteRequestAtom = atom(null)
+// Whether this page can invite agents (enterprise/ sets it while AgentsOnSlate offers invites); the
+// menu shows + Invite agent only then, so it is never an item that does nothing.
+export const inviteAvailableAtom = atom(false)
 // An agent's colour, from its colorIndex, as its chip, pointer and ghosts draw it.
 export const agentColor = (colorIndex) => AGENT_PALETTE[(Number(colorIndex) || 0) % AGENT_PALETTE.length]
 
@@ -205,34 +211,28 @@ AgentPresenceListener.propTypes = {
   canEdit: PropTypes.bool,
 }
 
-// The agent mark: a hexagon, not the round avatar a person has.
+/** The agents on this slate's roster, as the corner's pill and menu list them (agentsOnRoster). */
+export function useRosterAgents(shareId) {
+  const records = useAgentPresence(shareId).shown
+  const { actions, controls } = useAgentSuggestions(shareId)
+  const extras = useAtomValue(rosterExtrasAtom)
+  const agents = useMemo(() => agentsOnRoster(records, actions, Date.now(), extras), [records, actions, extras])
+  return { agents, controls }
+}
+
+/** Pause all agents on the slate, or resume them (agents.control; the server checks the edit right). */
+export const togglePaused = (shareId, controls) => Meteor.callAsync('agents.control', { shareId, paused: !controls.paused })
 
 /**
- * The agents on the slate, as their own group after the people (never a Huddle participant): one chip
- * per agent that is working here or has suggestions waiting, with Pause all agents for people who may
- * edit. A chip's popover shows the plan, Keep all and Discard all, the agent's activity with Undo, and
- * Edit directly where settings allow it.
+ * One agent's details, opened from its row in the corner's agents menu (or the agent trigger): the
+ * plan, Keep all and Discard all, the agent's activity with Undo, Edit directly where settings allow
+ * it, and an invited agent's own controls (the agents.chip slot: ask, sign in again, remove).
  */
-export function AgentChips({ records, shareId = null }) {
-  const { actions, controls } = useAgentSuggestions(shareId)
+export function AgentDetails({ agent, anchorEl = null, onClose, shareId = null }) {
+  const { controls } = useAgentSuggestions(shareId)
   const canEdit = useAtomValue(agentControlsAtom)
-  const [open, setOpen] = useState(null) // { key, anchor }
   const [told, setTold] = useState('')
   const [busy, setBusy] = useState(false)
-  const extras = useAtomValue(rosterExtrasAtom)
-  const [wantOpen, setWantOpen] = useAtom(openAgentAtom)
-  const agents = useMemo(() => agentsOnRoster(records, actions, Date.now(), extras), [records, actions, extras])
-  // Asked to open one agent's chip: once its chip is drawn, open it there.
-  useEffect(() => {
-    if (!wantOpen) return
-    const agent = agents.find((a) => a.agentId === wantOpen)
-    const chip = agent && document.querySelector(`[data-agent-chip][data-agent-id="${CSS.escape(wantOpen)}"]`)
-    if (!chip) return
-    setOpen({ key: agent.key, anchor: chip })
-    setWantOpen(null)
-  }, [wantOpen, agents, setWantOpen])
-  if (!agents.length) return null
-  const openAgent = open && agents.find((agent) => agent.key === open.key)
   const run = async (work) => {
     setBusy(true)
     try {
@@ -243,49 +243,26 @@ export function AgentChips({ records, shareId = null }) {
       setBusy(false)
     }
   }
-  const decideAll = (agent, decision) => run(async () => {
-    for (const action of agent.actions.filter((a) => pendingCount(a) > 0)) await decide(shareId, { decision, actionId: action.actionId })
+  const decideAll = (which, decision) => run(async () => {
+    for (const action of which.actions.filter((a) => pendingCount(a) > 0)) await decide(shareId, { decision, actionId: action.actionId })
   })
+  const openAgent = agent
   return (
-    <Box component="section" aria-label="Agents" sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 1, pl: 1, borderLeft: '1px solid rgba(0,0,0,0.2)' }}>
-      <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>Agents</Typography>
-      {agents.map((agent) => {
-        const color = AGENT_PALETTE[agent.colorIndex % AGENT_PALETTE.length]
-        const step = agent.record ? agentStepText({ ...agent.record, waiting: agent.waiting > 0 }) : null
-        const waiting = agent.waiting ? `${agent.waiting} waiting` : ''
-        const name = agentName(agent)
-        const extra = [step, agent.state, waiting].filter(Boolean).join(' · ')
-        return (
-          <Chip
-            key={'agent-' + agent.key}
-            data-agent-chip=""
-            data-agent-id={agent.agentId || ''}
-            variant="outlined"
-            icon={<Hexagon color={color} />}
-            label={name + (extra ? ' · ' + extra : '')}
-            onClick={(event) => setOpen({ key: agent.key, anchor: event.currentTarget })}
-            aria-label={name + ', an agent' + (extra ? ': ' + extra : '')}
-            sx={{ borderColor: color, borderStyle: 'dashed', maxWidth: 380 }}
-          />
-        )
-      })}
-      {canEdit && (
-        <Button size="small" variant={controls.paused ? 'contained' : 'text'} color={controls.paused ? 'warning' : 'inherit'} disabled={busy}
-          data-agents-pause="" onClick={() => run(() => Meteor.callAsync('agents.control', { shareId, paused: !controls.paused }))}>
-          {controls.paused ? 'Resume agents' : 'Pause all agents'}
-        </Button>
-      )}
-      {!canEdit && controls.paused && <Typography variant="caption">Agents paused</Typography>}
+    <>
       <Popover
-        open={Boolean(openAgent)}
-        anchorEl={open?.anchor}
-        onClose={() => setOpen(null)}
+        open={Boolean(openAgent && anchorEl)}
+        anchorEl={anchorEl}
+        onClose={onClose}
         anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
         transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        slotProps={{ paper: { sx: { mt: -1, borderRadius: 2.5 } } }}
       >
         {openAgent && (
           <Box sx={{ p: 2, width: 340, maxWidth: 'calc(100vw - 32px)', boxSizing: 'border-box' }} aria-label={openAgent.label + ' details'} data-agent-panel="">
-            <Typography variant="subtitle2">{openAgent.label}</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Hexagon color={agentColor(openAgent.colorIndex)} size={22} style={{}} />
+              <Typography variant="subtitle2">{openAgent.label}</Typography>
+            </Box>
             {agentOrigin(openAgent) && <Typography variant="caption" sx={{ color: 'text.secondary' }}>{agentOrigin(openAgent)}</Typography>}
             {openAgent.record && (agentChecklist(openAgent.record).length ? (
               <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0, mt: 1 }}>
@@ -297,6 +274,7 @@ export function AgentChips({ records, shareId = null }) {
             ) : (
               <Typography variant="body2" sx={{ mt: 1 }}>{agentStepText({ ...openAgent.record, waiting: openAgent.waiting > 0 }) || 'Working on this slate'}</Typography>
             ))}
+            {!canEdit && controls.paused && <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>Agents are paused on this slate.</Typography>}
             {/* Enterprise: an invited agent's own controls (ask it, sign in again, remove it). Empty where enterprise code is locked. */}
             {openAgent.invited && (
               <EnterpriseSlot name="agents.chip" agentId={openAgent.agentId} shareId={shareId} canEdit={canEdit} paused={Boolean(controls.paused)} waiting={openAgent.waiting} />
@@ -350,11 +328,14 @@ export function AgentChips({ records, shareId = null }) {
         )}
       </Popover>
       <Snackbar open={Boolean(told)} autoHideDuration={5000} onClose={() => setTold('')} message={told} />
-    </Box>
+    </>
   )
 }
-AgentChips.propTypes = {
+AgentDetails.propTypes = {
   // eslint-disable-next-line react/forbid-prop-types
-  records: PropTypes.array.isRequired,
+  agent: PropTypes.object,
+  // eslint-disable-next-line react/forbid-prop-types
+  anchorEl: PropTypes.object,
+  onClose: PropTypes.func.isRequired,
   shareId: PropTypes.string,
 }

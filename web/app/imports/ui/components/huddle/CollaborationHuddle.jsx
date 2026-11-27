@@ -8,7 +8,6 @@ import { createTheme, useTheme } from '@mui/material/styles'
 import { Meteor } from 'meteor/meteor'
 import { useTracker } from 'meteor/react-meteor-data'
 import Grid from '@mui/material/Grid2'
-import Chip from '@mui/material/Chip'
 import Snackbar from '@mui/material/Snackbar'
 import Alert from '@mui/material/Alert'
 import IconButton from '@mui/material/IconButton'
@@ -27,7 +26,6 @@ import {
 import CONSTANTS from '../../../api/common/constants'
 import promisify from '../../../api/client/promisify'
 import VideoParticipant from '../VideoParticipant'
-import { Avatar } from '../AccountMenu'
 
 import {
   slateHuddleType,
@@ -36,21 +34,18 @@ import {
   listeningForTranscriptionMessages,
   collaborationUsers,
   canManageHuddleTranscription,
+  huddleSpeaking,
 } from '../../jotai/atoms'
 
 import HuddleProperties from '../HuddleProperties'
-import { AgentChips, rosterExtrasAtom, useAgentPresence, useAgentSuggestions } from '../AgentPresenceListener'
-import { agentsOnRoster } from '../../../api/common/agent-roster.mjs'
 
 
 const theme = createTheme()
 
-// The slate's people while this person is in a huddle (or has been): Daily's call, its participants and
-// voices, and presence as before. It loads with the first huddle (HuddleIsland), never with the page.
-export default function CollaborationHuddle({
-  localCollaborator,
-  slate,
-}) {
+// The slate's huddle once this person has been in one: Daily's call, and its participants' tiles and
+// voices while it is on. Who is on the slate (people and agents) is the corner's presence pill
+// (CornerPresence): the tiles keep a row of their own above it, and whoever speaks gets a ring there. It loads with the first huddle (HuddleIsland), never with the page.
+export default function CollaborationHuddle({ slate }) {
   const theme = useTheme()
   const [isHuddleEnabled, setHuddleEnabled] = useAtom(huddleEnabled)
   const setCanTranscribe = useSetAtom(canManageHuddleTranscription)
@@ -77,11 +72,6 @@ export default function CollaborationHuddle({
   }, [slate?.shareId])
   const huddleType = call ? (call.mode === 'video' ? 'video' : 'audio') : slateHuddle
   const currentCollaborators = useAtomValue(collaborationUsers)
-  // Agents saving to this slate: their own chips, never Huddle participants.
-  const agents = useAgentPresence(slate?.shareId).shown
-  const { actions: agentActions } = useAgentSuggestions(slate?.shareId)
-  const rosterExtras = useAtomValue(rosterExtrasAtom)
-  const agentsShown = agentsOnRoster(agents, agentActions, Date.now(), rosterExtras).length
   const callObject = useDaily() // Meteor.callObject // useDaily() //useAtom(callObj)
 
   const [isListening, setListening] = useAtom(listeningForTranscriptionMessages)
@@ -110,18 +100,10 @@ export default function CollaborationHuddle({
     liveVideoChat: {
       height: '100px',
       paddingTop: '5px',
-      borderTop: '1px solid black',
       backgroundColor: 'rgba(255, 255, 255, 0.1)',
     },
     liveAudioChat: {
       height: '90px',
-      paddingTop: '5px',
-      borderTop: '1px solid black',
-      backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    },
-    pendingChat: {
-      height: '68px',
-      borderTop: '1px solid black',
       paddingTop: '5px',
       backgroundColor: 'rgba(255, 255, 255, 0.1)',
     },
@@ -247,6 +229,14 @@ export default function CollaborationHuddle({
 
   const participantIds = useParticipantIds()
 
+  // Whoever speaks gets a ring on their avatar in the corner's people group.
+  const setSpeaking = useSetAtom(huddleSpeaking)
+  useEffect(() => {
+    const speaker = isHuddleEnabled && activeSpeakerId ? callObject?.participants?.()?.[activeSpeakerId] ?? Object.values(callObject?.participants?.() || {}).find((p) => p.session_id === activeSpeakerId) : null
+    setSpeaking(speaker ? (speaker.local ? { you: true } : { name: speaker.user_name || '' }) : null)
+  }, [activeSpeakerId, isHuddleEnabled, callObject, setSpeaking])
+  useEffect(() => () => setSpeaking(null), [setSpeaking])
+
   const cssClass =
     huddleType === 'audio' ? styles.liveAudioChat : styles.liveVideoChat
 
@@ -271,42 +261,33 @@ export default function CollaborationHuddle({
         <Alert severity="warning" onClose={() => { setJoinError(''); setJoinAction(null) }}
           action={joinAction && <Button color="inherit" size="small" onClick={() => { setJoinError(''); setJoinAction(null); joinAction.run() }}>{joinAction.label}</Button>}>{joinError}</Alert>
       </Snackbar>
-      {(currentCollaborators.length > 0 || isHuddleEnabled || agentsShown > 0) && (
+      {(currentCollaborators.length > 0 || isHuddleEnabled) && (
         <>
-          <Grid
-            container
-            spacing={1}
-            sx={{
-              ...styles.pinBottom,
-              ...(isHuddleEnabled && huddleType
-                ? cssClass
-                : styles.pendingChat),
-            }}
-            component="section"
-            aria-label="Huddle"
-          >
-            {isHuddleEnabled
-              ? participantIds.map((sessionId) => (
-                  <VideoParticipant
-                    key={sessionId}
-                    sessionId={sessionId}
-                    audioOnly={huddleType === 'audio'}
-                    isActiveSpeaker={activeSpeakerId === sessionId}
-                  />
-                )).concat(huddleType === 'audio' && joined ? [
-                  <Tooltip key="camera" title="Turn on your camera">
-                    <IconButton aria-label="Turn on your camera" onClick={() => setCameraAsk(true)} color="inherit">
-                      <VideocamIcon />
-                    </IconButton>
-                  </Tooltip>,
-                ] : [])
-              // One chip per person: you once, however many tabs you have open, then each other person.
-              : [{ key: 'you', userName: 'You', color: localCollaborator?.color }, ...currentCollaborators].map((person) => (
-                  <Chip key={person.key} label={person.userName}
-                    avatar={<Avatar name={person.key === 'you' ? 'You' : person.userName} colour={person.color} size={24} />} />
-                ))}
-            <AgentChips records={agents} shareId={slate?.shareId} />
-          </Grid>
+          {/* The call's tiles, while it is on: a row of their own above the corner's presence pill. */}
+          {isHuddleEnabled && huddleType && (
+            <Grid
+              container
+              spacing={1}
+              sx={{ ...styles.pinBottom, ...cssClass }}
+              component="section"
+              aria-label="Huddle"
+            >
+              {participantIds.map((sessionId) => (
+                <VideoParticipant
+                  key={sessionId}
+                  sessionId={sessionId}
+                  audioOnly={huddleType === 'audio'}
+                  isActiveSpeaker={activeSpeakerId === sessionId}
+                />
+              )).concat(huddleType === 'audio' && joined ? [
+                <Tooltip key="camera" title="Turn on your camera">
+                  <IconButton aria-label="Turn on your camera" onClick={() => setCameraAsk(true)} color="inherit">
+                    <VideocamIcon />
+                  </IconButton>
+                </Tooltip>,
+              ] : [])}
+            </Grid>
+          )}
           <DailyAudio onPlayFailed={handlePlayFailed} />
           <HuddleProperties
             slate={slate}

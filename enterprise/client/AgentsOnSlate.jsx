@@ -12,8 +12,9 @@
 // an action card (a ghost note with Approve and Decline); the chip lists them too, with
 // Approve and Decline, their links once done, and, for its inviter (or the slate's owner, to narrow
 // it), whether it acts without asking here and who may approve.
-// The canvas.agents slot holds "+ Invite agent" and the walkthrough. For someone with connected
-// integrations, "+ Invite agent" first opens a small panel (owner, 2026-11-25: "it should be quicker to
+// The canvas.agents slot opens the invite panel and the walkthrough when "+ Invite agent" is chosen in
+// the app's agents menu (the corner's presence pill under the canvas; inviteRequestAtom holds where to
+// open it). For someone with connected integrations, "+ Invite agent" first opens a small panel (owner, 2026-11-25: "it should be quicker to
 // invite an already connected mcp to the slate - they can just connect here without 'asking' first"):
 // their integrations at the top, each with Add (one click: no dialog, no new sign-in, no consent again;
 // its cursor greets in view and its chip opens), "Add to every slate I own" (its standing rule), and
@@ -35,7 +36,7 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { McpConnections } from './collections'
 import InviteWalkthrough from './InviteWalkthrough'
-import { agentColor, openAgentAtom, rosterExtrasAtom } from '/imports/ui/components/AgentPresenceListener.jsx'
+import { agentColor, inviteAvailableAtom, inviteRequestAtom, openAgentAtom, rosterExtrasAtom } from '/imports/ui/components/AgentPresenceListener.jsx'
 import { askableAgentsAtom, conversationOpen, openChatWithAtom } from '/imports/ui/jotai/atoms'
 import { enterpriseSlots } from '/imports/api/client/enterprise-slots.mjs'
 import Hexagon from '/imports/ui/components/AgentMark.jsx'
@@ -66,7 +67,7 @@ export function rosterEntries(connections) {
 /** Why an agent can't be asked from this screen now, in the words Ask Slatebox answers "@its name" with. */
 export function cannotAskText(c) {
   if (!c.mine) return `Only ${c.inviterName || 'the person who invited it'} can ask ${c.name}.`
-  if (c.status === 'needs_sign_in') return `${c.name} needs you to sign in again. Open its chip under the canvas and choose Sign in again.`
+  if (c.status === 'needs_sign_in') return `${c.name} needs you to sign in again. Open it in Agents under the canvas and choose Sign in again.`
   if (c.status === 'paused') return `${c.name}'s tools changed. Invite it again from + Invite agent to look at them.`
   return ''
 }
@@ -134,9 +135,12 @@ export default function AgentsOnSlate({ slate, canEdit, readSelection, readView,
   const openAgent = useSetAtom(openAgentAtom)
   const [reconnect, setReconnect] = useAtom(reconnectAtom)
   const [inviting, setInviting] = useState(false)
-  // The quick panel above "+ Invite agent": this person's integrations, each added in one click.
+  // The quick panel above the agents menu's "+ Invite agent": this person's integrations, each added in
+  // one click. It opens at the element the menu names (its trigger on the corner's pill).
   const [panelOpen, setPanelOpen] = useState(false)
-  const inviteButton = useRef(null)
+  const [inviteAt, setInviteAt] = useAtom(inviteRequestAtom)
+  const anchor = useRef(null)
+  const setInviteAvailable = useSetAtom(inviteAvailableAtom)
   // This person's integrations (null until asked) and the slate owner's rule for outside agents.
   const [integrations, setIntegrations] = useState(null)
   const [setting, setSetting] = useState(null)
@@ -157,6 +161,13 @@ export default function AgentsOnSlate({ slate, canEdit, readSelection, readView,
       setPanelOpen(!panelOpen)
     } else setInviting(true)
   }
+  // "+ Invite agent" chosen in the agents menu: open here, at the element it names.
+  useEffect(() => {
+    if (!inviteAt) return
+    anchor.current = inviteAt
+    openInvite()
+    setInviteAt(null)
+  }, [inviteAt]) // eslint-disable-line react-hooks/exhaustive-deps
   // Standing rules: the owner's own integrations that join every slate they own arrive when it opens
   // (idempotent on the server; one removed from this slate before stays away).
   const ownSlate = Boolean(userId && slate?.userId === userId)
@@ -176,17 +187,19 @@ export default function AgentsOnSlate({ slate, canEdit, readSelection, readView,
     return () => setAskable([])
   }, [askable, readSelection, readView, setAskable])
   useEffect(() => { if (reconnect) setInviting(true) }, [reconnect])
+  // The agents menu offers "+ Invite agent" only while this person can invite here.
+  const mayInvite = Boolean(shareId && userId && canEdit && !guest)
+  useEffect(() => {
+    setInviteAvailable(mayInvite)
+    return () => setInviteAvailable(false)
+  }, [mayInvite, setInviteAvailable])
+  // On a phone, Ask Slatebox's sheet has the foot of the screen: the quick panel closes while it is open.
+  useEffect(() => { if (chatOpen) setPanelOpen(false) }, [chatOpen])
 
-  if (!shareId || !userId || !canEdit || guest) return null
+  if (!mayInvite) return null
   return (
-    <Box data-agents-on-slate=""
-      sx={{
-        position: 'fixed', left: 16, bottom: 'calc(var(--sb-canvas-bottom, 0px) + 140px)', zIndex: 1200,
-        // On a phone, Ask Slatebox's sheet has the foot of the screen: the button steps aside while it is open.
-        display: { xs: chatOpen ? 'none' : 'block', md: 'block' },
-      }}>
-      <Button size="small" variant="outlined" data-invite-agent-open="" ref={inviteButton} aria-expanded={integrations?.length ? panelOpen : undefined} onClick={openInvite} sx={{ bgcolor: 'background.paper' }}>+ Invite agent</Button>
-      <InvitePanel open={panelOpen} anchorEl={inviteButton.current} onClose={() => setPanelOpen(false)} shareId={shareId} readView={readView}
+    <Box data-agents-on-slate="">
+      <InvitePanel open={panelOpen} anchorEl={anchor.current} onClose={() => setPanelOpen(false)} shareId={shareId} readView={readView}
         integrations={integrations || []} invited={connections} setting={setting} isOwner={ownSlate} onChanged={loadIntegrations}
         onAdded={(connection) => { setPanelOpen(false); if (connection?.agentId) openAgent(connection.agentId) }}
         onMore={() => { setPanelOpen(false); setInviting(true) }} />

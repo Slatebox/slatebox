@@ -412,7 +412,7 @@ export default function NativeCanvasConversation({shareId,board,onClose,onKeep,o
               <Button size="small" disabled={Boolean(busy)} onClick={()=>ask(turn.message,{to:'slatebox',replace:turn.id})}>Ask Slatebox anyway</Button>
             </Box>
             : turn.next?.kind==='pay' ? <PayNotice refusal={turn.next.refusal} from="draft" retry={() => ask(turn.message,{replace:turn.id})} inline />
-            : turn.next?.kind==='signIn' || turn.next?.kind==='chip' ? <Button size="small" data-turn-next={turn.next.kind} onClick={()=>openChip(turn.next.agentId)}>{turn.next.kind==='signIn' ? 'Sign in again' : 'Open its chip'}</Button>
+            : turn.next?.kind==='signIn' || turn.next?.kind==='chip' ? <Button size="small" data-turn-next={turn.next.kind} onClick={()=>openChip(turn.next.agentId)}>{turn.next.kind==='signIn' ? 'Sign in again' : 'Open its details'}</Button>
             : turn.next?.kind==='retry' ? <Box sx={{display:'flex',flexWrap:'wrap',gap:.5}}>
               <Button size="small" data-turn-next="retry" disabled={Boolean(busy)} onClick={()=>ask(turn.message,{replace:turn.id,to:turn.next.agentId || 'slatebox'})}>Try again</Button>
               {/* The person's words back in the box, to say it another way (never lost to a failed turn). */}
