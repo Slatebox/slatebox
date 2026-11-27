@@ -67,6 +67,15 @@ export function privacySignal(nav = globalThis.navigator, win = globalThis.windo
   }
 }
 
+/** An automated browser (navigator.webdriver: test suites, crawlers that say so) is never counted. */
+export function automatedBrowser(nav = globalThis.navigator) {
+  try {
+    return nav?.webdriver === true
+  } catch {
+    return false
+  }
+}
+
 /** The same signal from request headers (DNT: 1, Sec-GPC: 1). */
 export function privacySignalFromHeaders(headers) {
   if (!headers || typeof headers !== 'object') return false

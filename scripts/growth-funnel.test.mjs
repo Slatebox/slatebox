@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import {
-  DIRECT, EXISTING, GROWTH_STORAGE_KEY, OTHER, SHARED_LINK, STEPS, cleanLabel, funnelRows, growthOn, planVisit,
+  DIRECT, EXISTING, automatedBrowser, GROWTH_STORAGE_KEY, OTHER, SHARED_LINK, STEPS, cleanLabel, funnelRows, growthOn, planVisit,
   privacySignal, privacySignalFromHeaders, rate, readRemembered, referrerHost, remember, sourceFromLocation, weekOf,
 } from '../web/app/imports/api/common/growth.mjs'
 import { RAW_TTL_DAYS, createGrowthFunnel, ensureGrowthIndexes, growthSummary, readVisit } from '../web/app/server/growth/funnel-core.mjs'
@@ -115,6 +115,13 @@ test('Do Not Track and Global Privacy Control, from the browser or the headers',
   assert.equal(privacySignalFromHeaders({ 'sec-gpc': '1' }), true)
   assert.equal(privacySignalFromHeaders({ 'user-agent': 'x' }), false)
   assert.equal(privacySignalFromHeaders(null), false)
+})
+
+test('an automated browser is never counted', () => {
+  assert.equal(automatedBrowser({ webdriver: true }), true)
+  assert.equal(automatedBrowser({ webdriver: false }), false)
+  assert.equal(automatedBrowser(undefined), false)
+  assert.match(read('web/app/imports/ui/components/GrowthBeacon.jsx'), /\|\| automatedBrowser\(\)\) return/)
 })
 
 test('Cloud only: off on a self-hosted server, without the Cloud license, or switched off', () => {
