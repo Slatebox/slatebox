@@ -59,14 +59,14 @@ function collection() {
   }
 }
 
-function setup({ on = true, accounts = {}, states = {}, now = T0 } = {}) {
+function setup({ on = true, accounts = {}, states = {}, now = T0, labelsPerDay } = {}) {
   const clock = { at: now }
   const stores = { events: collection(), days: collection(), people: collection() }
   const io = {
     account: async (id) => accounts[id] ?? null,
     state: async (id) => states[id] ?? { slate: false, share: false, invite: false, paid: {} },
   }
-  const funnel = createGrowthFunnel({ ...stores, io, on: () => on, now: () => clock.at, log: { warn() {} } })
+  const funnel = createGrowthFunnel({ ...stores, io, on: () => on, now: () => clock.at, log: { warn() {} }, ...(labelsPerDay && { labelsPerDay }) })
   const count = (step, source, kind = null) => [...stores.days.rows.values()]
     .filter((r) => r.step === step && (source === undefined || r.source === source) && (r.kind ?? null) === kind)
     .reduce((n, r) => n + r.n, 0)
@@ -221,8 +221,23 @@ test('a guest who signs up, shares, comes back and pays: each step once, under t
   out = await funnel.visit({ userId: 'g1', input: { source: 'compare-miro', since: '2026-11-27' } })
   assert.deepEqual(out.counted, ['paid:topup'])
   assert.equal(count('paid', 'compare-miro'), 1)
-  // raw events carry the account id and the step, nothing else about the person
-  for (const row of stores.events.rows.values()) assert.deepEqual(Object.keys(row).sort(), ['_id', 'at', 'campaign', 'day', 'kind', 'source', 'step', 'userId', 'week'])
+  // raw events carry the step and the source, nothing about the person (not even the account id)
+  for (const row of stores.events.rows.values()) assert.deepEqual(Object.keys(row).sort(), ['_id', 'at', 'campaign', 'day', 'kind', 'source', 'step', 'week'])
+})
+
+test('made-up labels cannot fill the database: past the day\'s cap a new label counts as "other"', async () => {
+  const { funnel, stores, clock, count } = setup({ labelsPerDay: 3 })
+  for (let i = 0; i < 10; i += 1) await funnel.visit({ input: { source: `spam${i}`, first: true, tagged: true, tagSource: `spam${i}`, since: '2026-11-27' } })
+  const sources = new Set([...stores.days.rows.values()].map((row) => row.source))
+  assert.deepEqual([...sources].sort(), ['other', 'spam0', 'spam1', 'spam2'])
+  assert.equal(count('landing', 'other'), 7)
+  // a label already seen today still counts as itself
+  await funnel.visit({ input: { source: 'spam1', first: true, tagged: true, tagSource: 'spam1', since: '2026-11-27' } })
+  assert.equal(count('landing', 'spam1'), 2)
+  // a new day, a new allowance
+  clock.at += DAY
+  await funnel.visit({ input: { source: 'hn', first: true, tagged: true, tagSource: 'hn', since: '2026-11-28' } })
+  assert.equal(count('landing', 'hn'), 1)
 })
 
 test('an account from before counting began counts only what it pays, under "existing"', async () => {

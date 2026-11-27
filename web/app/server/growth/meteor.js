@@ -93,6 +93,8 @@ Meteor.methods({
 
 // one report per page load and one per sign-in; a little more for many tabs, never a flood
 DDPRateLimiter.addRule({ type: 'method', name: CONSTANTS.methods.growth.visit, connectionId: () => true }, 10, 60000)
+// and per address, so opening many connections does not multiply it
+DDPRateLimiter.addRule({ type: 'method', name: CONSTANTS.methods.growth.visit, clientAddress: () => true }, 60, 60000)
 DDPRateLimiter.addRule({ type: 'method', name: CONSTANTS.methods.growth.forget, connectionId: () => true }, 5, 60000)
 
 Meteor.startup(() => {

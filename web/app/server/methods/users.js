@@ -631,7 +631,7 @@ method[CONSTANTS.methods.users.delete] = async function removeOwnAccount() {
   await removePersonalData(user._id)
   // their passkeys (the devices keep theirs until the browser is told the account is gone)
   await removePasskeysOf(user._id)
-  // what the growth funnel kept for the account (its source and steps, and its raw events)
+  // what the growth funnel kept for the account (its source and steps)
   await forgetGrowthOf(user._id)
   // Meteor Accounts normally closes every connection watching a removed login token.
   // Release only this connection's observer so it can receive the deletion result.

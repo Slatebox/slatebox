@@ -3,8 +3,8 @@
 // hands in the collections, the account reads and the Cloud check; the tests hand in fakes.
 //
 // Three stores, all first-party, in this server's Mongo:
-// - events: one raw row per counted step { step, kind, source, campaign, day, week, userId|null, at },
-//   removed after RAW_TTL_DAYS (a TTL index).
+// - events: one raw row per counted step { step, kind, source, campaign, day, week, at }, no account
+//   id (nothing reads one there: the people row counts each step once), removed after RAW_TTL_DAYS.
 // - days: the aggregate the Growth page reads, one counter per day, source, campaign, step and paid
 //   kind. No user id. Kept AGGREGATE_TTL_DAYS.
 // - people: one row per counted account { source, campaign, firstDay, steps: { step: day } }, so
@@ -16,7 +16,7 @@
 // - for a request whose headers say Do Not Track or Global Privacy Control,
 // - for an account with no people row (one only the browser beacon makes, so an account whose
 //   browser asked not to be tracked is never counted by the server either).
-import { PAID_KINDS, STEPS, DIRECT, EXISTING, cleanLabel, dayOf, privacySignalFromHeaders, weekOf } from '../../imports/api/common/growth.mjs'
+import { PAID_KINDS, STEPS, DIRECT, EXISTING, OTHER, cleanLabel, dayOf, privacySignalFromHeaders, weekOf } from '../../imports/api/common/growth.mjs'
 
 export const RAW_TTL_DAYS = 90
 export const AGGREGATE_TTL_DAYS = 800
@@ -31,6 +31,9 @@ export const TOP_CAMPAIGNS = 10
 export const EXISTING_AFTER_MS = 2 * 86_400_000
 // an account's state (slates, shares, payments) is read at most this often per server process
 export const RECHECK_MS = 10 * 60_000
+// at most this many different source and campaign labels a day per server process come from browsers;
+// past it a new label counts as 'other', so made-up labels cannot fill the database with rows
+export const LABELS_PER_DAY = 300
 const DAY = 86_400_000
 const NO_CAMPAIGN = '-'
 const NO_KIND = '-'
@@ -60,14 +63,25 @@ export function readVisit(input) {
  * io: { account(userId) -> { createdAt, isAnonymous } | null, state(userId) -> { slate, share, invite, paid: { kind: bool } } }
  * on(): whether this server is Slatebox Cloud.
  */
-export function createGrowthFunnel({ events, days, people, io, on = () => false, now = () => Date.now(), log = console, recheckMs = RECHECK_MS, remembered = 5000 }) {
+export function createGrowthFunnel({ events, days, people, io, on = () => false, now = () => Date.now(), log = console, recheckMs = RECHECK_MS, remembered = 5000, labelsPerDay = LABELS_PER_DAY }) {
   // when each account's state was last read, so a busy account costs a few reads a while, not a read per report
   const checked = new Map()
-  async function bump({ step, kind = null, source, campaign = null, userId = null }) {
+  // the source and campaign labels browsers brought today (LABELS_PER_DAY)
+  let labels = { day: null, seen: new Set() }
+  function admit(source, campaign) {
+    const day = dayOf(now())
+    if (labels.day !== day) labels = { day, seen: new Set() }
+    const key = `${source}|${campaign || NO_CAMPAIGN}`
+    if (labels.seen.has(key)) return { source, campaign }
+    if (labels.seen.size >= labelsPerDay) return { source: OTHER, campaign: null }
+    labels.seen.add(key)
+    return { source, campaign }
+  }
+  async function bump({ step, kind = null, source, campaign = null }) {
     const at = now()
     const day = dayOf(at)
     const week = weekOf(day)
-    await events.insertOne({ step, kind, source, campaign, day, week, userId, at: new Date(at) })
+    await events.insertOne({ step, kind, source, campaign, day, week, at: new Date(at) })
     await days.updateOne(
       { _id: [day, source, campaign || NO_CAMPAIGN, step, kind || NO_KIND].join('|') },
       { $inc: { n: 1 }, $setOnInsert: { day, week, source, campaign, step, kind, at: new Date(Date.parse(`${day}T00:00:00Z`)) } },
@@ -90,17 +104,17 @@ export function createGrowthFunnel({ events, days, people, io, on = () => false,
     let counted = false
     if (step === 'paid') {
       if (await markOnce(person, `paid_${kind}`)) {
-        await bump({ step, kind, source: person.source, campaign: person.campaign, userId: person._id })
+        await bump({ step, kind, source: person.source, campaign: person.campaign })
         counted = true
       }
       if (await markOnce(person, 'paid')) {
-        await bump({ step, source: person.source, campaign: person.campaign, userId: person._id })
+        await bump({ step, source: person.source, campaign: person.campaign })
         counted = true
       }
       return counted
     }
     if (await markOnce(person, step)) {
-      await bump({ step, source: person.source, campaign: person.campaign, userId: person._id })
+      await bump({ step, source: person.source, campaign: person.campaign })
       counted = true
     }
     return counted
@@ -163,9 +177,11 @@ export function createGrowthFunnel({ events, days, people, io, on = () => false,
   async function visit({ userId = null, input, headers = {} }) {
     if (!on() || privacySignalFromHeaders(headers)) return { counted: [] }
     const report = readVisit(input)
+    ;({ source: report.source, campaign: report.campaign } = admit(report.source, report.campaign))
+    if (report.tagged) ({ source: report.tagSource, campaign: report.tagCampaign } = admit(report.tagSource, report.tagCampaign))
     const counted = []
     if (report.tagged) {
-      await bump({ step: 'landing', source: report.tagSource, campaign: report.tagCampaign, userId })
+      await bump({ step: 'landing', source: report.tagSource, campaign: report.tagCampaign })
       counted.push('landing')
     }
     if (!userId) {
@@ -196,11 +212,10 @@ export function createGrowthFunnel({ events, days, people, io, on = () => false,
     checked.delete(userId)
   }
 
-  /** Forget an account: its people row and its raw events (the browser asked, or the account went). */
+  /** Forget an account: its people row (the browser asked, or the account went). Raw events never hold its id. */
   async function forget(userId) {
     if (typeof userId !== 'string' || !userId) return false
     await people.deleteOne({ _id: userId })
-    await events.deleteMany({ userId })
     return true
   }
 
@@ -278,7 +293,6 @@ export function growthSummary(rows, { now = Date.now(), weeks = SUMMARY_WEEKS, t
 
 export async function ensureGrowthIndexes({ events, days, people }) {
   await events.createIndex({ at: 1 }, { expireAfterSeconds: RAW_TTL_DAYS * 86400 })
-  await events.createIndex({ userId: 1 }, { sparse: true })
   await days.createIndex({ at: 1 }, { expireAfterSeconds: AGGREGATE_TTL_DAYS * 86400 })
   await days.createIndex({ day: 1 })
   await people.createIndex({ at: 1 }, { expireAfterSeconds: PEOPLE_TTL_DAYS * 86400 })
