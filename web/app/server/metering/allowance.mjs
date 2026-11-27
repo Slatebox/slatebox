@@ -20,12 +20,13 @@ export const DEFAULT_PERSONAL_ALLOWANCE = Object.freeze({
   // builds of a For you idea (workshops.js draftForYou): a board draft metered under its own key, so
   // ordinary board drafts ('workshop') stay outside the allowance
   'personal.build': 3,
+  // look-arounds in a connected tool for About you (profile.sources: one read and one model call)
+  'profile.sources': 5,
 })
 
 // The meter features the allowance pays for today. A feature joins by being added here, once its
-// requests run inside runAIAction under that feature name ('profile.sources' and 'profile.import'
-// next, with a default above).
-export const PERSONAL_FEATURES = Object.freeze(['interview', 'personal.suggest', 'personal.build', 'start.interview'])
+// requests run inside runAIAction under that feature name ('profile.import' next, with a default above).
+export const PERSONAL_FEATURES = Object.freeze(['interview', 'personal.suggest', 'personal.build', 'start.interview', 'profile.sources'])
 
 // The guest allowance (owner, 2026-11-26): /new is the page guests land on, so a guest, who has no other
 // way to use the agent, gets a small daily allowance of the use-case interview there and of building its
@@ -60,6 +61,10 @@ const USED_UP = Object.freeze({
   'personal.build': {
     own: "You've used today's free builds of your ideas. They come back tomorrow, or keep going with Pro or your own key.",
     cloud: "You've used today's free builds of your ideas. They come back tomorrow, or keep going with Pro.",
+  },
+  'profile.sources': {
+    own: "You've used today's free look-arounds in your tools. They come back tomorrow, or keep going with Pro or your own key.",
+    cloud: "You've used today's free look-arounds in your tools. They come back tomorrow, or keep going with Pro.",
   },
   // (no Pro here: the start page leads with free use, owner's adoption-first pricing note)
   'start.interview': {

@@ -286,9 +286,12 @@ export default function Interview({ onKept, onDone }) {
         return ANSWER.discarded
       }
       const results = []
+      // One Keep at a time, in order: each save must finish before the next (About you's own queue).
+      // eslint-disable-next-line no-restricted-syntax
       for (const fact of openFacts) {
         // keep() marks the chip and says why one could not be kept beside it
         keepError.current = ''
+        // eslint-disable-next-line no-await-in-loop
         const ok = await keep(fact)
         results.push(ok ? { text: fact.text, state: 'kept' } : { text: fact.text, error: keepError.current || 'That could not be kept. Try again.' })
       }

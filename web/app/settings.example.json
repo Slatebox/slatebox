@@ -100,12 +100,13 @@
     "//": "Slatebox Cloud only: its AI and call meter. It runs only where public.edition is cloud and enterprise.license holds Slatebox Cloud's own key (server/cloud-lock.mjs): anywhere else there is no meter, whatever this says. Leave it off for local development and self-hosting. See server/metering/README.md.",
     "enabled": false,
     "alertEmail": "",
-    "//personalAllowance": "Slatebox Cloud only, with the meter: what each signed-in person (never a guest) gets a day, by UTC day, of the features that get to know them, served on Slatebox's own models and costing them nothing. interview: turns of the talk in About you (starting it counts as one); personal.suggest: runs of For you ideas; personal.build: builds of a For you idea or of a start page tile (one build drafts all its boards); start.interview: turns of the talk on the start page (Talk it through with Slatebox). 0 turns one off. Past it the meter applies as always. A request on a person's own key never uses it. Counted in the shared budget, so its ceiling bounds it. See server/metering/allowance.mjs.",
+    "//personalAllowance": "Slatebox Cloud only, with the meter: what each signed-in person (never a guest) gets a day, by UTC day, of the features that get to know them, served on Slatebox's own models and costing them nothing. interview: turns of the talk in About you (starting it counts as one); personal.suggest: runs of For you ideas; personal.build: builds of a For you idea or of a start page tile (one build drafts all its boards); start.interview: turns of the talk on the start page (Talk it through with Slatebox); profile.sources: look-arounds in a connected tool for About you. 0 turns one off. Past it the meter applies as always. A request on a person's own key never uses it. Counted in the shared budget, so its ceiling bounds it. See server/metering/allowance.mjs.",
     "personalAllowance": {
       "interview": 20,
       "personal.suggest": 5,
       "personal.build": 3,
-      "start.interview": 20
+      "start.interview": 20,
+      "profile.sources": 5
     },
     "//guestAllowance": "Slatebox Cloud only, with the meter: what each guest (no saved account) gets a day, by UTC day, on the start page, the only agent use open to a guest: start.interview: turns of the talk (Talk it through with Slatebox); start.build: builds of the tile it ends with (one build drafts all its boards). guestAllowancePerAddress: what all the guests behind one network address get a day together, so making more guest accounts gets no more. 0 turns one off. Past it a guest is asked to save the account. Counted in the shared budget, so its ceiling bounds it. See server/metering/allowance.mjs.",
     "guestAllowance": {
