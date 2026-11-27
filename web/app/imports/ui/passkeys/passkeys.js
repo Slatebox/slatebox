@@ -7,6 +7,7 @@ import {
   WebAuthnAbortService, browserSupportsWebAuthn, browserSupportsWebAuthnAutofill, sendSignal, startAuthentication, startRegistration,
 } from '@simplewebauthn/browser'
 import CONSTANTS from '../../api/common/constants'
+import { authenticationRequest } from './passkey-request.mjs'
 
 const M = CONSTANTS.methods.passkeys
 
@@ -37,14 +38,17 @@ function loginWith(response) {
 }
 
 /**
- * Sign in with a passkey: the prompt (autofill: false), or the email field's autofill (autofill:
- * true, which waits until the person picks a passkey there). Resolves true once signed in, false
- * when passkeys are off here.
+ * Sign in with a passkey: the email field's autofill (autofill: true, conditional: it waits until the
+ * person picks a passkey there and never opens a sheet), or the prompt (gesture: true, only from the
+ * person's own click on the button; passkey-request.mjs). Resolves true once signed in, false when
+ * passkeys are off here.
  */
-export async function signInWithPasskey({ autofill = false } = {}) {
+export async function signInWithPasskey({ autofill = false, gesture = false } = {}) {
+  // Refused before anything is asked of the server or the device.
+  authenticationRequest(null, { autofill, gesture })
   const optionsJSON = await Meteor.callAsync(M.loginOptions)
   if (!optionsJSON) return false
-  const response = await startAuthentication({ optionsJSON, useBrowserAutofill: autofill })
+  const response = await startAuthentication(authenticationRequest(optionsJSON, { autofill, gesture }))
   try {
     await loginWith(response)
   } catch (error) {

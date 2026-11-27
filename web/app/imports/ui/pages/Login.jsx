@@ -17,6 +17,7 @@ import { SsoSignIn, useSso } from '../sso/sso'
 import { loginReturn } from '../components/billing/pay/pay-url.mjs'
 import { loginWelcome, rememberSignedIn, signedInBefore } from '../common/accountCopy.mjs'
 import PasskeySignIn from '../passkeys/PasskeySignIn'
+import { focusOnLoad } from '../passkeys/passkey-request.mjs'
 
 export default function Login() {
   const history = useNavigate()
@@ -31,6 +32,9 @@ export default function Login() {
   // A first visit is greeted as one; a browser that has been signed in before says Welcome back.
   const [welcome] = React.useState(() => loginWelcome(signedInBefore(globalThis.localStorage)))
   const sso = useSso()
+  // No field takes focus on load on a touch device: a focused webauthn field raised iOS's passkey
+  // sheet uninvited in the app's sign-in sheet (passkeys/passkey-request.mjs).
+  const [focusFirst] = React.useState(() => focusOnLoad())
   if (Meteor.user() && !Meteor.user().isAnonymous) return <Navigate replace to={destination} />
 
   async function generateLoginToken(eml) {
@@ -129,7 +133,7 @@ export default function Login() {
             // "webauthn" lets the browser offer this site's passkeys here (autofill, PasskeySignIn).
             autoComplete="username webauthn"
             defaultValue={email}
-            autoFocus={!email}
+            autoFocus={focusFirst && !email}
           />
           <TextField
             variant="outlined"
@@ -142,7 +146,7 @@ export default function Login() {
             type="password"
             id="password"
             autoComplete="current-password"
-            autoFocus={!!email}
+            autoFocus={focusFirst && !!email}
           />
           <Button type="submit" fullWidth color="primary" variant="contained" disableElevation size="large"
             sx={{ mt: 2, mb: 1, borderRadius: 6 }}>

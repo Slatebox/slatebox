@@ -31,7 +31,7 @@ export const PASSKEY_WORDS = Object.freeze({
 export function browserErrorText(error) {
   const name = error?.name || ''
   const code = error?.code || ''
-  if (name === 'AbortError' || code === 'ERROR_CEREMONY_ABORTED') return null
+  if (name === 'AbortError' || code === 'ERROR_CEREMONY_ABORTED' || code === 'passkey-uninvited') return null
   if (name === 'NotAllowedError') return null
   if (code === 'ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED' || name === 'InvalidStateError') return 'This device already has a passkey for your account.'
   if (code === 'ERROR_INVALID_DOMAIN' || code === 'ERROR_INVALID_RP_ID' || name === 'SecurityError') return 'Passkeys do not work at this address. Open Slatebox at its usual address and try again.'

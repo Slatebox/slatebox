@@ -6,6 +6,7 @@ import PropTypes from 'prop-types'
 import Button from '@mui/material/Button'
 import KeyIcon from '@mui/icons-material/Key'
 import { PASSKEY_WORDS, browserErrorText } from './passkey-copy.mjs'
+import { isGesture } from './passkey-request.mjs'
 import { autofillAvailable, cancelPasskeyPrompt, passkeysAvailable, signInWithPasskey } from './passkeys'
 
 export default function PasskeySignIn({ onSignedIn, onError }) {
@@ -19,7 +20,8 @@ export default function PasskeySignIn({ onSignedIn, onError }) {
     ;(async () => {
       if (!await passkeysAvailable() || !mounted.current) return
       setAvailable(true)
-      // Autofill waits in the background until a passkey is picked in the email field.
+      // Autofill waits in the background until a passkey is picked in the email field. It is
+      // conditional only: it never opens the passkey sheet by itself.
       if (!await autofillAvailable() || !mounted.current) return
       autofill = true
       try {
@@ -36,11 +38,13 @@ export default function PasskeySignIn({ onSignedIn, onError }) {
   }, [])
 
   if (!available) return null
-  const start = async () => {
+  const start = async (event) => {
+    // Only the person's own click opens the passkey prompt (never a script or a page load).
+    if (!isGesture(event)) return
     setWaiting(true)
     try {
       // This replaces the autofill request; the browser shows its passkey prompt.
-      if (await signInWithPasskey() && mounted.current) onSignedIn()
+      if (await signInWithPasskey({ gesture: true }) && mounted.current) onSignedIn()
     } catch (error) {
       const text = browserErrorText(error)
       if (text && mounted.current) onError(text)

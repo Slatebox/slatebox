@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs'
 const ui = (path) => readFileSync(new URL(`../web/app/imports/ui/${path}`, import.meta.url), 'utf8')
 const repo = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
 const copy = await import('../web/app/imports/ui/passkeys/passkey-copy.mjs')
+const request = await import('../web/app/imports/ui/passkeys/passkey-request.mjs')
 const { registrationCopy } = await import('../web/app/imports/ui/common/accountCopy.mjs')
 const { isClaimFormComplete, markClaimFieldsInvalid } = await import('../web/app/imports/ui/common/guestRegistration.mjs')
 
@@ -33,7 +34,8 @@ test('the browser side asks the server for every challenge and signs in through 
   const client = ui('passkeys/passkeys.js')
   assert.match(client, /from '@simplewebauthn\/browser'/)
   assert.match(client, /Accounts\.callLoginMethod\(\{ methodArguments: \[\{ passkey: response \}\]/)
-  assert.match(client, /startAuthentication\(\{ optionsJSON, useBrowserAutofill: autofill \}\)/)
+  assert.match(client, /startAuthentication\(authenticationRequest\(optionsJSON, \{ autofill, gesture \}\)\)/)
+  assert.equal((client.match(/startAuthentication\(/g) || []).length, 1, 'one call, through authenticationRequest')
   assert.match(client, /Meteor\.callAsync\(M\.loginOptions\)/)
   assert.match(client, /Meteor\.callAsync\(M\.registerOptions\)/)
   assert.match(client, /Meteor\.callAsync\(M\.claimOptions, \{ email \}\)/)
@@ -127,4 +129,50 @@ test('the words: "passkey", plain, US spelling, no "AI", and the self-host READM
   assert.match(section, /Email me a sign-in link/)
   assert.match(section, /SLATEBOX_SSO_ONLY=true`, passkeys are off/)
   assert.doesNotMatch(section, /\bPro\b|pay|price|stripe|balance|meter|\bAI\b/i)
+})
+
+// 2026-11-26 (mobile viewer proof): inside the app's system-browser sign-in sheet, iOS raised its passkey
+// sheet ("Scan QR Code / Use Security Key") on the sign-in page uninvited.
+test('autofill is conditional only, and the modal passkey prompt needs the person\'s own click', () => {
+  const opts = { challenge: 'c', rpId: 'x.test' }
+  assert.deepEqual(request.authenticationRequest(opts, { autofill: true }), { optionsJSON: opts, useBrowserAutofill: true })
+  assert.deepEqual(request.authenticationRequest(opts, { autofill: true, gesture: false }), { optionsJSON: opts, useBrowserAutofill: true })
+  assert.deepEqual(request.authenticationRequest(opts, { gesture: true }), { optionsJSON: opts, useBrowserAutofill: false })
+  // No gesture, no prompt: nothing on load, nothing from a script, nothing from a truthy non-true value.
+  for (const how of [undefined, {}, { autofill: false }, { gesture: false }, { gesture: 1 }, { gesture: 'yes' }, { autofill: 'true' }]) {
+    assert.throws(() => request.authenticationRequest(opts, how), (error) => error.code === request.UNINVITED && error.name === 'NotAllowedError', JSON.stringify(how))
+  }
+  // The refusal is silent (no error message on the page).
+  assert.equal(copy.browserErrorText(Object.assign(new Error('x'), { code: request.UNINVITED })), null)
+  assert.equal(request.isGesture({ isTrusted: true }), true)
+  for (const event of [undefined, null, {}, { isTrusted: false }, { isTrusted: 'true' }]) assert.equal(request.isGesture(event), false)
+})
+
+test('no sign-in field takes focus on load on a touch device', () => {
+  const at = (coarse) => ({ matchMedia: (query) => ({ matches: query === '(pointer: coarse)' ? coarse : false }) })
+  assert.equal(request.focusOnLoad(at(true)), false)
+  assert.equal(request.focusOnLoad(at(false)), true)
+  assert.equal(request.focusOnLoad({ matchMedia: () => { throw new Error('no') } }), false)
+  const login = ui('pages/Login.jsx')
+  assert.match(login, /const \[focusFirst\] = React\.useState\(\(\) => focusOnLoad\(\)\)/)
+  assert.match(login, /autoFocus=\{focusFirst && !email\}/)
+  assert.match(login, /autoFocus=\{focusFirst && !!email\}/)
+  assert.doesNotMatch(login, /autoFocus=\{!!?email\}/)
+})
+
+test('the sign-in page never opens the passkey prompt by itself: only the button\'s trusted click does', () => {
+  const signIn = ui('passkeys/PasskeySignIn.jsx')
+  const client = ui('passkeys/passkeys.js')
+  // The effect that runs on load only ever asks for autofill.
+  const effect = signIn.slice(signIn.indexOf('useEffect('), signIn.indexOf('}, [])'))
+  assert.equal((effect.match(/signInWithPasskey\(/g) || []).length, 1)
+  assert.match(effect, /signInWithPasskey\(\{ autofill: true \}\)/)
+  // The button: a trusted click, then gesture: true.
+  assert.match(signIn, /const start = async \(event\) => \{\s*\/\/[^\n]*\n\s*if \(!isGesture\(event\)\) return/)
+  assert.match(signIn, /signInWithPasskey\(\{ gesture: true \}\)/)
+  assert.match(signIn, /onClick=\{start\}/)
+  // The guard runs before the server is asked for a challenge.
+  assert.ok(client.indexOf('authenticationRequest(null, { autofill, gesture })') < client.indexOf('Meteor.callAsync(M.loginOptions)'))
+  // Nothing else in the app calls navigator.credentials.get or startAuthentication directly.
+  assert.doesNotMatch(signIn + ui('pages/Login.jsx'), /navigator\.credentials|startAuthentication/)
 })
