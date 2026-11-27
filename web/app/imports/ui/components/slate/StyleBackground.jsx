@@ -41,6 +41,7 @@ function Swatch({ on, name, background, ink = '#000000', ...props }) {
   )
 }
 Swatch.propTypes = { on: PropTypes.bool, name: PropTypes.string.isRequired, background: PropTypes.string.isRequired, ink: PropTypes.string }
+Swatch.defaultProps = { on: false, ink: '#000000' }
 
 const HEX = /^#[0-9a-f]{6}$/i
 
@@ -113,6 +114,7 @@ GradientPicker.propTypes = {
   busy: PropTypes.bool,
   onApply: PropTypes.func.isRequired,
 }
+GradientPicker.defaultProps = { current: null, busy: false }
 
 const FITS = [{ value: 'cover', name: 'Fill' }, { value: 'contain', name: 'Fit' }, { value: 'repeat', name: 'Tile' }]
 const UPLOAD_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
@@ -253,3 +255,4 @@ PicturePicker.propTypes = {
   onApply: PropTypes.func.isRequired,
   onRemove: PropTypes.func.isRequired,
 }
+PicturePicker.defaultProps = { current: null, busy: false }
