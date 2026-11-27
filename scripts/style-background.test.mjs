@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { createRequire } from 'node:module'
 import {
-  DIM_DEFAULT, GRADIENT_PRESETS, blend, pictureAddress, cleanBackgroundOverride, gradientCss, isPictureUrl, readBackground, shownBackground, withBackground,
+  DIM_DEFAULT, GRADIENT_PRESETS, blend, cssUrl, pictureAddress, cleanBackgroundOverride, gradientCss, isPictureUrl, readBackground, shownBackground, withBackground,
 } from '../web/app/imports/ui/components/presentations/presentationBackground.mjs'
 import { revertToOriginal, setSlateBackground, takeOffStyle, wearStyle, wornStyle } from '../web/app/imports/ui/components/presentations/presentationBake.mjs'
 import { STYLES, cleanStyleRef, resolveStyle, textOn } from '../web/app/imports/ui/components/presentations/presentationStyles.mjs'
@@ -106,6 +106,17 @@ test('the sanitizer refuses pictures and values that are not safe', () => {
   same(cleanStyleRef({ id: 'neon', overrides: { background: { gradient: SUNSET, picture: PICTURE } } }), { id: 'neon' })
   same(cleanStyleRef({ id: 'neon', overrides: { background: { gradient: SUNSET } } }), { id: 'neon', overrides: { background: { gradient: SUNSET } } })
   assert.equal(resolveStyle({ id: 'neon', overrides: { background: { gradient: { type: 'linear', colors: ['javascript:1', '#000000'] } } } }).background, null)
+})
+
+test('a picture address stored by anyone cannot end the panel preview\'s url() or its rule', () => {
+  const hostile = 'https://e.com/a.jpg"\n) } body { display: none } .x { b: url("'
+  const css = cssUrl(hostile)
+  assert.ok(css.startsWith('url("') && css.endsWith('")'))
+  // Only the closing quote ends the string: no raw quote, backslash or line break inside it.
+  assert.doesNotMatch(css.slice(5, -2), /["\n\r\f]|\\(?![0-9a-f]+ )/)
+  assert.equal(cssUrl('/files/u1/a.png'), 'url("/files/u1/a.png")')
+  const panel = readFileSync(new URL('../web/app/imports/ui/components/slate/StyleBackground.jsx', import.meta.url), 'utf8')
+  assert.match(panel, /cssUrl\(current\.url\)/)
 })
 
 test('a gradient set by hand is part of the style: worn again it stays, another style brings its own, Remove keeps it, Revert takes it back', () => {

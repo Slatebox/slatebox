@@ -25,7 +25,7 @@ import CONSTANTS from '../../../api/common/constants'
 import uploadImage from '../../../api/client/uploadImage'
 import PayNotice from '../PayNotice'
 import { textOn } from '../presentations/presentationStyles.mjs'
-import { DIM_DEFAULT, DIM_MAX, GRADIENT_PRESETS, gradientCss, isPictureUrl, pictureAddress, sameGradient } from '../presentations/presentationBackground.mjs'
+import { DIM_DEFAULT, DIM_MAX, GRADIENT_PRESETS, cssUrl, gradientCss, isPictureUrl, pictureAddress, sameGradient } from '../presentations/presentationBackground.mjs'
 
 const label = { display: 'block', mt: 1.5, mb: 0.5, fontWeight: 600 }
 const swatchGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(64px, 1fr))', gap: 0.75 }
@@ -183,7 +183,7 @@ export function PicturePicker({ current = null, color, tints, busy = false, onAp
       {current && (
         <Box aria-hidden="true" data-slate-picture-preview sx={{
           height: 64, borderRadius: '8px', border: 1, borderColor: 'divider', mb: 1, backgroundColor: color,
-          backgroundImage: `linear-gradient(${tintCss(color, current.dim)}, ${tintCss(color, current.dim)}), url("${current.url.replace(/["\\]/g, '')}")`,
+          backgroundImage: `linear-gradient(${tintCss(color, current.dim)}, ${tintCss(color, current.dim)}), ${cssUrl(current.url)}`,
           backgroundSize: `100% 100%, ${current.fit === 'repeat' ? 'auto' : current.fit}`, backgroundRepeat: `no-repeat, ${current.fit === 'repeat' ? 'repeat' : 'no-repeat'}`, backgroundPosition: 'center',
         }} />
       )}

@@ -40,6 +40,13 @@ export function pictureAddress(url, origin) {
   }
 }
 
+/**
+ * A CSS url() for any stored address (the engine's own rule, containerBackground cssUrl): quoted,
+ * with the characters that could end it escaped, so a picture saved by anyone cannot end the url()
+ * or the rule it sits in.
+ */
+export const cssUrl = (url) => `url("${String(url).replace(/[\\"\n\r\f]/g, (c) => `\\${c.charCodeAt(0).toString(16)} `)}")`
+
 const angleOf = (value) => (Number.isInteger(value) && value >= 0 && value <= 359 ? value : null)
 
 /** A gradient made safe: { type, colors: 2 or 3 hex colors, angle? (linear) }, or null. */
