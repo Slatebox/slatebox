@@ -19,6 +19,10 @@ import { MOVE_ACTIONS, MOVE_RESOURCE_PATH } from './device.mjs'
 
 export const VIEWER_CLIENT_ID = 'slatebox-viewer'
 export const VIEWER_NAME = 'Slatebox viewer'
+// What the consent page calls the app. It is Slatebox's own, so the page says so (verified) instead
+// of warning about an app Slatebox has not checked. A server that names its viewer (settings.mobile.name)
+// shows that name instead.
+export const VIEWER_CONSENT_NAME = 'Slatebox for iPhone and Android'
 // The redirect settings.example.json suggests. It is not a default: the client stays off until redirects are set.
 export const VIEWER_REDIRECTS = Object.freeze(['com.slatebox.viewer://oauth'])
 export const VIEWER_SCOPES = Object.freeze(['slates:read'])
@@ -44,7 +48,7 @@ function redirectFrom(value) {
 
 /**
  * The viewer client from the settings, or null when it is off (enabled: false, or no usable redirect):
- * { clientId, name, redirects, scopes, resourcePath, actions, ignored }. Redirects that are not an app
+ * { clientId, name, consentName, redirects, scopes, resourcePath, actions, ignored }. Redirects that are not an app
  * scheme or https are left out and named in `ignored`.
  */
 export function viewerClient(settings = {}) {
@@ -55,10 +59,12 @@ export function viewerClient(settings = {}) {
   const ignored = asked.filter((value) => !redirectFrom(value)).map(String)
   const redirects = [...new Set(asked.map(redirectFrom).filter(Boolean))]
   if (!redirects.length) return null
-  const name = typeof conf.name === 'string' && conf.name.trim() ? conf.name.trim().slice(0, 80) : VIEWER_NAME
+  const named = typeof conf.name === 'string' && conf.name.trim() ? conf.name.trim().slice(0, 80) : ''
+  const name = named || VIEWER_NAME
   return {
     clientId,
     name,
+    consentName: named || VIEWER_CONSENT_NAME,
     redirects: redirects.slice(0, 10),
     scopes: [...VIEWER_SCOPES],
     resourcePath: VIEWER_RESOURCE_PATH,

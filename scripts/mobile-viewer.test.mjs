@@ -28,7 +28,7 @@ import { createOAuthCore } from "../web/app/server/oauth/core.mjs";
 import { mountOAuth } from "../web/app/server/oauth/routes.mjs";
 import { MOVE_ACTIONS, MOVE_RESOURCE_PATH } from "../web/app/server/oauth/device.mjs";
 import {
-  VIEWER_ACTIONS, VIEWER_CLIENT_ID, VIEWER_REDIRECTS, VIEWER_RESOURCE_PATH, VIEWER_SCOPES, apiAudiences, viewerClient,
+  VIEWER_ACTIONS, VIEWER_CLIENT_ID, VIEWER_CONSENT_NAME, VIEWER_REDIRECTS, VIEWER_RESOURCE_PATH, VIEWER_SCOPES, apiAudiences, viewerClient,
 } from "../web/app/server/oauth/viewer.mjs";
 import { createRelayLive } from "../web/app/server/common/relay-live.mjs";
 import { verifyRoomToken } from "../web/app/server/common/relay-token.mjs";
@@ -353,6 +353,20 @@ test("the consent page names the app's scheme as where the person goes back to, 
   assert.equal(started.status, 302);
   const shown = await core.describeRequest(new URL(started.location, "https://x.test").searchParams.get("request"));
   assert.equal(shown.client.redirectHost, "com.slatebox.viewer");
+});
+
+test("the consent page names the viewer as Slatebox's own, verified, with its read-only scope", async (t) => {
+  const { authorize, core } = await setup(t);
+  const started = await authorize({ response_type: "code", client_id: VIEWER_CLIENT_ID, redirect_uri: APP_REDIRECT, code_challenge: pkce().challenge, code_challenge_method: "S256" });
+  assert.equal(started.status, 302);
+  const shown = await core.describeRequest(new URL(started.location, "https://x.test").searchParams.get("request"));
+  assert.deepEqual(shown.client, { name: "Slatebox for iPhone and Android", redirectHost: "com.slatebox.viewer", verified: true });
+  assert.deepEqual(shown.scopes, ["slates:read"]);
+  assert.equal(VIEWER_CONSENT_NAME, "Slatebox for iPhone and Android");
+  // A server that names its viewer shows that name; an unnamed one the consent name.
+  assert.equal(viewerClient({ mobile: { redirects: [APP_REDIRECT], name: "Acme boards" } }).consentName, "Acme boards");
+  assert.equal(viewerClient({ mobile: { redirects: [APP_REDIRECT] } }).consentName, VIEWER_CONSENT_NAME);
+  assert.equal(viewerClient({ mobile: { redirects: [APP_REDIRECT] } }).name, "Slatebox viewer", "the connection keeps its listed name");
 });
 
 // ---- slates.live -------------------------------------------------------------------------------

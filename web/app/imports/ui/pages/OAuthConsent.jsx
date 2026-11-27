@@ -8,6 +8,7 @@ import Button from '@mui/material/Button'
 import Checkbox from '@mui/material/Checkbox'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Typography from '@mui/material/Typography'
+import VerifiedIcon from '@mui/icons-material/Verified'
 import CONSTANTS from '../../api/common/constants'
 import BrandBar from '../common/BrandBar'
 import { tokenPermissions } from '../../api/common/token-permissions.mjs'
@@ -17,6 +18,8 @@ import { AccountActions, AccountNote, AccountPage, AccountPanel, AccountSection,
 // person on the hosted MCP endpoint. The server checked the app and where it returns; the person
 // sees its name (which the app chose itself), that address, and each permission, and allows or
 // denies. Allowing sends the browser back to the app with a one-time code (server/oauth).
+// Slatebox's own app (a first-party client, request.client.verified: the iPhone and Android viewer)
+// is named as verified, with its read-only permissions listed, and never the unchecked-app warning.
 export default function OAuthConsent() {
   const [query] = useSearchParams()
   const requestId = query.get('request') || ''
@@ -79,6 +82,45 @@ export default function OAuthConsent() {
           <Button variant="contained" component={RouterLink} to={signIn}>Sign in</Button>
         </AccountActions>
       </AccountSection>
+    )
+  } else if (request.client.verified) {
+    const offered = tokenPermissions.filter(({ scope }) => request.scopes.includes(scope))
+    body = (
+      <>
+        <AccountSection title={`Allow ${request.client.name} to read your slates?`}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: SPACE.hair, color: 'success.main', mb: SPACE.tight }}>
+            <VerifiedIcon fontSize="small" aria-hidden />
+            <Typography variant="subtitle2" component="p">Verified: this is Slatebox’s own app</Typography>
+          </Box>
+          <Typography>
+            It shows you the slates you can open, as you. It only reads: it cannot change, share or delete
+            anything. You can disconnect it at any time in Profile → Developer.
+          </Typography>
+          <AccountNote>
+            <Typography variant="subtitle2">After you answer, you go back to the app</Typography>
+          </AccountNote>
+        </AccountSection>
+        <AccountSection title="It can">
+          <Box component="ul" sx={{ m: 0, pl: 2.5, display: 'grid', gap: SPACE.tight }}>
+            {offered.map(({ scope, label, explain }) => (
+              <li key={scope}>
+                <Typography variant="body2">{label} (read only)</Typography>
+                <Typography variant="caption" color="text.secondary">{explain}</Typography>
+              </li>
+            ))}
+          </Box>
+          {error && <Alert severity="error">{error}</Alert>}
+          <AccountActions>
+            <Button variant="contained" onClick={() => answer(true)} disabled={busy || !chosen.length}>
+              Allow
+            </Button>
+            <Button variant="outlined" onClick={() => answer(false)} disabled={busy}>
+              Deny
+            </Button>
+          </AccountActions>
+          <FinePrint sx={{ mt: SPACE.text }}>Signed in as {user.emails?.[0]?.address || 'you'}.</FinePrint>
+        </AccountSection>
+      </>
     )
   } else {
     const offered = tokenPermissions.filter(({ scope }) => request.scopes.includes(scope))

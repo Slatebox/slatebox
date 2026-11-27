@@ -80,3 +80,18 @@ test("each permission is explained in plain words on the consent page and the to
   }
   assert.match(consent, /explain/);
 });
+
+test("Slatebox's own viewer app gets a verified consent with its read-only permissions listed; other apps keep the warning", () => {
+  const verified = consent.slice(consent.indexOf("} else if (request.client.verified) {"), consent.indexOf("  } else {\n    const offered"));
+  assert.ok(verified.length > 100, "a branch of its own for verified clients");
+  assert.match(verified, /Verified: this is Slatebox’s own app/);
+  assert.match(verified, /It only reads: it cannot change, share or delete/);
+  assert.match(verified, /\(read only\)/);
+  assert.match(verified, /offered\.map/);
+  assert.doesNotMatch(verified, /has not checked/);
+  assert.doesNotMatch(verified, /Checkbox/, "nothing to untick: the list is what it may do");
+  // The third-party branch still warns.
+  const third = consent.slice(consent.indexOf("  } else {\n    const offered"));
+  assert.match(third, /Slatebox has not checked this app/);
+  assert.match(third, /Allow it only if you\s+started connecting it just now/);
+});

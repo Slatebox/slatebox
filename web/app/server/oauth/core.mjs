@@ -389,6 +389,8 @@ export function createOAuthCore({ clients, requests, codes, refreshFamily, apiTo
   }
 
   // What the page shows: the app's own name (unverified), where it sends the person back, the scopes.
+  // A first-party client (the viewer app) is Slatebox's own: its consent name, marked verified, so the
+  // page lists its read-only scopes instead of warning about an unchecked app.
   async function describeRequest(requestId) {
     const request = await pending(requestId)
     if (!request) return null
@@ -398,8 +400,12 @@ export function createOAuthCore({ clients, requests, codes, refreshFamily, apiTo
     // (com.slatebox.viewer://oauth reads as com.slatebox.viewer, not as "oauth").
     const back = new URL(request.redirectUri)
     const web = back.protocol === 'https:' || back.protocol === 'http:'
+    const redirectHost = (web && back.host) || back.protocol.replace(/:$/, '')
+    const first = firstPartyOf(request.clientId)
     return {
-      client: { name: client.client_name, redirectHost: (web && back.host) || back.protocol.replace(/:$/, '') },
+      client: first
+        ? { name: first.consentName || first.name, redirectHost, verified: true }
+        : { name: client.client_name, redirectHost },
       scopes: request.scopes,
       expiresAt: request.expiresAt,
     }
