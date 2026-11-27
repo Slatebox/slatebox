@@ -37,7 +37,7 @@ unacceptable behavior through https://slatebox.com/contact/?topic=conduct.
 
 | Path | What it is | Versioned as |
 | --- | --- | --- |
-| [`web/app`](web/app) | The Slatebox app (Meteor 3.5, React) | app, tags `vX.Y.Z` |
+| [`web/app`](web/app) | The Slatebox app (Meteor 3.6.1, React) | app, tags `vX.Y.Z` |
 | [`self-host`](self-host) | The one-container image `ghcr.io/slatebox/slatebox` | with the app |
 | [`packages/slatebox`](packages/slatebox) | `npx slatebox`: the installer and CLI | npm `slatebox`, tags `slatebox@X.Y.Z` |
 | [`packages/slatebox-mcp`](packages/slatebox-mcp) | The MCP server and local CLI | npm `slatebox-mcp`, tags `slatebox-mcp@X.Y.Z` |
@@ -53,7 +53,7 @@ Versioning, tags and releases are described in [docs/releasing.md](docs/releasin
 
 ## Development setup
 
-You need Node 22 (`web/app/.nvmrc` pins 22.12.0 for the app; the npm packages need 22.13 or later), [Meteor 3.5](https://docs.meteor.com/about/install.html)
+You need Node 22.13 or later for the npm packages (`web/app/.nvmrc` pins 26.13.1, the Node that Meteor 3.6.1 bundles, for the app), [Meteor 3.6.1](https://docs.meteor.com/about/install.html)
 and Git. Meteor runs its own MongoDB in development.
 
 1. Clone this repository and, next to it, the engine. The app links the engine from a sibling

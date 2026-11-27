@@ -1,4 +1,7 @@
 import { Meteor } from 'meteor/meteor'
+// Method, login and publication timing per 5-minute window, when settings.metrics.methodTiming is on
+// (server/metrics/method-timing.mjs). First, so it is listening before any client connects.
+import './metrics/meteor'
 // the in-app pay sheet's public settings, checked before any browser loads (pay-settings.mjs), and
 // the Cloud lock: payments and the meter run only on Slatebox Cloud by its signed key (cloud-lock.mjs)
 import './pay-settings-startup'

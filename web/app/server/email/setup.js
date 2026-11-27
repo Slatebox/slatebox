@@ -20,6 +20,10 @@ export default async function setup() {
   // A self-hosted instance sends from its operator's own address (mailFrom),
   // one its mail service accepts.
   Accounts.emailTemplates.from = Meteor.settings.mailFrom || 'Slatebox <info@slatebox.com>'
+  // A link to verify an email address works for 3 days (Meteor 3.6's default, set here so it is a
+  // decision, not an accident; before 3.6 the links never expired). An expired link shows its error on
+  // /verify-email with a resend.
+  Accounts.config({ emailVerificationTokenExpirationInDays: 3 })
 
   // The team an invitation is for: its name, else its subdomain.
   async function teamNameOf(user) {

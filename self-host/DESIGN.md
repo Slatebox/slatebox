@@ -155,8 +155,8 @@ MongoDB itself later ends with SIGILL.
 Every line carries the name of the process that wrote it: `[slatebox]`,
 `[app]`, `[relay]`, `[proxy]`, `[mongo]`. MongoDB writes a JSON line for
 every routine event and several host-tuning hints at each start; only its
-errors are passed on. Caddy logs errors only. The relay's deprecation notice
-from Node 24 is switched off.
+errors are passed on. Caddy logs errors only. The relay's Node deprecation notice
+is switched off.
 
 What people write never reaches the log. The app and the relay log ids,
 counts and sizes, never note text, chat, AI prompts or replies, email
@@ -251,9 +251,9 @@ committed files of the three repositories and runs one multi-stage
   and checks the result.
 - `meteor-build`: the Meteor bundle. The build stops if a `settings*.json` is
   in the app tree; the script removes them and the context ignores them.
-- `server-dependencies`: native modules for the runtime's own base. bcrypt 5
-  inside `accounts-password` is replaced by bcrypt 6 before the rebuild,
-  because bcrypt 5 has no arm64 glibc binary and does not compile on Node 24.
+- `server-dependencies`: native modules for the runtime's own base. With
+  Meteor 3.6.1, `accounts-password` (3.3.3) bundles bcrypt 6 and Argon2 with
+  prebuilt bindings (3.3.0, in Meteor 3.5, still had bcrypt 5); the stage checks that bcrypt 6 is the one that loads and hashes.
   Third-party source maps, editor folders and the sample keys in packages'
   test suites are left out (about 130 MB).
 - `relay`, `fonts`: production dependencies of the relay; the Google Fonts
@@ -263,7 +263,7 @@ committed files of the three repositories and runs one multi-stage
   and the database tools, fetched at the released versions and pinned by
   checksum (the official `mongo` image leaves its documentation out).
 - `runtime`: Ubuntu 24.04 (the platform MongoDB 8.0 publishes builds for),
-  Node 24.15.0, `mongod`, `mongodump` and `mongorestore` from the official
+  Node 26.13.1, `mongod`, `mongodump` and `mongorestore` from the official
   `mongo` image, Caddy from the official `caddy` image, tini.
 
 The result is about 585 MB to download and 1.6 GB on disk, of which Keycloak

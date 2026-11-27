@@ -1,4 +1,4 @@
-FROM geoffreybooth/meteor-base:3.5 AS meteor-build
+FROM geoffreybooth/meteor-base:3.6.1 AS meteor-build
 
 # Copy the complete app before installing dependencies. Published releases use
 # the registry dependency directly; the local production-candidate gate stages
@@ -9,8 +9,8 @@ RUN bash $SCRIPTS_FOLDER/build-app-npm-dependencies.sh
 
 RUN bash $SCRIPTS_FOLDER/build-meteor-bundle.sh
 
-# Meteor 3.5 bundles against Node 24.15.0. Keep both runtime stages identical.
-FROM node:24.15.0-alpine AS server-dependencies
+# Meteor 3.6.1 bundles against Node 26.13.1. Keep both runtime stages identical.
+FROM node:26.13.1-alpine AS server-dependencies
 
 ENV APP_BUNDLE_FOLDER /opt/bundle
 ENV SCRIPTS_FOLDER /docker
@@ -30,14 +30,12 @@ COPY --from=meteor-build $APP_BUNDLE_FOLDER/bundle $APP_BUNDLE_FOLDER/bundle/
 
 RUN bash $SCRIPTS_FOLDER/build-meteor-npm-dependencies.sh
 
-# accounts-password@3.3.0 bundles bcrypt@5 plus node-pre-gyp's vulnerable,
-# install-only tar stack. Re-resolve its isolated native dependency tree with
-# bcrypt 6 while retaining the package's pinned Argon2 implementation.
+# accounts-password@3.3.3 (Meteor 3.6.1) bundles bcrypt 6 and Argon2 with
+# prebuilt glibc and musl bindings, so the old bcrypt 5 re-resolve is gone.
+# Prove the bundled password hashing loads on Alpine and works.
 RUN BCRYPT_ROOT="$APP_BUNDLE_FOLDER/bundle/programs/server/npm/node_modules/meteor/accounts-password" && \
-    npm install --prefix "$BCRYPT_ROOT" --ignore-scripts --no-save --no-audit --no-fund \
-      bcrypt@6.0.0 argon2@0.41.1 && \
     BCRYPT_ROOT="$BCRYPT_ROOT" node --eval \
-      "const root = process.env.BCRYPT_ROOT + '/node_modules/'; const bcrypt = require(root + 'bcrypt'); const argon2 = require(root + 'argon2'); const hash = bcrypt.hashSync('slatebox-runtime-check', 4); if (!bcrypt.compareSync('slatebox-runtime-check', hash)) process.exit(1); argon2.hash('slatebox-runtime-check').then((argonHash) => argon2.verify(argonHash, 'slatebox-runtime-check')).then((valid) => { if (!valid) process.exit(1) })"
+      "const root = process.env.BCRYPT_ROOT + '/node_modules/'; const bcrypt = require(root + 'bcrypt'); const argon2 = require(root + 'argon2'); if (!require(root + 'bcrypt/package.json').version.startsWith('6.')) process.exit(1); const hash = bcrypt.hashSync('slatebox-runtime-check', 4); if (!bcrypt.compareSync('slatebox-runtime-check', hash)) process.exit(1); argon2.hash('slatebox-runtime-check').then((argonHash) => argon2.verify(argonHash, 'slatebox-runtime-check')).then((valid) => { if (!valid) process.exit(1) })"
 
 # Meteor creates the server bundle on glibc, so Sharp's generated dependency
 # tree contains glibc binaries. Install the matching musl payload explicitly
@@ -70,7 +68,7 @@ RUN SERVER_ROOT="$APP_BUNDLE_FOLDER/bundle/programs/server" && \
 
 # Start another Docker stage, so that the final image doesn’t contain the layer with the build dependencies
 # See previous FROM line; this must match
-FROM node:24.15.0-alpine AS runtime
+FROM node:26.13.1-alpine AS runtime
 
 ENV APP_BUNDLE_FOLDER /opt/bundle
 ENV SCRIPTS_FOLDER /docker

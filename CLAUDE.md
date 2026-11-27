@@ -1,6 +1,6 @@
 # Slatebox app — working notes
 
-Canonical Meteor 3.5 product app. Canvas engine comes from the sibling
+Canonical Meteor 3.6.1 product app. Canvas engine comes from the sibling
 library repo `../slateboxjs-v2` (SlateboxJS v3).
 
 ## Engine source
@@ -18,6 +18,16 @@ confuse with a published one. To try local engine changes, build
 - A failing test is fixed in the code, or in the test only when the test
   itself is wrong. Never loosen a test to make it pass.
 
+## Meteor 3.6
+
+- `web/app/package.json` sets `meteor.modern: false`. Meteor 3.6 turns the modern build stack on
+  (SWC transpiler, `@swc/helpers` imports) when it is unset; 3.5 left it off. Turning it on is a
+  separate change with its own client checks (the app's Babel plugin is not applied by SWC).
+- Live updates: `packages.mongo.reactivity` is `["changeStreams","polling"]`. With
+  `MONGO_OPLOG_URL` set, Meteor still opens an oplog tail per server whatever the order says.
+- `settings.metrics.methodTiming: true` logs one `[method-timing]` line per 5-minute window
+  (server/metrics, from Meteor's `instrumentation` package).
+
 ## Settings
 
 No settings file with real values is tracked. Copy
@@ -27,5 +37,5 @@ and fill in the keys you need. Deployed apps read `METEOR_SETTINGS`.
 ## Dev commands
 
 - Library gates: `cd ../slateboxjs-v2 && npm test && npm run build`.
-- Paired real-host gate: `npm run test:port-container` (disposable Meteor 3.5
+- Paired real-host gate: `npm run test:port-container` (disposable Meteor 3.6.1
   image + Mongo replica + two-client suite; also `SLATEBOX_LIBRARY_SOURCE=registry`).

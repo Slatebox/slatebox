@@ -14,10 +14,10 @@
 #
 # See DESIGN.md for the reasoning behind each stage.
 
-ARG NODE_VERSION=24.15.0
+ARG NODE_VERSION=26.13.1
 ARG MONGO_VERSION=8.0.17
 ARG CADDY_VERSION=2.11.9
-ARG METEOR_BASE=geoffreybooth/meteor-base:3.5
+ARG METEOR_BASE=geoffreybooth/meteor-base:3.6.1
 ARG KEYCLOAK_VERSION=26.8.2
 # The Java runtime Keycloak 26.8 is built and tested on (21), from Eclipse Temurin's Ubuntu 24.04 image.
 ARG TEMURIN_JRE=21.0.13_9-jre-noble
@@ -28,7 +28,7 @@ ARG CLOUDFLARED_VERSION=2026.11.2
 # version here and by checksum below and in build/docker-cli.sha256 (a bump changes both files).
 ARG DOCKER_CLI_VERSION=29.10.1
 
-# Meteor 3.5 bundles against Node 24.15.0. Every stage that runs or compiles
+# Meteor 3.6.1 bundles against Node 26.13.1. Every stage that runs or compiles
 # for the app takes its Node binary from this one image.
 FROM node:${NODE_VERSION}-bookworm-slim AS node
 FROM mongo:${MONGO_VERSION} AS mongo
@@ -160,13 +160,10 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm
 COPY --from=meteor-build /opt/bundle/bundle /opt/slatebox/app/bundle
 WORKDIR /opt/slatebox/app/bundle/programs/server
 
-# accounts-password@3.3.0 bundles bcrypt@5 plus node-pre-gyp's vulnerable,
-# install-only tar stack. Re-resolve its isolated native dependency tree with
-# bcrypt 6 while retaining the package's pinned Argon2 implementation. This
-# comes before the rebuild below: bcrypt 5 publishes no arm64 glibc binary and
-# does not compile against Node 24, while bcrypt 6 ships prebuilt bindings.
-RUN npm install --prefix "$PWD/npm/node_modules/meteor/accounts-password" --ignore-scripts --no-save --no-audit --no-fund \
-      bcrypt@6.0.0 argon2@0.41.1
+# accounts-password@3.3.3 (Meteor 3.6.1) bundles bcrypt 6 and Argon2 with
+# prebuilt bindings (bcrypt 5 and its node-pre-gyp/tar install stack are gone),
+# so no re-resolve is needed before the rebuild below. The check after it still
+# insists on bcrypt 6.
 
 # Install the server's own dependencies and rebuild native modules for this
 # platform, then prove password hashing loads and works.

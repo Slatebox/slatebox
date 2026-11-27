@@ -14,6 +14,8 @@ import { DATABASE_SETTINGS, PROVIDER_KEY, SETTINGS as KNOWN, runtimeFacts } from
 
 // Payments and metering run only on Slatebox Cloud, under its signed license: a self-hosted
 // Slatebox is never a paid service, so its settings cannot switch them on.
+// The observe drivers the app uses, in order (settings.packages.mongo.reactivity).
+const MONGO_REACTIVITY = Object.freeze(['changeStreams', 'polling'])
 const CLOUD_ONLY = ['stripePrivateKey', 'stripe', 'metering', 'wallet']
 
 function setting(name) {
@@ -305,6 +307,10 @@ function main() {
   if (settings.public) delete settings.public.sso
   if (sso.enabled) mergeSettings(settings, ssoAppSettings({ url, secrets, only: sso.only, defaultRole: sso.defaultRole, domains: sso.domains }))
   if (mailFrom) settings.mailFrom = mailFrom
+  // Live updates come from MongoDB change streams, with polling as the only fallback (Meteor 3.6.1).
+  // An operator's own packages.mongo in SLATEBOX_SETTINGS still wins. MONGO_OPLOG_URL stays set
+  // below until the change-stream measurement says it can go.
+  settings.packages = { ...settings.packages, mongo: { reactivity: MONGO_REACTIVITY, ...settings.packages?.mongo } }
   settings.mailGun = { server: '', ...settings.mailGun }
   settings.selfHosted = { ...settings.selfHosted }
   // The AI settings win over the same fields in SLATEBOX_SETTINGS.

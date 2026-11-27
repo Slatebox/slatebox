@@ -20,6 +20,9 @@ shipped early. The next release is 2.0.0, which is above both lines.
 
 ## [Unreleased]
 
+- **accounts:** Meteor 3.6.1. A link to verify an email address now expires after 3 days (before, it
+  never did); an expired link offers a resend. Password hashing uses bcrypt 6.
+
 ## [2.1.4] - 2026-11-27
 
 No user-facing changes are recorded in Conventional Commits for this release.

@@ -225,8 +225,8 @@ function buildImage(libraryVersion, libraryRevision) {
     appImageRunArgs(['--rm', '--entrypoint', 'node', imageTag, '--version']),
     { capture: true }
   ).stdout.trim()
-  if (nodeVersion !== 'v24.15.0') {
-    throw new Error(`Candidate image uses ${nodeVersion}; expected v24.15.0`)
+  if (nodeVersion !== 'v26.13.1') {
+    throw new Error(`Candidate image uses ${nodeVersion}; expected v26.13.1`)
   }
 
   const bundledLibraryVersion = run(
@@ -425,7 +425,7 @@ try {
   buildImage(libraryVersion, libraryRevision)
   if (!buildOnly) await smokeImage()
   console.log(
-    `Verified ${imageTag}: Meteor 3.5 build, Node 24.15.0 runtime${
+    `Verified ${imageTag}: Meteor 3.6.1 build, Node 26.13.1 runtime${
       buildOnly ? '' : ', Mongo replica-set readiness, and real-host app invariants'
     }${imagePlatform ? ` on ${imagePlatform}` : ''}.`
   )

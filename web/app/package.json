@@ -108,7 +108,7 @@
     "lodash.uniqby": "^4.7.0",
     "lru-cache": "^7.18.3",
     "markdown-it": "^14.1.0",
-    "meteor-node-stubs": "^1.2.10",
+    "meteor-node-stubs": "^1.2.32",
     "multer": "^1.4.5-lts.1",
     "node-fetch": "^3.3.2",
     "oauth": "^0.10.0",
@@ -153,7 +153,8 @@
     "mainModule": {
       "client": "client/main.jsx",
       "server": "server/main.js"
-    }
+    },
+    "modern": false
   },
   "babel": {
     "plugins": [

@@ -30,6 +30,8 @@ const settings = {
   slateboxAPI: { publicKey, secretKey },
   // Room tokens only: the room-less legacy relay credential is off (compose.yaml sets RELAY_ALLOW_LEGACY=false).
   relay: { legacy: false },
+  // Live updates from MongoDB change streams, with polling as the only fallback (Meteor 3.6.1).
+  packages: { mongo: { reactivity: ['changeStreams', 'polling'] } },
   selfHosted: { workshopAI: false },
   // Made once with the other secrets: a backup restored into a new installation gets a new id.
   instance: { id: randomUUID() },

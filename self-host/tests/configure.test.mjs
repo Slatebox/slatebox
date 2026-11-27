@@ -13,7 +13,7 @@ const SEP = '\u001e'
 /**
  * Run configure.mjs with these settings. Returns its exit code, everything it
  * printed (the container log), the app's environment as the app reads it (from
- * app.env alone, nothing inherited), and the files it left in /data/secrets.
+ * app.env alone, nothing inherited; of the oplog URL only what follows its credentials), and the files it left in /data/secrets.
  */
 async function configure(env) {
   const envArgs = Object.entries(env).flatMap(([key, value]) => ['-e', `${key}=${value}`])
@@ -22,7 +22,7 @@ async function configure(env) {
     `printf '%s${SEP}' "$code"`,
     `cat /run/slatebox-test.log; printf '${SEP}'`,
     // What the app process gets from app.env, with the container's own environment left out.
-    `[ -f /run/slatebox/app.env ] && env -i sh -c 'set -a; . /run/slatebox/app.env; set +a; node -e "process.stdout.write(JSON.stringify({ key: process.env.SLATEBOX_KEY_ENCRYPTION_KEY ?? null, settings: process.env.METEOR_SETTINGS }))"'; printf '${SEP}'`,
+    `[ -f /run/slatebox/app.env ] && env -i sh -c 'set -a; . /run/slatebox/app.env; set +a; node -e "process.stdout.write(JSON.stringify({ key: process.env.SLATEBOX_KEY_ENCRYPTION_KEY ?? null, settings: process.env.METEOR_SETTINGS, oplog: process.env.MONGO_OPLOG_URL ? process.env.MONGO_OPLOG_URL.split(String.fromCharCode(64)).pop() : null }))"'; printf '${SEP}'`,
     'ls -A /data/secrets 2>/dev/null | wc -l',
   ].join('; ')
   const out = await ok(['run', '--rm', '--network', 'none',
@@ -173,6 +173,18 @@ test('a self-hosted install: edition self-host (enterprise locked without a lice
     assert.match(refused.log, /not a setting of a self-hosted Slatebox \(payments and metering run only on Slatebox Cloud\)/)
     assert.equal(refused.secretFiles, 0, 'nothing written')
   }
+})
+
+test('live updates: change streams then polling, the oplog URL still set, method timing off; an operator packages.mongo wins', async () => {
+  const run = await configure({})
+  assert.equal(run.code, 0, run.log)
+  const settings = appSettings(run)
+  assert.deepEqual(settings.packages.mongo.reactivity, ['changeStreams', 'polling'])
+  assert.equal(settings.metrics?.methodTiming, undefined)
+  assert.match(run.app.oplog ?? '', /^[^@/]+\/local\?/, 'MONGO_OPLOG_URL stays until the measurement says it can go')
+  const own = await configure({ SLATEBOX_SETTINGS: JSON.stringify({ packages: { mongo: { reactivity: ['polling'] } } }) })
+  assert.equal(own.code, 0, own.log)
+  assert.deepEqual(appSettings(own).packages.mongo.reactivity, ['polling'])
 })
 
 test('single sign-on: everyone it lets in joins the first team as a member by default; SLATEBOX_SSO_DEFAULT_ROLE=none and SLATEBOX_SSO_DOMAINS reach the app', async () => {

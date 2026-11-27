@@ -27,8 +27,14 @@
   },
   "packages": {
     "mongo": {
-      "reactivity": ["changeStreams", "oplog", "polling"]
+      "//": "Observe drivers, in order: MongoDB change streams, then polling for a query change streams cannot serve. Oplog tailing is left out (Meteor 3.6.1); MONGO_OPLOG_URL is still set on Cloud and in the self-host image until the change-stream measurement says it can go.",
+      "reactivity": ["changeStreams", "polling"]
     }
+  },
+  "metrics": {
+    "//": "methodTiming: true logs, once per 5-minute window, one compact [method-timing] line with the count, p50 and p95 (ms) of each Meteor method and login that ran (names only, never arguments or user data). Off when absent or false; Cloud turns it on, a self-hosted install leaves it off. sampleRate (0-1, default 1) records only that share of calls; Meteor still builds its per-call event for every call while timing is on. A method called from inside another method or publication is counted as call:<name>.",
+    "methodTiming": false,
+    "sampleRate": 1
   },
   "googleImageSearch": {
     "//": "Picture search (Google Programmable Search). Server only: never move these into public.",
