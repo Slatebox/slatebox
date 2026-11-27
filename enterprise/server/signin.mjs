@@ -144,6 +144,7 @@ export function createSignIn({ flows, clients, vault, master, fetch, apps = () =
         issuer: found.server.issuer,
         tokenEndpoint: found.server.tokenEndpoint,
         ...(found.server.revocationEndpoint && { revocationEndpoint: found.server.revocationEndpoint }),
+        ...(found.server.revocation && { revocation: found.server.revocation }),
         ...(registration.app?.tokenAccept && { tokenAccept: registration.app.tokenAccept }),
         // a known provider's documented exceptions (oauth.mjs KNOWN_PROVIDERS), kept for refresh and revocation
         ...(found.server.noResource && { noResource: true }),

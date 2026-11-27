@@ -25,6 +25,7 @@ import {
 import AuthManager from '../../imports/api/common/AuthManager'
 import { removePersonalData } from '../profile/meteor'
 import { audit } from '../audit/recorder.mjs'
+import { removeIntegrationsOfAccount } from '../integrations/meteor'
 
 const method = {}
 
@@ -138,6 +139,9 @@ method[CONSTANTS.methods.organizations.delete] = async function deleteOrganizati
         await audit.record({ action: 'slate.deleted', orgId: user.orgId, target: { type: 'slate', id: slate.shareId || slate._id, name: slate.options?.name || 'Untitled slate' }, slateId: slate.shareId || slate._id, details: { reason: 'team deleted' } })
       }
       await audit.record({ action: 'team.deleted', orgId: user.orgId, target: { type: 'team', id: user.orgId, name: team?.name } })
+      // their integrations and sign-ins (revoked at each vendor first), before their slates go
+      await removeIntegrationsOfAccount(user._id)
+
       await Slates.removeAsync({
         userId: Meteor.userId(),
         orgId: user.orgId,

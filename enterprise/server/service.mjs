@@ -1870,6 +1870,64 @@ export function createConnectorService({
     return { ok: true, integrationId: doc._id, name: doc.name, removedFrom, signedOut, ...(running && { running, say }), ...(note && { note }) }
   }
 
+  /**
+   * The person's account is being removed (users.delete, a team owner deleting the team, an admin
+   * removing a member): every integration they connected is disconnected as Disconnect does (off
+   * every slate, waiting suggestions withdrawn, waiting cards declined, the sign-in revoked at its
+   * server and forgotten), then every other sign-in they still hold (one they never connected) is
+   * revoked and forgotten, and their agents' rows and action cards on any slate are removed.
+   * Only their own: a teammate's integration, sign-in or agent on the same slates stays, and so does
+   * a card a teammate's agent made at this person's request (it is the teammate's).
+   * Best effort per step: nothing here throws, and a step that fails is recorded (never a token);
+   * the caller removes the rows that are left whatever happened (server/integrations).
+   * credentialRows(userId) -> [{ ownerId, address }]
+   */
+  async function forgetPerson(userId, { credentialRows = async () => [] } = {}) {
+    const out = { disconnected: 0, signIns: 0, agents: 0, cards: 0, failed: [] }
+    if (typeof userId !== 'string' || !userId) return out
+    const principal = { kind: 'person', userId }
+    const step = async (name, fn) => {
+      try {
+        return await fn()
+      } catch (error) {
+        out.failed.push(name)
+        audit({ kind: 'account_integrations_step_failed', userId, step: name, error: String(error?.message || error).slice(0, 200) })
+        return undefined
+      }
+    }
+    for (const doc of (await step('list', () => integrations.find({ ownerId: userId }))) || []) {
+      if (doc.ownerId !== userId) continue
+      const gone = await step('disconnect', () => integrationDisconnect(principal, { integrationId: doc._id }))
+      if (gone?.ok) out.disconnected++
+      else await step('integration', () => integrations.remove(doc._id))
+    }
+    if (vault) {
+      for (const row of (await step('sign_ins', () => credentialRows(userId))) || []) {
+        if (row?.ownerId !== userId || typeof row.address !== 'string') continue
+        if ((await step('sign_in', () => vault.remove(userId, row.address)))?.removed) out.signIns++
+      }
+    }
+    if (connections.remove) {
+      for (const doc of (await step('agents', () => connections.find({ ownerId: userId }))) || []) {
+        if (doc.ownerId !== userId) continue
+        // An agent still on a slate with no integration (from before integrations): taken off as
+        // Remove does, its waiting suggestions withdrawn.
+        if (doc.status !== 'removed') await step('agent_off', () => disconnect(principal, { connectionId: doc._id }))
+        await step('agent', () => connections.remove(doc._id))
+        out.agents++
+      }
+    }
+    if (outside.remove) {
+      for (const card of (await step('cards', () => outside.find({ ownerId: userId }))) || []) {
+        if (card.ownerId !== userId) continue
+        await step('card', () => outside.remove(card._id))
+        out.cards++
+      }
+    }
+    audit({ kind: 'account_integrations_removed', userId, disconnected: out.disconnected, signIns: out.signIns, agents: out.agents, cards: out.cards, ...(out.failed.length && { failed: out.failed }) })
+    return out
+  }
+
   // Puts an integration on a slate as a named agent: no sign-in and no consent again (the
   // integration's carry over). The slate's limits and its owner's choice still apply.
   async function placeOnSlate(principal, slate, integration, { by, contextLevel = null, name: rawName = null, view = null }) {
@@ -2089,6 +2147,7 @@ export function createConnectorService({
     integrationAllowChanges,
     integrationSetRule,
     integrationDisconnect,
+    forgetPerson,
     integrationInvite,
     applyRules,
     slateSetting,

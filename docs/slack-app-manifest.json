@@ -1,0 +1,30 @@
+{
+  "display_information": {
+    "name": "Slatebox",
+    "description": "Bring Slack threads onto a shared canvas your team edits."
+  },
+  "oauth_config": {
+    "redirect_urls": [
+      "https://app.slatebox.com/connectors/oauth/callback",
+      "https://test.slatebox.com/connectors/oauth/callback"
+    ],
+    "scopes": {
+      "user": [
+        "canvases:read",
+        "canvases:write",
+        "channels:history",
+        "channels:read",
+        "chat:write",
+        "groups:history",
+        "groups:read",
+        "im:history",
+        "mpim:history",
+        "search:read.public",
+        "search:read.private",
+        "search:read.im",
+        "search:read.mpim",
+        "users:read"
+      ]
+    }
+  }
+}

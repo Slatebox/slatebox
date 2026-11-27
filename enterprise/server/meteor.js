@@ -29,6 +29,7 @@ import { firstNameOf, sanitizeClientName } from '/imports/api/common/agent-label
 import { AIAgents, LibraryItems, Slates } from '/imports/api/common/models'
 import { setLibraryIntegrations } from '/server/library/integration-hooks.mjs'
 import { setProfileIntegrations } from '/server/profile/integration-hooks.mjs'
+import { setAccountIntegrations } from '/server/integrations/account-removal.mjs'
 import { loadMasterKey } from '/server/metering/vault.mjs'
 import { createMcpFetch } from './mcp-fetch.mjs'
 import { callTool, discover } from './mcp-session.mjs'
@@ -191,6 +192,7 @@ const connectionsStore = {
   findOne: (query) => McpConnections.findOneAsync(query),
   find: (query) => McpConnections.find(query, { sort: { createdAt: 1 } }).fetchAsync(),
   update: (id, set) => McpConnections.updateAsync({ _id: id }, { $set: set }),
+  remove: (id) => McpConnections.removeAsync({ _id: id }),
 }
 
 const storeOf = (collection) => ({
@@ -250,7 +252,8 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
   const google = () => googleSettings(Meteor.settings, { development: Meteor.isDevelopment })
   const fetch = createMcpFetch({ devOrigins: settings.devOrigins, userAgent: settings.userAgent })
   // Sign-in's own fetch: the same checks, may GET metadata, follows no redirect, small answers.
-  const signInFetch = createMcpFetch({ devOrigins: [...settings.devOrigins, ...google().devOrigins], userAgent: settings.userAgent, methods: ['GET', 'POST'], maxRedirects: 0, maxBytes: 256 * 1024, timeoutMs: 10000 })
+  // DELETE: GitHub ends a sign-in with one (oauth.mjs KNOWN_PROVIDERS.github.revoke).
+  const signInFetch = createMcpFetch({ devOrigins: [...settings.devOrigins, ...google().devOrigins], userAgent: settings.userAgent, methods: ['GET', 'POST', 'DELETE'], maxRedirects: 0, maxBytes: 256 * 1024, timeoutMs: 10000 })
   // Google's APIs: the same address checks; uploads are larger, downloads follow Google's own redirects.
   const googleFetch = createMcpFetch({ devOrigins: google().devOrigins, userAgent: settings.userAgent, methods: ['GET', 'POST', 'PATCH', 'DELETE'], maxBytes: 4 * 1024 * 1024, timeoutMs: 30000 })
   // The app's existing master key (never generated here). Without it, sign-in servers are not offered.
@@ -275,6 +278,8 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     // Google's sign-in is Slatebox's own OAuth client (settings.googleDocs.web); MCP servers' are the
     // integration apps (Admin › Integration apps, else settings.connectors.oauthApps), asked on every refresh.
     secretFor: async (registration) => (registration.provider === 'google' ? google().clientSecret : (await integrationApps.apps())[registration.provider]?.clientSecret || null),
+    // Hosts and a reason only (credentials.mjs): never a token.
+    log: (entry) => console.warn('[connectors]', JSON.stringify({ ...entry, at: new Date().toISOString() })),
   })
   const signIn = createSignIn({
     flows: flowsStore,
@@ -395,6 +400,14 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
   // first (only while enterprise code is unlocked; a locked server has no cards).
   deps.suggestionGate = (principal, slate, choice) => (isUnlocked() ? service.gate(principal, slate, choice) : null)
   resumeGoogle = (integration) => service.resumeIntegration(integration)
+  // A removed account (users.delete, a team deleted, a member removed): its integrations are
+  // disconnected and each sign-in revoked at its vendor, whether or not enterprise code is unlocked
+  // (a privacy promise); the app then removes every row the person owns (server/integrations).
+  setAccountIntegrations({
+    forgetPerson: (userId) => service.forgetPerson(userId, {
+      credentialRows: (id) => McpCredentials.find({ ownerId: id }, { fields: { ownerId: 1, address: 1 } }).fetchAsync(),
+    }),
+  })
   Meteor.startup(async () => {
     await McpConnections.rawCollection().createIndex({ slateId: 1, status: 1 })
     await McpConnections.rawCollection().createIndex({ ownerId: 1, address: 1 })

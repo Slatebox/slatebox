@@ -21,7 +21,18 @@ An integration is an outside agent (any MCP server) or your Google account, conn
 - **Remove it from one slate** from its chip. That slate remembers: your rule never brings it back
   there. You can still invite it there yourself.
 - **Disconnect it** on the Integrations page. It leaves every slate, its suggestions that are still
-  waiting are discarded (notes people kept stay), and its sign-in is revoked.
+  waiting are discarded (notes people kept stay), and its sign-in is revoked at the vendor, then
+  forgotten. Slatebox uses the vendor's revocation endpoint when its sign-in metadata names one
+  (RFC 7009), else the one each known vendor documents (Slack `auth.revoke`, GitHub's
+  `DELETE /applications/{client_id}/token`, Zoom, HubSpot, Asana, Box, Pitch, Salesforce, Google),
+  and counts it as done only when the vendor says so (Slack answers 200 with `"ok":false` when it
+  fails). Microsoft Entra offers no way to end one sign-in, so for it, and whenever a vendor does not
+  confirm, the page says to remove Slatebox's access in that account's settings. The sign-in is
+  forgotten here either way.
+- **Delete your account**, and every integration you connected is disconnected the same way, each
+  sign-in revoked at its vendor, and every integration row you own removed: your integrations, your
+  sign-ins, the agents you invited onto slates and their action cards. A teammate's integrations on
+  the same slates stay.
 
 Connecting a server from a slate's walkthrough makes the integration too, so the next slate only needs
 **Invite to this slate**.
@@ -182,7 +193,7 @@ administrator does, for their own install. Each one needs:
 
 | Provider (`oauthApps.<provider>`) | Cards | Where to register | Scopes Slatebox asks for |
 | --- | --- | --- | --- |
-| `slack` | Slack | api.slack.com/apps: a Slack app with *User Token Scopes* for the MCP server (channels, search, chat, canvases), distributed or installed to the workspace; a workspace admin may need to approve it | what the server's metadata lists |
+| `slack` | Slack | api.slack.com/apps: a Slack app whose *User Token Scopes* are exactly the 14 on the right ([`slack-app-manifest.json`](slack-app-manifest.json) has them; create the app from it with your own redirect URL, or match an existing app to it; Slack's MCP server access is turned on in the app's settings; a test checks the manifest against `SLACK_SCOPES`), distributed or installed to the workspace; a workspace admin may need to approve it | `canvases:read canvases:write channels:history channels:read chat:write groups:history groups:read im:history mpim:history search:read.public search:read.private search:read.im search:read.mpim users:read` (what the Slack card reads, searches and, after you approve its card, posts; `oauth.mjs` `SLACK_SCOPES` says which feature needs each). Slack's metadata lists 30; Slatebox never asks for the other 16. A scope the app lacks makes Slack's permission screen fail for everyone, so change the app and `scopes` together |
 | `asana` | Asana | Asana developer console: an app for MCP V2 (confidential client) | what the server names (`default`) |
 | `hubspot` | HubSpot | HubSpot: Development › MCP Auth Apps | what the server names |
 | `box` | Box | Box Developer Console: an OAuth 2.0 app with the *Manage AI Requests* scope (or the admin's predefined *Box MCP Server* integration) | what the server names |

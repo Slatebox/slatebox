@@ -10,6 +10,7 @@ import { teamPerson } from '../common/team-person'
 import { removePersonalData } from '../profile/meteor'
 import { audit } from '../audit/recorder.mjs'
 import { personLabel } from '../audit/meteor'
+import { removeIntegrationsOfAccount } from '../integrations/meteor'
 
 // A team member with canRemoveUsers removes another member: the slates that member owns in the
 // team, then the account, in one call. Never the owner, never yourself, and an admin only by an
@@ -32,6 +33,8 @@ Meteor.methods({
     for (const slate of owned) {
       await audit.record({ action: 'slate.deleted', orgId, target: { type: 'slate', id: slate.shareId || slate._id, name: slate.options?.name || 'Untitled slate' }, slateId: slate.shareId || slate._id, details: { reason: 'member removed' } })
     }
+    // the member's own integrations and sign-ins (revoked at each vendor first), never a teammate's
+    await removeIntegrationsOfAccount(memberId)
     await SlateAccess.removeAsync({ slateId: { $in: ids } })
     await Comments.removeAsync({ slateId: { $in: ids } })
     await Messages.removeAsync({ slateId: { $in: ids } })

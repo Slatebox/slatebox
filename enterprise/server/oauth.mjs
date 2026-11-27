@@ -29,9 +29,44 @@ export const START_PATH = '/connectors/oauth/start'
 export const CLIENT_DOCUMENT_PATH = '/oauth/mcp-client.json'
 export const OAUTH_LIMITS = Object.freeze({ flowMinutes: 10, metadataChars: 64 * 1024, tokenChars: 8192, scopes: 24, scopeChars: 1000 })
 
+// What Slatebox asks Slack for: exactly what the Slack card's features call, nothing more (the
+// Slack app's User Token Scopes must list these same 14: docs/slack-app-manifest.json).
+// Slack's MCP metadata lists 30, more than OAUTH_LIMITS.scopes, and asking for all of them cut
+// the list at 24 in Slack's order, which dropped search and users:read (review, 2026-11-27).
+// Each scope and the feature it serves (enterprise/common/gallery.mjs, the Slack card):
+export const SLACK_SCOPES = Object.freeze([
+  'canvases:read', // "Slack canvas" ask: slack_read_canvas brings a canvas onto the slate
+  'canvases:write', // "Create Slack canvas" write: slack_create_canvas, after the person approves its card
+  'channels:history', // "From the channel" ask: slack_read_channel (and its threads) in a public channel
+  'channels:read', // finding the public channel a person names ("#launch") for a read or a post
+  'chat:write', // "Post in Slack" write: slack_send_message, after the person approves its card
+  'groups:history', // "From the channel" ask in a private channel the person is in
+  'groups:read', // finding the private channel a person names
+  'im:history', // reading a direct message a search found, as the person who is in it
+  'mpim:history', // reading a group direct message a search found, as a person who is in it
+  'search:read.public', // "From Slack" ask (slack_search_public), and About you's `from:me` look-around
+  'search:read.private', // "From Slack" ask over private channels (slack_search_public_and_private)
+  'search:read.im', // the same search over the person's own direct messages
+  'search:read.mpim', // the same search over the person's group direct messages
+  'users:read', // About you's look-around (slack_read_user_profile), and naming who said what
+])
+
 // Apps Slatebox registers with a vendor ahead of time (vendors with no CIMD and no DCR). The
 // client id and secret come from Admin › Integration apps (integration-apps.mjs, the secret sealed)
 // or settings.connectors.oauthApps.<provider>, never from code.
+//
+// `revoke`: how Disconnect ends a sign-in at the vendor when its metadata names no
+// revocation_endpoint (a metadata endpoint, RFC 7009, always wins), each from the vendor's own
+// documentation (metadata probed 2026-11-27). Also the fallback for sign-ins saved before
+// Slatebox stored an endpoint (revocationOf). style says how its answer is read:
+//   (none)   RFC 7009: a form POST of the token with the client's credentials; a 2xx is success
+//   slack    auth.revoke: a form POST of the token; Slack answers 200 even when it fails, so only
+//            {"ok":true} is success
+//   zoom     a form POST with the client in an Authorization header; only {"status":"success"} is success
+//   github   DELETE /applications/{client_id}/token with the client as Basic auth and the access
+//            token in a JSON body; only 204 is success (OAuth apps issue no refresh token)
+// `revoke: null`: the vendor has no endpoint that ends one sign-in (Microsoft Entra), so Disconnect
+// says the person may remove Slatebox's access in their account settings.
 export const KNOWN_PROVIDERS = Object.freeze({
   github: Object.freeze({
     issuer: 'https://github.com/login/oauth',
@@ -48,6 +83,7 @@ export const KNOWN_PROVIDERS = Object.freeze({
     scopes: Object.freeze(['public_repo', 'read:org']),
     // GitHub's token endpoint answers form-encoded unless asked for JSON.
     tokenAccept: 'application/json',
+    revoke: Object.freeze({ url: 'https://api.github.com/applications/{client_id}/token', style: 'github' }),
   }),
   // The vendors below offer no open automatic registration (no DCR anyone may use, no Client ID
   // Metadata Document; Salesforce's registration endpoint needs an initial access token), so an
@@ -55,7 +91,7 @@ export const KNOWN_PROVIDERS = Object.freeze({
   // (settings.connectors.oauthApps.<provider>; docs/integrations.md says how). Their issuers and the
   // only MCP servers their sign-ins are sent to are fixed here, from each vendor's own metadata
   // (probed 2026-11-26), so settings carry the client only. With no `scopes`, a sign-in asks for what
-  // the server's challenge or metadata names (or `scopesFor` its server, the least it needs).
+  // the server's challenge or metadata names (or the provider's own `scopes`, or `scopesFor` its server: the least it needs).
   // Exceptions to the standard steps, each a documented fact of that vendor, never a setting:
   //   metadataIssuer  the issuer its metadata document states, when it is not the protected resource
   //                   metadata's spelling exactly (a trailing slash; Microsoft's {tenantid} template)
@@ -63,10 +99,18 @@ export const KNOWN_PROVIDERS = Object.freeze({
   //   resourceParam   false: its token service refuses RFC 8707 `resource` (Microsoft identity v2)
   //   tokenAuth       'basic': the client secret goes in an Authorization header (Zoom accepts nothing else)
   //   authorizeParams fixed extra words on the sign-in address (Google: a refresh token needs offline access)
-  slack: Object.freeze({ issuer: 'https://mcp.slack.com', name: 'Slack', resources: Object.freeze(['https://mcp.slack.com']) }),
-  asana: Object.freeze({ issuer: 'https://app.asana.com', name: 'Asana', resources: Object.freeze(['https://mcp.asana.com']) }),
-  hubspot: Object.freeze({ issuer: 'https://mcp.hubspot.com', name: 'HubSpot', resources: Object.freeze(['https://mcp.hubspot.com']) }),
-  box: Object.freeze({ issuer: 'https://api.box.com/', metadataIssuer: 'https://api.box.com', name: 'Box', resources: Object.freeze(['https://mcp.box.com']) }),
+  // Slack: the explicit list above, never the metadata's 30 (settings' `scopes` may still change it
+  // on purpose, and then the Slack app has to list the same scopes).
+  slack: Object.freeze({
+    issuer: 'https://mcp.slack.com',
+    name: 'Slack',
+    resources: Object.freeze(['https://mcp.slack.com']),
+    scopes: SLACK_SCOPES,
+    revoke: Object.freeze({ url: 'https://slack.com/api/auth.revoke', style: 'slack' }),
+  }),
+  asana: Object.freeze({ issuer: 'https://app.asana.com', name: 'Asana', resources: Object.freeze(['https://mcp.asana.com']), revoke: Object.freeze({ url: 'https://app.asana.com/-/oauth_revoke' }) }),
+  hubspot: Object.freeze({ issuer: 'https://mcp.hubspot.com', name: 'HubSpot', resources: Object.freeze(['https://mcp.hubspot.com']), revoke: Object.freeze({ url: 'https://mcp.hubspot.com/oauth/v3/token/revoke' }) }),
+  box: Object.freeze({ issuer: 'https://api.box.com/', metadataIssuer: 'https://api.box.com', name: 'Box', resources: Object.freeze(['https://mcp.box.com']), revoke: Object.freeze({ url: 'https://api.box.com/oauth2/revoke' }) }),
   // Zoom's metadata lists every scope its server has, writes and deletes included (meetings, docs,
   // workflows), and its challenge names none: the card reads, so it asks for the read scopes only.
   zoom: Object.freeze({
@@ -78,9 +122,10 @@ export const KNOWN_PROVIDERS = Object.freeze({
         'my_notes:read:content', 'hub:read:content', 'agentic_search:read:search', 'agentic_search:read:ask']),
     }),
     tokenAuth: 'basic',
+    revoke: Object.freeze({ url: 'https://zoom.us/oauth/revoke', style: 'zoom' }),
   }),
-  pitch: Object.freeze({ issuer: 'https://auth.pitch.com/', name: 'Pitch', resources: Object.freeze(['https://mcp.pitch.com']) }),
-  salesforce: Object.freeze({ issuer: 'https://login.salesforce.com', name: 'Salesforce', resources: Object.freeze(['https://api.salesforce.com']) }),
+  pitch: Object.freeze({ issuer: 'https://auth.pitch.com/', name: 'Pitch', resources: Object.freeze(['https://mcp.pitch.com']), revoke: Object.freeze({ url: 'https://auth.pitch.com/oauth/revoke' }) }),
+  salesforce: Object.freeze({ issuer: 'https://login.salesforce.com', name: 'Salesforce', resources: Object.freeze(['https://api.salesforce.com']), revoke: Object.freeze({ url: 'https://login.salesforce.com/services/oauth2/revoke' }) }),
   // Microsoft's own remote MCP servers (Work IQ for Microsoft 365, the Entra directory server, Azure
   // DevOps): one multi-tenant Entra app, which each tenant's administrator consents to.
   microsoft: Object.freeze({
@@ -98,6 +143,9 @@ export const KNOWN_PROVIDERS = Object.freeze({
     }),
     pkce: 'documented',
     resourceParam: false,
+    // Entra has no endpoint that ends one sign-in (only an administrator's revokeSignInSessions,
+    // which signs the person out of everything): the person removes Slatebox's access themselves.
+    revoke: null,
   }),
   // Google Workspace's own remote MCP servers: one Google Cloud OAuth client for all of them. Read-only
   // scopes by default; `scopes` in settings widens them on purpose (drafts, events).
@@ -118,6 +166,7 @@ export const KNOWN_PROVIDERS = Object.freeze({
       'https://tasksmcp.googleapis.com': Object.freeze(['https://www.googleapis.com/auth/tasks.readonly']),
     }),
     authorizeParams: Object.freeze({ access_type: 'offline', prompt: 'consent' }),
+    revoke: Object.freeze({ url: 'https://oauth2.googleapis.com/revoke' }),
   }),
 })
 
@@ -290,7 +339,10 @@ export async function discoverSignIn({ address, challenge = null, fetch, devOrig
     authorizationEndpoint: checkEndpoint(meta.authorization_endpoint, { devOrigins }),
     tokenEndpoint: checkEndpoint(meta.token_endpoint, { devOrigins }),
     ...(meta.registration_endpoint && { registrationEndpoint: checkEndpoint(meta.registration_endpoint, { devOrigins }) }),
-    ...(meta.revocation_endpoint && { revocationEndpoint: checkEndpoint(meta.revocation_endpoint, { devOrigins }) }),
+    // The metadata's revocation endpoint (RFC 7009), else the known provider's documented one.
+    ...(meta.revocation_endpoint
+      ? { revocationEndpoint: checkEndpoint(meta.revocation_endpoint, { devOrigins }) }
+      : known?.revoke && { revocationEndpoint: known.revoke.url, ...(known.revoke.style && { revocation: known.revoke.style }) }),
     issParameter: meta.authorization_response_iss_parameter_supported === true,
     cimd: meta.client_id_metadata_document_supported === true,
     authMethods: stringList(meta.token_endpoint_auth_methods_supported),
@@ -550,13 +602,61 @@ export function refreshTokens({ server, client, refreshToken, resource, scopes, 
   return tokenRequest({ server, client, params, fetch, accept })
 }
 
-/** Revocation (RFC 7009) when the server offers it. Best effort: never throws. */
-export async function revokeToken({ server, client, token, hint, fetch }) {
-  if (!server?.revocationEndpoint || !token) return false
-  const params = new URLSearchParams({ token, ...(hint && { token_type_hint: hint }) })
-  const auth = clientAuth(client, params, server.tokenAuth)
+/**
+ * How a sign-in is ended at its server: the endpoint saved with it (from the metadata, or a known
+ * provider's at sign-in), else the known provider's (a sign-in saved before Slatebox kept one).
+ * → { url, style } or null (the server offers none).
+ */
+export function revocationOf(server) {
+  if (!server || typeof server !== 'object') return null
+  if (typeof server.revocationEndpoint === 'string' && server.revocationEndpoint) return { url: server.revocationEndpoint, style: server.revocation || 'rfc7009' }
+  const known = knownOf(server.issuer)?.revoke
+  return known ? { url: known.url, style: known.style || 'rfc7009' } : null
+}
+
+async function answerOf(response) {
   try {
-    const response = await fetch(server.revocationEndpoint, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', ...auth }, body: params.toString() })
+    const text = await response.text()
+    return text.length <= 8192 ? JSON.parse(text) : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Ends one token at its server (revocationOf), reading the vendor's own way of saying it worked.
+ * Best effort: never throws, never logs. → true only when the server confirmed it.
+ */
+export async function revokeToken({ server, client, token, hint, fetch }) {
+  const revocation = revocationOf(server)
+  if (!revocation || !token) return false
+  try {
+    if (revocation.style === 'github') {
+      // OAuth apps have access tokens only, and GitHub needs the app's own secret to end one.
+      if (hint === 'refresh_token' || !client?.clientId || !client?.clientSecret) return false
+      const response = await fetch(revocation.url.replace('{client_id}', encodeURIComponent(client.clientId)), {
+        method: 'DELETE',
+        headers: {
+          authorization: 'Basic ' + Buffer.from(`${client.clientId}:${client.clientSecret}`).toString('base64'),
+          accept: 'application/vnd.github+json',
+          'content-type': 'application/json',
+          'x-github-api-version': '2022-11-28',
+        },
+        body: JSON.stringify({ access_token: token }),
+      })
+      await response.body?.cancel?.().catch(() => {})
+      return response.status === 204
+    }
+    const params = new URLSearchParams({ token })
+    let auth = {}
+    // Slack's auth.revoke takes the token alone (it is its own proof); every other style names the client.
+    if (revocation.style !== 'slack') {
+      if (hint) params.set('token_type_hint', hint)
+      auth = clientAuth(client, params, revocation.style === 'zoom' ? 'basic' : server.tokenAuth)
+    }
+    const response = await fetch(revocation.url, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', ...auth }, body: params.toString() })
+    if (revocation.style === 'slack') return response.ok && (await answerOf(response))?.ok === true
+    if (revocation.style === 'zoom') return response.ok && (await answerOf(response))?.status === 'success'
     await response.body?.cancel?.().catch(() => {})
     return response.ok
   } catch {

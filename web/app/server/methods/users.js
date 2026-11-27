@@ -31,6 +31,7 @@ import { personLabel } from '../audit/meteor'
 import { roleChangeRefusal, clearedByAdmin } from '../team-guard.mjs'
 import { readCreditName } from '../../imports/api/common/library-model.mjs'
 import { removePersonalData } from '../profile/meteor'
+import { removeIntegrationsOfAccount } from '../integrations/meteor'
 import { removePasskeysAddedUnverified, removePasskeysOf } from '../passkeys/meteor'
 
 import {
@@ -621,6 +622,9 @@ method[CONSTANTS.methods.users.delete] = async function removeOwnAccount() {
     remove: async () => true,
   }).catch(error => { throw error instanceof Meteor.Error ? error : new Meteor.Error('refund-failed', error.message) })
   const owner = { userId: user._id }
+  // their integrations: each sign-in revoked at its vendor (best effort), then every row they own
+  // removed (only theirs), while their slates still exist so their agents' suggestions are withdrawn
+  await removeIntegrationsOfAccount(user._id)
   await JoinedSlates.removeAsync(user._id)
   await SlateApiTokens.removeAsync(owner)
   await SlateOperationRuns.removeAsync(owner)

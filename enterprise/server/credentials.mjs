@@ -16,7 +16,7 @@
 // needed and stops: no retry loop.
 import { randomBytes, createHash } from 'node:crypto'
 import { open, seal } from '/server/metering/vault.mjs'
-import { refreshTokens, revokeToken } from './oauth.mjs'
+import { refreshTokens, revocationOf, revokeToken } from './oauth.mjs'
 
 export const VAULT_LIMITS = Object.freeze({ refreshAheadMs: 60000, leaseMs: 30000, waitStepMs: 200 })
 
@@ -29,6 +29,14 @@ export class SignInNeeded extends Error {
 }
 
 /** The row id for a person and an address (stable; not a secret). */
+const hostOf = (url) => {
+  try {
+    return new URL(url).host
+  } catch {
+    return null
+  }
+}
+
 export const credentialId = (userId, address) => 'k' + createHash('sha256').update(`${userId}\n${address}`).digest('hex').slice(0, 32)
 
 const ownerOf = (doc, field) => ({ ownerType: 'mcp', ownerId: doc.ownerId, provider: `${doc.address}|${doc.issuer}|${field}` })
@@ -39,8 +47,10 @@ const ownerOf = (doc, field) => ({ ownerType: 'mcp', ownerId: doc.ownerId, provi
  * master: loadMasterKey() result (null: sign-in servers are not offered)
  * fetch: the guarded sign-in fetch; secretFor(registration) -> the pre-registered app's secret (or a
  *   promise of it), asked on every refresh and revocation (Admin › Integration apps or settings)
+ * log: (entry) -> void, told when a server did not confirm a revocation: hosts and a reason only,
+ *   never a token, a secret or the server's words
  */
-export function createVault({ store, master, fetch, secretFor = () => null, now = Date.now, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), leaseMs = VAULT_LIMITS.leaseMs }) {
+export function createVault({ store, master, fetch, secretFor = () => null, log = () => {}, now = Date.now, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), leaseMs = VAULT_LIMITS.leaseMs }) {
   const available = () => Boolean(master)
   const sealField = (doc, field, value) => (value ? seal({ master, owner: ownerOf(doc, field), plaintext: value }) : null)
   // A value sealed under another master key, or moved to another row, does not open: sign in again.
@@ -77,6 +87,7 @@ export function createVault({ store, master, fetch, secretFor = () => null, now 
         issuer: server.issuer,
         tokenEndpoint: server.tokenEndpoint,
         ...(server.revocationEndpoint && { revocationEndpoint: server.revocationEndpoint }),
+        ...(server.revocation && { revocation: server.revocation }),
         ...(server.tokenAccept && { tokenAccept: server.tokenAccept }),
         ...(server.noResource && { noResource: true }),
         ...(server.tokenAuth && { tokenAuth: server.tokenAuth }),
@@ -176,26 +187,40 @@ export function createVault({ store, master, fetch, secretFor = () => null, now 
     return refreshUnderLease(doc)
   }
 
-  /** Forgets a sign-in, revoking it at the server when it offers revocation. */
+  /**
+   * Forgets a sign-in, revoking it at its server first. The server's endpoint is the one saved with
+   * the sign-in, else (a sign-in saved before Slatebox kept one, or one whose server's metadata names
+   * none) the known provider's (oauth.mjs revocationOf). revokeFailed: the server did not confirm
+   * that the sign-in ended, or it offers no way to end it.
+   */
   async function remove(userId, address) {
     const doc = await store.get(credentialId(userId, address))
     if (!doc) return { removed: false, revoked: false }
     let revoked = false
-    let tried = false
+    let failed = false
     // Telling the server to end the sign-in is best effort: a refusal, a timeout or a broken
-    // client never keeps the sign-in here. revokeFailed says the server did not confirm it.
-    if (doc.kind === 'oauth' && doc.server?.revocationEndpoint && master) {
-      const refresh = openQuietly(doc, 'refresh')
-      const access = openQuietly(doc, 'access')
-      tried = Boolean(refresh || access)
-      try {
-        const client = await clientOf(doc)
-        if (refresh) revoked = (await revokeToken({ server: doc.server, client, token: refresh, hint: 'refresh_token', fetch })) || revoked
-        if (access) revoked = (await revokeToken({ server: doc.server, client, token: access, hint: 'access_token', fetch })) || revoked
-      } catch {}
+    // client never keeps the sign-in here.
+    if (doc.kind === 'oauth') {
+      const revocation = revocationOf(doc.server)
+      const refresh = master ? openQuietly(doc, 'refresh') : null
+      const access = master ? openQuietly(doc, 'access') : null
+      if (revocation && (refresh || access)) {
+        try {
+          const client = await clientOf(doc)
+          if (refresh) revoked = (await revokeToken({ server: doc.server, client, token: refresh, hint: 'refresh_token', fetch })) || revoked
+          if (access) revoked = (await revokeToken({ server: doc.server, client, token: access, hint: 'access_token', fetch })) || revoked
+        } catch {}
+      }
+      failed = !revoked
+      if (failed) {
+        const reason = !revocation ? 'not_offered' : refresh || access ? 'not_confirmed' : 'no_token'
+        try {
+          log({ kind: 'revoke_failed', reason, server: hostOf(revocation?.url || doc.server?.tokenEndpoint), address: hostOf(doc.address) })
+        } catch {}
+      }
     }
     await store.remove(doc._id)
-    return { removed: true, revoked, ...(tried && !revoked && { revokeFailed: true }) }
+    return { removed: true, revoked, ...(failed && { revokeFailed: true }) }
   }
 
   return { available, save, describe, tokenFor, remove }
