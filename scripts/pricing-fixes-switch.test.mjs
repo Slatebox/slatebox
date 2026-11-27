@@ -239,6 +239,13 @@ test('#5: the caller is found behind Cloudflare; an edge address is never counte
   assert.equal(address.clientAddress(null), false)
   // no proxy configured: Meteor's own address
   assert.equal(resolveClientAddress({ forwardedFor: '203.0.113.9', forwardedCount: undefined, fallback: '127.0.0.1' }), '127.0.0.1')
+  // On Slatebox Cloud the in-cluster Cloudflare tunnel is the last hop: "<visitor>, <tunnel pod>" finds the visitor,
+  // through a tunnel and an edge too, and a forged entry to the left of the visitor is never reached.
+  assert.equal(resolveClientAddress({ forwardedFor: '203.0.113.9, 10.42.0.17', forwardedCount: '1' }), '203.0.113.9')
+  assert.equal(resolveClientAddress({ forwardedFor: '203.0.113.9, 162.158.1.2, 10.42.0.17', forwardedCount: '1' }), '203.0.113.9')
+  assert.equal(resolveClientAddress({ forwardedFor: '198.51.100.66, 203.0.113.9, 10.42.0.17', forwardedCount: '1' }), '203.0.113.9')
+  // Only cluster hops known: the result is a cluster address, which per-address counts skip.
+  assert.equal(resolveClientAddress({ forwardedFor: '10.42.0.17', forwardedCount: '1' }), '10.42.0.17')
   assert.match(source('server/metering/meteor.js'), /Meteor\.onConnection\(connection => \{\n  const address = resolveClientAddress\(/)
 })
 

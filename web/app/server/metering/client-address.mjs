@@ -2,7 +2,8 @@
 // Pure apart from node:net.
 //
 // The ingress writes the last X-Forwarded-For entry (HTTP_FORWARDED_COUNT=1: the address that
-// reached it). On the Cloud that is a Cloudflare edge, shared by many people. Cloudflare writes
+// reached it). On the Cloud that is the in-cluster Cloudflare tunnel (a private address) or a
+// Cloudflare edge, each shared by many people. Cloudflare writes
 // the visitor's address just before its own, so walking left past Cloudflare's own addresses
 // finds the visitor; an entry a caller wrote themselves is never reached, because it sits to
 // the left of an address Cloudflare or the ingress wrote. When no address other than
@@ -65,7 +66,9 @@ export function resolveClientAddress({ forwardedFor, forwardedCount, fallback = 
   // the entry our own first proxy wrote; anything further left came from outside
   let index = entries.length - count
   if (index < 0 || !isIP(entries[index] || '')) return fallback
-  while (index > 0 && isCloudflareAddress(entries[index]) && isIP(entries[index - 1])) index -= 1
+  // Past Cloudflare's edges and the cluster's own hops (the in-cluster Cloudflare tunnel, the ingress): on Slatebox
+  // Cloud the header reaches the app as "<visitor>, <tunnel pod>", and a private hop is never a caller.
+  while (index > 0 && (isCloudflareAddress(entries[index]) || isPrivateAddress(entries[index])) && isIP(entries[index - 1])) index -= 1
   return entries[index]
 }
 
