@@ -57,3 +57,10 @@ condition = "AND"
 paths = ['''(^|/)packages/slatebox/test/fakes\.mjs$''']
 regexTarget = "secret"
 regexes = ['''^sbxi_[a-z0-9]{8}_fake-[a-z-]+-0123456789$''']
+
+[[allowlists]]
+description = "Passkey provider AAGUIDs: public authenticator model ids (FIDO MDS, passkey-authenticator-aaguids), not secrets"
+condition = "AND"
+paths = ['''(^|/)web/app/server/passkeys/core\.mjs$''']
+regexTarget = "match"
+regexes = ['''[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}''']
