@@ -13,7 +13,11 @@ import { mountActions } from './actions/mount'
 import { mountMcp } from './mcp/meteor'
 import { mountOAuth } from './oauth/meteor'
 import { mountLicenses } from './licenses/meteor'
+import { mountAppLinks } from './mobile/app-links.mjs'
 
+// /.well-known/apple-app-site-association and assetlinks.json: links and sign-ins for the Slatebox
+// viewer app (settings.mobile), 404 JSON until it is set up; ahead of the app's page.
+mountAppLinks(app, { settings: () => Meteor.settings })
 // Every /api/v1 route, its OpenAPI document and the matching Meteor methods come from the
 // action registry (server/actions).
 mountActions(app)

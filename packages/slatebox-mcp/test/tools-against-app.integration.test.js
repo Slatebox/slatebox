@@ -250,6 +250,9 @@ async function instance(t) {
     },
     // Video notes (server/media): a looked-up video, as the host would answer it.
     media: async (url) => ({ found: true, media: { provider: "youtube", id: "dQw4w9WgXcQ", url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", title: "A talk", author: "Probe" } }),
+    // A read-only seat in a slate's live room (slates.live): the relay's own access check and room
+    // token have their own tests (scripts/mobile-viewer.test.mjs). Here: the route and the call.
+    relayLive: { live: async ({ shareId }) => ({ code: "ok", wsUrl: "wss://relay.probe.test", room: "room-" + shareId, token: "probe.seat", exp: 1800000900, role: "read" }) },
     // Who calls (the app's deps.loadUser): the shape library is per person and team.
     loadUser: async (id) => (id === "owner" ? { _id: "owner", orgId: null } : null),
     // Custom shapes: drawing (a model) and the library have their own tests
@@ -550,6 +553,8 @@ return slatebox.presence.step({ shareId: "canvas", index: 0, status: "done" })`)
   const comment = await ok(`return slatebox.comments.add({ shareId: "canvas", noteId: "a", text: "Is this right?" })`);
   assert.deepEqual([comment.author, comment.text, comment.resolved], ["Owner", "Is this right?", false]);
   assert.equal((await ok(`return slatebox.comments.list({ shareId: "canvas" })`)).comments.length, 1);
+  const seat = await ok(`return slatebox.slates.live({ shareId: "canvas" })`);
+  assert.deepEqual([seat.role, seat.room, seat.wsUrl], ["read", "room-canvas", "wss://relay.probe.test"]);
   assert.equal((await ok(`return slatebox.comments.resolve({ shareId: "canvas", noteId: "a" })`)).comments, 1);
   await confirmed(`return slatebox.comments.remove({ shareId: "canvas", commentId: ${JSON.stringify(comment.commentId)} })`, ["removes"]);
   assert.equal(comments.length, 0);
@@ -655,6 +660,20 @@ return slatebox.library.saveDraft({ shareId, title: "Probe triage", summary: "So
   ]) {
     const refusedWrite = await exec(`return slatebox.${call}`);
     assert.deepEqual([refusedWrite.status, refusedWrite.error.status, refusedWrite.error.code, refusedWrite.error.details?.requiredScope], ["failed", 403, "insufficient_scope", "ai:admin"], call);
+  }
+
+  // About you and For you (2026-11-26) need profile:read / profile:write, which this token was not given:
+  // each is refused with that scope named, and nothing about the person is read or written.
+  for (const call of [
+    "profile.facts.list({})", "profile.settings.get({})", "personal.ideas.list({})",
+    "profile.facts.add({ kind: \"role\", text: \"Leads product\" })", "profile.facts.update({ factId: \"f1\", text: \"x\" })",
+    "profile.facts.hide({ factId: \"f1\", hidden: true })", "profile.facts.remove({ factId: \"f1\" })", "profile.facts.clear({})",
+    "personal.ideas.refresh({})", "personal.ideas.dismiss({ ideaId: \"i1\" })", "personal.ideas.build({ ideaId: \"i1\" })",
+  ]) {
+    const refused = await exec(`return slatebox.${call}`);
+    assert.equal(refused.error?.status, 403, call);
+    assert.equal(refused.error?.code, "insufficient_scope", call);
+    assert.match(String(refused.error?.details?.requiredScope), /^profile:(read|write)$/, call);
   }
 
   assert.deepEqual([...called].sort(), [...defaultGenerated().methods.keys()].sort(), "every client method was called");

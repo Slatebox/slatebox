@@ -31,7 +31,7 @@
     "test:mcp": "npm test --workspace slatebox-mcp",
     "test:mcp:unit": "cd packages/slatebox-mcp && node --test $(ls test/*.test.js | grep -v tools-against-app)",
     "test:installer": "npm test --prefix packages/slatebox && node --test scripts/bin-ownership.test.mjs",
-    "test:server-access": "node --test scripts/server-access.test.mjs scripts/relay-token.test.mjs scripts/server-egress.test.mjs scripts/passkeys.test.mjs scripts/passkeys-methods.test.mjs",
+    "test:server-access": "node --test scripts/server-access.test.mjs scripts/relay-token.test.mjs scripts/server-egress.test.mjs scripts/passkeys.test.mjs scripts/passkeys-methods.test.mjs scripts/mobile-viewer.test.mjs",
     "test:server-access:live": "node --test --test-concurrency=1 scripts/server-access.live.test.mjs",
     "test:save-fence:live": "node --test --test-concurrency=1 scripts/slate-save-fence.live.test.mjs",
     "test:exec": "node --test --test-concurrency=1 scripts/exec-client-render.test.mjs scripts/exec-redact.test.mjs scripts/exec-gate.test.mjs scripts/exec-runner.test.mjs scripts/exec-api.integration.test.mjs scripts/mcp-endpoint.test.mjs scripts/mcp-oauth.test.mjs scripts/agent-tools.test.mjs scripts/canvas-conversation-exec.test.mjs scripts/exec-hardening.test.mjs scripts/exec-app-hardening.test.mjs scripts/canvas-conversation-review.test.mjs scripts/workshop-edits-exec.test.mjs scripts/business-boards-exec.test.mjs scripts/slate-operation-listener.test.mjs scripts/agent-presence.test.mjs scripts/library-exec.test.mjs scripts/library-components.test.mjs scripts/many-boards.test.mjs scripts/agent-tasks.test.mjs scripts/create-presentation.test.mjs scripts/agent-suggestions.test.mjs scripts/library-actions.test.mjs",

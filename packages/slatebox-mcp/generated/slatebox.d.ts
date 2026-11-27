@@ -2247,6 +2247,25 @@ declare namespace slatebox.slates {
 }
 
 declare namespace slatebox.slates {
+  /** Watch a slate live. A read-only seat in a slate's live room: the relay address (wsUrl), the room and a room token that lasts 15 minutes (exp, unix seconds). Join the relay with them to see edits as people make them; ask again before exp for a fresh token. The role is always read. A public slate answers without a token. 503 unavailable when this server has no live relay. @scope slates:read */
+  function live(input: {
+    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
+    shareId: string;
+  }): Promise<{
+    /** The relay's WebSocket address. */
+    wsUrl: string;
+    /** The slate's room on the relay. */
+    room: string;
+    /** The room token: a credential, never log it. */
+    token: string;
+    /** When the token lapses, unix seconds. */
+    exp: number;
+    role: "read";
+    [key: string]: unknown;
+  }>;
+}
+
+declare namespace slatebox.slates {
   /** Redo. Makes again the edit this caller last took back with slates.undo, if the caller has saved no edit on this slate since (a new edit clears what can be redone). Each part goes back to how the edit left it, unless someone else changed it since: that part stays as they left it and is listed in left[]. Saved as an edit, and refused for an agent, as slates.undo is. 409 nothing_to_redo when there is nothing of the caller's to redo. @scope slates:write @destructive */
   function redo(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */

@@ -10,6 +10,9 @@
 //              but bound to the /mcp resource, with a 1-hour access token and a 30-day refresh
 //              token, both rotated on refresh. Revoking the row (the client's revoke, or
 //              Disconnect in Profile → Developer) ends both.
+//   first-party  a pre-registered public client (firstParty: the viewer app, viewer.mjs), never
+//              registered over RFC 7591: it may ask for its own scopes only, and its tokens are
+//              bound to its own resource (origin + resourcePath), never /mcp.
 //
 // Scopes are the personal-token scopes, and actions check them the same way. Only a signed-in
 // account may authorize; a guest (anonymous) account never can.
@@ -108,15 +111,34 @@ const consentError = (code, message) => Object.assign(new Error(message), { code
 
 // refreshFamily: one record per rotated refresh token, { _id: its SHA-256, tokenId, clientId,
 // purgeAt }; never the token itself. Presenting any of them again ends the whole connection.
-export function createOAuthCore({ clients, requests, codes, refreshFamily, apiTokens, users, origin, errors, now = Date.now, randomBytesImpl = randomBytes }) {
+// firstParty: the pre-registered public clients, [{ clientId, name, redirects, scopes, resourcePath }].
+export function createOAuthCore({ clients, requests, codes, refreshFamily, apiTokens, users, origin, errors, firstParty = [], now = Date.now, randomBytesImpl = randomBytes }) {
   const urls = oauthUrls(origin)
   const random = (bytes) => randomBytesImpl(bytes)
   const seconds = () => Math.floor(now() / 1000)
+  const own = new Map(firstParty.filter(Boolean).map((client) => [client.clientId, client]))
+  const firstPartyOf = (clientId) => (typeof clientId === 'string' && own.has(clientId) ? own.get(clientId) : null)
+  const resourceOf = (clientId) => {
+    const client = firstPartyOf(clientId)
+    return client ? urls.issuer + client.resourcePath : urls.resource
+  }
 
   // ---- clients (RFC 7591) -----------------------------------------------------------------
   const clientsStore = {
     async getClient(clientId) {
       if (typeof clientId !== 'string' || clientId.length > 100) return undefined
+      // A first-party client is never a registered one: no registration can take its id.
+      const first = firstPartyOf(clientId)
+      if (first)
+        return {
+          client_id: first.clientId,
+          client_name: first.name,
+          redirect_uris: [...first.redirects],
+          grant_types: ['authorization_code', 'refresh_token'],
+          response_types: ['code'],
+          token_endpoint_auth_method: 'none',
+          scope: first.scopes.join(' '),
+        }
       const doc = await clients.findOneAsync({ _id: clientId })
       if (!doc) return undefined
       const { _id, secretHash, createdAt, ...metadata } = doc
@@ -141,6 +163,7 @@ export function createOAuthCore({ clients, requests, codes, refreshFamily, apiTo
         throw new InvalidClientMetadataError(`scope may name ${API_TOKEN_SCOPES.join(', ')}.`)
       const name = typeof info.client_name === 'string' && info.client_name.trim() ? info.client_name.trim().slice(0, 80) : 'An MCP app'
       const clientId = info.client_id || random(16).toString('hex')
+      if (firstPartyOf(clientId)) throw new InvalidClientMetadataError('That client_id is taken.')
       const doc = {
         _id: clientId,
         client_name: name,
@@ -206,19 +229,26 @@ export function createOAuthCore({ clients, requests, codes, refreshFamily, apiTo
     async authorize(client, params, res) {
       const { InvalidScopeError, InvalidTargetError } = errors
       const asked = (params.scopes || []).filter(Boolean)
+      const first = firstPartyOf(client.client_id)
+      const resource = resourceOf(client.client_id)
+      if (first) {
+        // A first-party app asks for its own scopes only (none means all of them).
+        const outside = asked.filter((scope) => !first.scopes.includes(scope))
+        if (outside.length) throw new InvalidScopeError(`${first.name} may ask for ${first.scopes.join(', ')} only.`)
+      }
       const unknown = asked.filter((scope) => !API_TOKEN_SCOPES.includes(scope))
       if (unknown.length) throw new InvalidScopeError(`Unknown scope ${unknown[0].slice(0, 40)}. Slatebox offers ${API_TOKEN_SCOPES.join(', ')}.`)
-      if (params.resource && !sameResource(params.resource.href, urls.resource))
-        throw new InvalidTargetError(`This server issues tokens for ${urls.resource} only.`)
+      if (params.resource && !sameResource(params.resource.href, resource))
+        throw new InvalidTargetError(`This server issues tokens for ${resource} only.`)
       const id = random(16).toString('hex')
       await requests.insertAsync({
         _id: id,
         clientId: client.client_id,
         redirectUri: params.redirectUri,
         codeChallenge: params.codeChallenge,
-        scopes: asked.length ? [...new Set(asked)] : [...DEFAULT_SCOPES],
+        scopes: asked.length ? [...new Set(asked)] : [...(first ? first.scopes : DEFAULT_SCOPES)],
         state: params.state ?? null,
-        resource: urls.resource,
+        resource,
         createdAt: now(),
         expiresAt: now() + REQUEST_SECONDS * 1000,
         decidedAt: null,
@@ -364,9 +394,12 @@ export function createOAuthCore({ clients, requests, codes, refreshFamily, apiTo
     if (!request) return null
     const client = await clientsStore.getClient(request.clientId)
     if (!client) return null
+    // Where the person goes back to: the host for a web address, the scheme for an app
+    // (com.slatebox.viewer://oauth reads as com.slatebox.viewer, not as "oauth").
     const back = new URL(request.redirectUri)
+    const web = back.protocol === 'https:' || back.protocol === 'http:'
     return {
-      client: { name: client.client_name, redirectHost: back.host || back.protocol.replace(/:$/, '') },
+      client: { name: client.client_name, redirectHost: (web && back.host) || back.protocol.replace(/:$/, '') },
       scopes: request.scopes,
       expiresAt: request.expiresAt,
     }

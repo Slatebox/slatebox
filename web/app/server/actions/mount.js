@@ -6,6 +6,7 @@ import { Mongo, MongoInternals } from 'meteor/mongo'
 import { Random } from 'meteor/random'
 import {
   Comments,
+  GuestViews,
   Messages,
   SlateAccess,
   SlateOperationRuns,
@@ -18,7 +19,7 @@ import { createWorkshopOperations } from '../workshop-operation-api.mjs'
 import { createSlateReader } from '../slate-read.mjs'
 import { createPrivateSlateOperation } from '../create-slate-api.mjs'
 import { createSlateInviteOperation } from '../slate-invite-api.mjs'
-import { deleteOwnedSlate, embedViewerOrigin, generateSlateShareId } from '../methods/slates'
+import { deleteOwnedSlate, embedViewerOrigin, generateSlateShareId, slateOpenStores } from '../methods/slates'
 import { canCommentSlate } from '../common/slate-access'
 import { resolvePresentationSlate } from '../methods/creative-slates'
 import { slateSaveCore } from '../slate-save'
@@ -33,7 +34,8 @@ import { accounts, describer } from '../instance/meteor'
 import { createIdempotencyStore, ensureIdempotencyIndexes } from './idempotency.mjs'
 import { createRateLimiter } from './rate-limit.mjs'
 import { principalFromToken } from './principal.mjs'
-import { MOVE_ACTIONS, MOVE_RESOURCE_PATH } from '../oauth/device.mjs'
+import { apiAudiences, viewerClient } from '../oauth/viewer.mjs'
+import { createRelayLive } from '../common/relay-live.mjs'
 import { mountHttp } from './http.mjs'
 import { mountDdp } from './ddp.mjs'
 import { mountMermaidFiles } from './mermaid-file.mjs'
@@ -200,6 +202,15 @@ export const deps = {
     posterAllowed: (url) => posterAllowedFor(Meteor.settings)(url),
     // profile.*: About you, the person's own facts and switches (server/profile)
     profile: profileStore,
+    // slates.live: a read-only seat in a slate's live room, the check collaborators.init runs (server/common/relay-live.mjs)
+    relayLive: createRelayLive({
+      stores: { ...slateOpenStores, access: SlateAccess.rawCollection(), guestViews: GuestViews.rawCollection() },
+      loadUser: (userId) => Meteor.users.findOneAsync(
+        { _id: userId, isDisabled: { $ne: true } },
+        { fields: { _id: 1, orgId: 1, isMasterUser: 1, isAnonymous: 1 } }
+      ),
+      settings: () => Meteor.settings,
+    }),
 }
 
 // library.* (server/library): the shared library, over the same save core, slate access and decks.
@@ -217,15 +228,18 @@ export const exec = createMeteorExec({ registry, idempotency, presence })
 deps.exec = exec.service
 ensureExecCollections()
 
+const viewer = viewerClient(Meteor.settings)
+
 export function mountActions(app) {
   // Proxies in front of the app; Meteor reads the same setting for its own client addresses.
   const forwardedCount = Number.parseInt(process.env.HTTP_FORWARDED_COUNT, 10) || 0
   mountHttp(app, gatedRegistry(registry, exec.gate), {
     express,
-    // Personal tokens; and a move's device sign-in (server/oauth/device.mjs), for the move actions only.
+    // Personal tokens; a move's device sign-in (server/oauth/device.mjs), for the move actions only;
+    // and the viewer app's sign-in (server/oauth/viewer.mjs), for its read actions only.
     authenticate: async (req) => {
-      const moveResource = new URL(Meteor.settings.public?.baseUrl || Meteor.absoluteUrl()).origin + MOVE_RESOURCE_PATH
-      return principalFromToken(await apiTokenService.authenticateApiRequest(req, { audience: moveResource }), { audiences: { [moveResource]: MOVE_ACTIONS } })
+      const audiences = apiAudiences({ origin: Meteor.settings.public?.baseUrl || Meteor.absoluteUrl(), viewer })
+      return principalFromToken(await apiTokenService.authenticateApiRequest(req, { audience: Object.keys(audiences) }), { audiences })
     },
     forwardedCount,
     // a token's calls, counted by action and User-Agent (agent-reach), for Admin › Overview

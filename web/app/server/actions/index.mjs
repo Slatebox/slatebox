@@ -3,6 +3,7 @@ import { createRegistry } from './registry.mjs'
 import { slateComponents } from './slate-schemas.mjs'
 import { API_TOKEN_SCOPES } from '../api-token-core.mjs'
 import slatesGet from './slate-get.mjs'
+import slatesLive from './slate-live.mjs'
 import slatesCreate from './slate-create.mjs'
 import slatesApplyOperations from './slate-operations.mjs'
 import slatesIssueInvite from './slate-invite-issue.mjs'
@@ -53,6 +54,7 @@ import startTileActions from './start-tiles.mjs'
 
 export const actions = [
   slatesGet,
+  slatesLive,
   slatesCreate,
   slatesApplyOperations,
   slatesIssueInvite,

@@ -16,6 +16,7 @@ import { cloudOn } from '../cloud-lock-meteor'
 import { createOAuthCore, REQUEST_ID } from './core.mjs'
 import { createDeviceFlow, createWindowCounter, DeviceError, teamClaimsConfigured } from './device.mjs'
 import { mountOAuth as mount } from './routes.mjs'
+import { viewerClient } from './viewer.mjs'
 import { licenseIssuerConfigured } from '../licenses/issuer.mjs'
 
 /* eslint-disable camelcase, no-undef */
@@ -47,6 +48,8 @@ export const oauth = createOAuthCore({
   users: Meteor.users,
   origin: appOrigin(),
   errors: load('@modelcontextprotocol/sdk/server/auth/errors.js'),
+  // The Slatebox viewer app (viewer.mjs): pre-registered, read only, settings.mobile.
+  firstParty: [viewerClient(Meteor.settings)].filter(Boolean),
 })
 
 // Offered only on Slatebox Cloud: team addresses where the claim service is set up, moves

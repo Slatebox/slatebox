@@ -1158,6 +1158,94 @@
       }
     },
     {
+      "id": "slates.live",
+      "title": "Watch a slate live",
+      "description": "A read-only seat in a slate's live room: the relay address (wsUrl), the room and a room token that lasts 15 minutes (exp, unix seconds). Join the relay with them to see edits as people make them; ask again before exp for a fresh token. The role is always read. A public slate answers without a token. 503 unavailable when this server has no live relay.",
+      "action": "slates.live",
+      "toolset": "slates",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "agent",
+        "visitor"
+      ],
+      "scope": "slates:read",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/slates/{shareId}/live",
+        "pathParams": [
+          "shareId"
+        ],
+        "queryParams": [],
+        "bodyParams": [],
+        "idempotencyKey": "none"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "shareId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The slate ID from its address: /canvas/<shareId>."
+          }
+        },
+        "required": [
+          "shareId"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "wsUrl": {
+            "type": "string",
+            "description": "The relay's WebSocket address."
+          },
+          "room": {
+            "type": "string",
+            "description": "The slate's room on the relay."
+          },
+          "token": {
+            "type": "string",
+            "description": "The room token: a credential, never log it."
+          },
+          "exp": {
+            "type": "integer",
+            "description": "When the token lapses, unix seconds."
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "read"
+            ]
+          }
+        },
+        "required": [
+          "wsUrl",
+          "room",
+          "token",
+          "exp",
+          "role"
+        ]
+      },
+      "tool": {
+        "name": "watch_slate_live",
+        "title": "Watch a slate live",
+        "description": "Get a read-only seat in a slate's live room (relay address, room and a short-lived token) to follow edits as people make them.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
       "id": "slates.create",
       "title": "Create a slate",
       "description": "Omitting kind creates a playable decision map from a brief of up to 160 characters. kind diagram makes editable notes and connections from your own steps (up to 1200 characters, connect two steps with → or ->) or from a named source. The token owner owns the new private slate.",

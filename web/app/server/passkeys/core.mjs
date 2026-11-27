@@ -91,6 +91,8 @@ const fail = (code) => { throw new PasskeyError(code) }
 
 const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/
 const isLocal = (host) => host === 'localhost' || host.endsWith('.localhost')
+// A native Android app's origin: the exact prefix, then 43 base64url characters (32 bytes, no padding).
+export const ANDROID_APP_ORIGIN = /^android:apk-key-hash:[A-Za-z0-9_-]{43}$/
 const coveredBy = (host, rpId) => host === rpId || host.endsWith('.' + rpId)
 
 function parseOrigin(value) {
@@ -111,6 +113,10 @@ function parseOrigin(value) {
  * - origins: ROOT_URL's origin, then settings.public.baseUrl and settings.passkeys.extraOrigins when
  *   each is https (http only on localhost), has no path, and its host is the rpId or under it. Any
  *   other is left out and named in `ignored`.
+ * - Then the Slatebox app's Android builds: settings.mobile.android.passkeyOrigins, each exactly
+ *   android:apk-key-hash:<the signing certificate's SHA-256, base64url without padding>, the origin
+ *   Android's Credential Manager sends for a native app. Anything else there is left out and named in
+ *   `ignored`. The rpId does not change (the app proves it may use it through assetlinks.json).
  * - Off when settings.passkeys.enabled is false, ROOT_URL is missing or plain http off localhost,
  *   or its host is an IP address (WebAuthn does not allow one).
  */
@@ -138,6 +144,11 @@ export function relyingParty({ rootUrl, settings = {} } = {}) {
     if (!parsed || !coveredBy(parsed.host, rpId)) { ignored.push(String(candidate)); continue }
     if (!origins.includes(parsed.origin)) origins.push(parsed.origin)
   }
+  const apps = settings?.mobile?.android?.passkeyOrigins
+  ;(Array.isArray(apps) ? apps : []).forEach((candidate) => {
+    if (typeof candidate !== 'string' || !ANDROID_APP_ORIGIN.test(candidate)) ignored.push(String(candidate))
+    else if (!origins.includes(candidate)) origins.push(candidate)
+  })
   const rpName = typeof conf.rpName === 'string' && conf.rpName.trim() ? conf.rpName.trim().slice(0, 64) : 'Slatebox'
   return { rpId, rpName, origins, ignored }
 }

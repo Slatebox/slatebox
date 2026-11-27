@@ -13959,6 +13959,100 @@
         }
       }
     },
+    "/slates/{shareId}/live": {
+      "get": {
+        "operationId": "getSlateLive",
+        "summary": "Watch a slate live",
+        "description": "A read-only seat in a slate's live room: the relay address (wsUrl), the room and a room token that lasts 15 minutes (exp, unix seconds). Join the relay with them to see edits as people make them; ask again before exp for a fresh token. The role is always read. A public slate answers without a token. 503 unavailable when this server has no live relay.",
+        "x-required-scope": "slates:read",
+        "security": [
+          {},
+          {
+            "personalToken": []
+          }
+        ],
+        "x-slatebox": {
+          "action": "slates.live",
+          "toolset": "slates",
+          "readOnly": true,
+          "destructive": false,
+          "idempotent": true,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "agent",
+            "visitor"
+          ]
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "shareId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "The slate ID from its address: /canvas/<shareId>."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "wsUrl": {
+                      "type": "string",
+                      "description": "The relay's WebSocket address."
+                    },
+                    "room": {
+                      "type": "string",
+                      "description": "The slate's room on the relay."
+                    },
+                    "token": {
+                      "type": "string",
+                      "description": "The room token: a credential, never log it."
+                    },
+                    "exp": {
+                      "type": "integer",
+                      "description": "When the token lapses, unix seconds."
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "read"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "wsUrl",
+                    "room",
+                    "token",
+                    "exp",
+                    "role"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/slates/{shareId}/media": {
       "post": {
         "operationId": "addMediaNote",

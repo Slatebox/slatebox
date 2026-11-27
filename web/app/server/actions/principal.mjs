@@ -18,14 +18,18 @@ export function principalFromUser(user, allScopes) {
 }
 
 // A connected app's token (sbo_) authenticates on /api/v1 only when it was issued for a purpose
-// that names its actions: a move sign-in (server/oauth/device.mjs, purpose "move") is bound to
-// `audiences` → its action ids, and the registry admits it for those actions only (onlyActions).
+// that names its actions: a move sign-in (server/oauth/device.mjs, purpose "move") or the viewer
+// app (server/oauth/viewer.mjs) is bound to `audiences` → its action ids (or { actions, refusal }),
+// and the registry admits it for those actions only (onlyActions), saying `refusal` otherwise.
 export function principalFromToken(authenticated, { audiences = null } = {}) {
   if (!authenticated?.token?._id) return null
   const { token } = authenticated
-  const only = token.kind === 'oauth' && audiences && Object.hasOwn(audiences, token.resource) ? audiences[token.resource] : null
+  const purpose = token.kind === 'oauth' && audiences && Object.hasOwn(audiences, token.resource) ? audiences[token.resource] : null
+  const only = Array.isArray(purpose) ? purpose : purpose?.actions || null
+  const refusal = !Array.isArray(purpose) && typeof purpose?.refusal === 'string' ? purpose.refusal : null
   return {
     ...(only && { onlyActions: [...only] }),
+    ...(only && refusal && { onlyRefusal: refusal }),
     kind: 'agent',
     userId: token.userId,
     tokenId: token._id,

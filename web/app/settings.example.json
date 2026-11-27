@@ -10,6 +10,21 @@
     "//": "collaborators.init hands each viewer a room token for one slate (v2, signed with a key derived from slateboxAPI.secretKey). legacy: true is a rollout-only override that also hands the old bearer/timestamp pair (valid on every room, no expiry) to callers with write, for engines that do not send the token yet; the relay takes it only with RELAY_ALLOW_LEGACY=true. Leave it false.",
     "legacy": false
   },
+  "mobile": {
+    "//": "The Slatebox viewer app (read only). It signs in as the public OAuth client clientId (no registration) and returns to one of redirects (a full address, or a bare reverse-DNS app scheme such as com.acme.boards meaning <scheme>://oauth; never http). The client is off until redirects holds at least one usable entry. Its tokens read on /api/v1 only (account, slates, a slate, comments, the deck, a live seat) and show under Profile > Developer > Connected apps. enabled: false turns the client off. ios.appIds (TeamID.bundleId) builds /.well-known/apple-app-site-association; android.package and android.sha256 (signing certificate fingerprints, AA:BB:... form) build /.well-known/assetlinks.json; each answers 404 until set. android.passkeyOrigins lets passkeys work in the Android app: each is exactly android:apk-key-hash:<base64url SHA-256 of the signing certificate>.",
+    "enabled": true,
+    "clientId": "slatebox-viewer",
+    "name": "Slatebox viewer",
+    "redirects": ["com.slatebox.viewer://oauth"],
+    "ios": {
+      "appIds": []
+    },
+    "android": {
+      "package": "",
+      "sha256": [],
+      "passkeyOrigins": []
+    }
+  },
   "packages": {
     "mongo": {
       "reactivity": ["changeStreams", "oplog", "polling"]

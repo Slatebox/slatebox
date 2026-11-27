@@ -58,9 +58,11 @@ export function createApiTokenService({
   // registry, which answers 403 insufficient_scope; a token whose account is gone, or was
   // never a registered account, does not authenticate.
   // A personal token (sbx_) works wherever tokens do. A connected app's access token (sbo_,
-  // server/oauth) works only where it was issued for (audience: the /mcp resource) and only
-  // until it expires; without an audience (/api/v1) it never authenticates.
+  // server/oauth) works only where it was issued for (audience: the /mcp resource, or on /api/v1
+  // the resources of its first-party purposes, a list) and only until it expires; without an
+  // audience it never authenticates.
   async function authenticateApiRequest(req, { audience } = {}) {
+    const audiences = (Array.isArray(audience) ? audience : [audience]).filter((item) => typeof item === 'string' && item)
     const rawToken = extractBearerToken(req)
     if (!rawToken?.startsWith('sbx_') && !rawToken?.startsWith('sbo_')) return null
     const token = await apiTokens.findOneAsync({
@@ -70,7 +72,7 @@ export function createApiTokenService({
     if (!token) return null
     const oauth = token.kind === 'oauth'
     if (oauth !== rawToken.startsWith('sbo_')) return null
-    if (oauth && (!audience || token.resource !== audience || !(token.expiresAt > now()))) return null
+    if (oauth && (!audiences.includes(token.resource) || !(token.expiresAt > now()))) return null
     // A token is only as good as its account: none for an account that was deleted, disabled,
     // or whose single sign-on identity provider has removed the person.
     const account = await users.findOneAsync(
