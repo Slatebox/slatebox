@@ -467,6 +467,10 @@ test("every account removal removes the account's tokens, presentations, AI keys
     assert.match(text, /import \{ removeAccountRows \} from '\.\/account-rows'/, file);
     assert.ok(text.indexOf(call) > 0 && text.indexOf(call) < text.indexOf(removal), `${file}: before the account goes`);
   }
+  // deleting a team removes every slate of the owner's, inside the team and out (Team settings lists both)
+  const org = app("server/methods/organizations.js");
+  assert.ok(org.includes("await releaseUploadsOfSlates({ userId: user._id })"));
+  assert.ok(org.includes("await Slates.removeAsync({ userId: user._id })"));
   // users.delete keeps its own list: every presentation, not only a workshop's
   const users = app("server/methods/users.js");
   assert.ok(users.includes("await SlatePresentations.removeAsync(owner)"));

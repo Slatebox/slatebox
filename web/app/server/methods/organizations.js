@@ -22,6 +22,8 @@ import {
   Messages,
   Wallets,
   SlateSnapshots,
+  SlateAccess,
+  Comments,
 } from '../../imports/api/common/models'
 import AuthManager from '../../imports/api/common/AuthManager'
 import { removePersonalData } from '../profile/meteor'
@@ -145,11 +147,13 @@ method[CONSTANTS.methods.organizations.delete] = async function deleteOrganizati
       // their integrations and sign-ins (revoked at each vendor first), before their slates go
       await removeIntegrationsOfAccount(user._id)
 
-      await releaseUploadsOfSlates({ userId: user._id, orgId: user.orgId })
-      await Slates.removeAsync({
-        userId: Meteor.userId(),
-        orgId: user.orgId,
-      })
+      // Every slate of theirs: the team's and any outside it (Team settings lists both as removed),
+      // with its sharing and comments
+      const owned = (await Slates.find({ userId: user._id }, { fields: { _id: 1 } }).fetchAsync()).map((slate) => slate._id)
+      await SlateAccess.removeAsync({ slateId: { $in: owned } })
+      await Comments.removeAsync({ slateId: { $in: owned } })
+      await releaseUploadsOfSlates({ userId: user._id })
+      await Slates.removeAsync({ userId: user._id })
       await SlateSnapshots.removeAsync({ userId: user._id })
 
       await GuestViews.removeAsync({ slateOrgId: user.orgId })
