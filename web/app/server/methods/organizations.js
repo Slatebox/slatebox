@@ -21,11 +21,13 @@ import {
   ArchivedSlates,
   Messages,
   Wallets,
+  SlateSnapshots,
 } from '../../imports/api/common/models'
 import AuthManager from '../../imports/api/common/AuthManager'
 import { removePersonalData } from '../profile/meteor'
 import { audit } from '../audit/recorder.mjs'
 import { removeIntegrationsOfAccount } from '../integrations/meteor'
+import { releaseUploadsOfSlates, removeUploadsOfAccount } from '../upload-removal'
 
 const method = {}
 
@@ -142,10 +144,12 @@ method[CONSTANTS.methods.organizations.delete] = async function deleteOrganizati
       // their integrations and sign-ins (revoked at each vendor first), before their slates go
       await removeIntegrationsOfAccount(user._id)
 
+      await releaseUploadsOfSlates({ userId: user._id, orgId: user.orgId })
       await Slates.removeAsync({
         userId: Meteor.userId(),
         orgId: user.orgId,
       })
+      await SlateSnapshots.removeAsync({ userId: user._id })
 
       await GuestViews.removeAsync({ slateOrgId: user.orgId })
 
@@ -169,6 +173,8 @@ method[CONSTANTS.methods.organizations.delete] = async function deleteOrganizati
         throw error
       }
       if (connection) await this.setUserId(null)
+      // their uploaded files, in the background (upload-removal.js)
+      await removeUploadsOfAccount(user)
 
       return {
         success: true,

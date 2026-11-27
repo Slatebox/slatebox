@@ -33,6 +33,7 @@ import { readCreditName } from '../../imports/api/common/library-model.mjs'
 import { removePersonalData } from '../profile/meteor'
 import { removeIntegrationsOfAccount } from '../integrations/meteor'
 import { removePasskeysAddedUnverified, removePasskeysOf } from '../passkeys/meteor'
+import { releaseUploadsOfSlates, removeUploadsOfAccount } from '../upload-removal'
 
 import {
   Permissions,
@@ -48,6 +49,7 @@ import {
   APILinks,
   ProviderKeys,
   AIChoices,
+  SlateSnapshots,
 } from '../../imports/api/common/models'
 import utils from '../../imports/api/common/utils'
 import { accounts, enrollmentMailAvailable, verificationMailAvailable } from '../instance/meteor'
@@ -628,7 +630,10 @@ method[CONSTANTS.methods.users.delete] = async function removeOwnAccount() {
   await JoinedSlates.removeAsync(user._id)
   await SlateApiTokens.removeAsync(owner)
   await SlateOperationRuns.removeAsync(owner)
+  // other people's pictures on these slates are released (removed later when nothing else shows them)
+  await releaseUploadsOfSlates(owner)
   await Slates.removeAsync(owner)
+  await SlateSnapshots.removeAsync(owner)
   await SlatePresentations.removeAsync({ ...owner, workshop: { $exists: true } })
   await Messages.removeAsync(owner)
   // the person's own AI connections, keys and choices
@@ -654,6 +659,9 @@ method[CONSTANTS.methods.users.delete] = async function removeOwnAccount() {
   if (connection) await this.setUserId(null)
   // A person outside any team: this server's own log (a self-hosted server's administrator reads it).
   await audit.record({ action: 'account.deleted', actor: { kind: 'person', userId: user._id, label: personLabel(user) }, target: { type: 'person', id: user._id, name: personLabel(user) } })
+  // their uploaded files (photos from the phone, the editor's uploads): removed in the background,
+  // retried by the hourly sweep, never holding up the removal (upload-removal.js)
+  await removeUploadsOfAccount(user)
   return true
 }
 

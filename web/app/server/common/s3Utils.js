@@ -10,6 +10,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
+import { pagedKeys } from './upload-removal.mjs'
 
 function createS3() {
   return new S3Client({
@@ -145,6 +146,12 @@ export async function putS3Object({ body, key, contentType, contentDisposition }
 
 export async function deleteS3Object(key) {
   await sendS3(new DeleteObjectCommand({ Bucket: Meteor.settings.aws.imageBucket, Key: key }))
+}
+
+// Every key of the image bucket that starts with prefix, page by page.
+export function listS3Keys(prefix) {
+  const Bucket = Meteor.settings.aws.imageBucket
+  return pagedKeys((ContinuationToken) => sendS3(new ListObjectsV2Command({ Bucket, Prefix: prefix, ContinuationToken })))
 }
 
 // An object's bytes, or null when it is not there. An object larger than maxBytes answers with

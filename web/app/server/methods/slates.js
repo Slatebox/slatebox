@@ -27,6 +27,7 @@ import { rememberInvitedEdit } from './joined-slates'
 import { recordNativeGuestEdit } from './kept-native-slate'
 import { saveNativeSlate } from './native-slate-save.mjs'
 import { slateSaveCore } from '../slate-save'
+import { releaseUploadsOfSlates } from '../upload-removal'
 import AuthManager from '../../imports/api/common/AuthManager'
 import CONSTANTS from '../../imports/api/common/constants'
 import { boardEmbed } from '../../imports/api/common/slate-embed.mjs'
@@ -92,6 +93,8 @@ export async function deleteOwnedSlate(slate) {
     slateId: slate.shareId || slate._id,
     ...(slate.orgId && { orgId: slate.orgId }),
   })
+  // the slate's pictures: removed after the grace period when no other slate shows them
+  await releaseUploadsOfSlates({ _id: slate._id })
   await SlateAccess.removeAsync({ slateId: slate._id })
   await Messages.removeAsync({ slateId: slate._id })
   await Comments.removeAsync({ slateId: slate._id })

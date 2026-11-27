@@ -6,8 +6,9 @@ import { Buffer } from 'buffer'
 import { Meteor } from 'meteor/meteor'
 import { MongoInternals } from 'meteor/mongo'
 import { Random } from 'meteor/random'
-import { dateFolder, uploadKey } from './upload-keys.mjs'
-import { deleteS3Object, putS3Object, readS3Object } from './s3Utils'
+import { dateFolder, uploadKey, uploadKeyFor } from './upload-keys.mjs'
+import { bucketUploadsOf } from './upload-removal.mjs'
+import { deleteS3Object, listS3Keys, putS3Object, readS3Object } from './s3Utils'
 
 const inBucket = () => Boolean(Meteor.settings.aws?.imageBucket)
 
@@ -79,6 +80,23 @@ export async function deleteStoredFile(key) {
   }
   const files = databaseFiles()
   for (const id of await databaseFileIds(key)) await files.delete(id).catch(() => {})
+}
+
+// Uploads before this day are not looked for when an account has no creation date.
+const FIRST_UPLOAD_DAY = Date.UTC(2015, 0, 1)
+
+// Every upload of a person's (the editor's and the phone app's, upload-keys.mjs) the store holds.
+// The bucket is listed by each day's folder from the account's creation (a prefix per day: the
+// person's id is part of the name, not of a folder); the database by the names it keeps.
+export async function listUploadsOf(userId, since) {
+  if (typeof userId !== 'string' || !/^[A-Za-z0-9]{17}$/.test(userId)) return []
+  const mine = (key) => uploadKeyFor(key, userId)
+  if (!inBucket()) {
+    const name = new RegExp(`^\\d{4}/\\d{2}/\\d{2}/u_${userId}_`)
+    const rows = await databaseFiles().find({ filename: name }, { projection: { filename: 1 } }).toArray()
+    return [...new Set(rows.map((row) => row.filename).filter(mine))]
+  }
+  return bucketUploadsOf({ userId, since: since ?? FIRST_UPLOAD_DAY, until: Date.now(), listPrefix: listS3Keys, dateFolder, uploadKeyFor })
 }
 
 // A file kept in the database, by key: { bytes, contentType, contentDisposition }, or null.

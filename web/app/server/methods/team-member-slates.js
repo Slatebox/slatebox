@@ -3,7 +3,7 @@ import { Meteor } from 'meteor/meteor'
 import { check } from 'meteor/check'
 import AuthManager from '../../imports/api/common/AuthManager'
 import CONSTANTS from '../../imports/api/common/constants'
-import { Slates, SlateAccess, Comments, Messages, Permissions } from '../../imports/api/common/models'
+import { Slates, SlateAccess, SlateSnapshots, Comments, Messages, Permissions } from '../../imports/api/common/models'
 import { membersChanged } from './business'
 import { removalRefusal } from '../team-guard.mjs'
 import { teamPerson } from '../common/team-person'
@@ -11,6 +11,7 @@ import { removePersonalData } from '../profile/meteor'
 import { audit } from '../audit/recorder.mjs'
 import { personLabel } from '../audit/meteor'
 import { removeIntegrationsOfAccount } from '../integrations/meteor'
+import { releaseUploadsOfSlates, removeUploadsOfAccount } from '../upload-removal'
 
 // A team member with canRemoveUsers removes another member: the slates that member owns in the
 // team, then the account, in one call. Never the owner, never yourself, and an admin only by an
@@ -38,11 +39,16 @@ Meteor.methods({
     await SlateAccess.removeAsync({ slateId: { $in: ids } })
     await Comments.removeAsync({ slateId: { $in: ids } })
     await Messages.removeAsync({ slateId: { $in: ids } })
+    await releaseUploadsOfSlates({ _id: { $in: ids } })
     await Slates.removeAsync({ _id: { $in: ids } })
+    await SlateSnapshots.removeAsync({ userId: memberId })
     await Permissions.removeAsync({ userId: memberId, orgId })
     // About you: every fact they kept and their personalization switches
     await removePersonalData(memberId)
+    const removed = await Meteor.users.findOneAsync({ _id: memberId, orgId }, { fields: { _id: 1, createdAt: 1 } })
     await Meteor.users.removeAsync({ _id: memberId, orgId })
+    // their uploaded files, in the background; one a team slate that stays still shows is kept (upload-removal.js)
+    if (removed) await removeUploadsOfAccount(removed)
     // a team billed for Slatebox Business pays for one member fewer (prorated)
     membersChanged(orgId)
     return ids.length

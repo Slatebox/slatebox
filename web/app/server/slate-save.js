@@ -7,6 +7,7 @@ import { createSlateSaveCore } from './slate-save-core.mjs'
 import { growthStep } from './growth/meteor'
 import { audit } from './audit/recorder.mjs'
 import { slateWriteEntries } from './audit/slate-entries.mjs'
+import { releaseUploads } from './upload-removal'
 
 // One row per save: { _id: slateId:revision, slateId, revision, at, source, actor, notes, fields }.
 export const SlateEvents = new Mongo.Collection('slateEvents')
@@ -37,6 +38,8 @@ export const slateSaveCore = countingFirstSlate(createSlateSaveCore({
   events: SlateEvents.rawCollection(),
   onEventError: (error, row) => console.error('slate event not logged', row.slateId, row.revision, error.message),
   onWrite: logSlateWrite,
+  // a deleted photo note's file: removed after the grace period, when nothing names it (upload-removal.mjs)
+  onReleased: (keys) => releaseUploads(keys),
 }))
 
 Meteor.startup(async () => {
@@ -66,4 +69,6 @@ export const fencedSlateSaveCore = countingFirstSlate(createSlateSaveCore({
   events: SlateEvents.rawCollection(),
   onEventError: (error, row) => console.error('slate event not logged', row.slateId, row.revision, error.message),
   onWrite: logSlateWrite,
+  // a deleted photo note's file: removed after the grace period, when nothing names it (upload-removal.mjs)
+  onReleased: (keys) => releaseUploads(keys),
 }))

@@ -22,6 +22,7 @@
 // the content change together; a concurrent save makes the core read again and rebuild.
 import { SEARCH_FIELDS, searchDescription, searchFieldsOf, searchName, searchText } from './slate-search-fields.mjs'
 import { moveAnnotation } from './workshop-move-log.mjs'
+import { releasedUploadKeys } from './common/upload-removal.mjs'
 
 // How many saves the slate document remembers the touches of. A caller whose revision is older
 // than that is refused: nothing can show its notes are untouched.
@@ -260,14 +261,27 @@ function actorRow(actor = {}) {
  * @param stores.onWrite  told of every create and every save that changed something (the activity
  *   log, server/audit/slate-entries.mjs): { kind: 'created' | 'saved', slate, set, actor, source,
  *   notes, fields, session }, slate being the stored slate before the save. Its failure never fails the save.
+ * @param stores.onReleased  told the upload keys a save stopped using (a deleted photo note), after
+ *   the save is written: (keys, { slateId }). Its failure never fails the save
+ *   (common/upload-removal.mjs removes them later, only when nothing names them).
  */
-export function createSlateSaveCore({ slates, events, now = Date.now, onEventError = () => {}, onWrite = null }) {
+export function createSlateSaveCore({ slates, events, now = Date.now, onEventError = () => {}, onWrite = null, onReleased = null }) {
   async function told(change) {
     if (!onWrite) return
     try {
       await onWrite(change)
     } catch {
       // The activity log reports its own failures; the save stands.
+    }
+  }
+
+  async function release(current, set, diff, slateId) {
+    if (!onReleased || (!diff.removed.length && !diff.changed.length && !diff.fields.length)) return
+    try {
+      const keys = releasedUploadKeys(current, set)
+      if (keys.length) await onReleased(keys, { slateId })
+    } catch (error) {
+      onEventError(error, { slateId, revision: (current.revision ?? 0) + 1 })
     }
   }
 
@@ -341,6 +355,7 @@ export function createSlateSaveCore({ slates, events, now = Date.now, onEventErr
           session
         )
         await told({ kind: 'saved', slate: current, set, actor, source, notes, fields: diff.fields, session })
+        await release(current, set, diff, slateId)
         return { revision: next, saved: true, notes, fields: diff.fields, slate: current }
       }
       // Either another save landed (the revision moved: build again on it), or the caller's
