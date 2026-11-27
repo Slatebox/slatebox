@@ -76,7 +76,11 @@ export function automatedBrowser(nav = globalThis.navigator) {
   }
 }
 
-/** The same signal from request headers (DNT: 1, Sec-GPC: 1). */
+/**
+ * The same signal from request headers (DNT: 1, Sec-GPC: 1). Over DDP the server sees DNT only (SockJS
+ * passes a fixed list of headers, without Sec-GPC): the browser's own check (privacySignal) is what
+ * honors Global Privacy Control.
+ */
 export function privacySignalFromHeaders(headers) {
   if (!headers || typeof headers !== 'object') return false
   return String(headers.dnt ?? '').trim() === '1' || String(headers['sec-gpc'] ?? '').trim() === '1'
