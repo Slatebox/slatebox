@@ -30,7 +30,8 @@ export const CLIENT_DOCUMENT_PATH = '/oauth/mcp-client.json'
 export const OAUTH_LIMITS = Object.freeze({ flowMinutes: 10, metadataChars: 64 * 1024, tokenChars: 8192, scopes: 24, scopeChars: 1000 })
 
 // Apps Slatebox registers with a vendor ahead of time (vendors with no CIMD and no DCR). The
-// client id and secret come from settings.connectors.oauthApps.<provider>, never from code.
+// client id and secret come from Admin › Integration apps (integration-apps.mjs, the secret sealed)
+// or settings.connectors.oauthApps.<provider>, never from code.
 export const KNOWN_PROVIDERS = Object.freeze({
   github: Object.freeze({
     issuer: 'https://github.com/login/oauth',

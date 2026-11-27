@@ -164,12 +164,21 @@ administrator does, for their own install. Each one needs:
 
 - **Redirect URL** (also called callback or reply URL): `<your Slatebox address>/connectors/oauth/callback`,
   for example `https://app.slatebox.com/connectors/oauth/callback`. It must be https.
-- **Settings**: `settings.connectors.oauthApps.<provider>` with `clientId` and `clientSecret` (the
-  secret lives only in settings or the environment that fills them, never in the database). The
-  provider's sign-in server and the only MCP servers its sign-in is sent to are built into Slatebox
-  (`enterprise/server/oauth.mjs` `KNOWN_PROVIDERS`), so nothing else is needed. `scopes` replaces the
-  scopes Slatebox asks for, on purpose (for example to allow Gmail drafts).
-- `SLATEBOX_KEY_ENCRYPTION_KEY` set, as for every sign-in.
+- **Client id and secret**, entered either way:
+  - **In admin**: /admin/ai › Integration apps has a row for each provider, with a link to the
+    vendor's console and the redirect URL to copy. Paste the client id and client secret and save.
+    The secret is stored encrypted with `SLATEBOX_KEY_ENCRYPTION_KEY` and is never shown again (the
+    page shows only a fingerprint of it, and who changed it when). It is used at once, with no
+    restart. Every save and clear is in /admin/ai › Changes; only a person can make them, never a
+    token or an agent. A new client id without a new secret drops the saved secret.
+  - **In settings**: `settings.connectors.oauthApps.<provider>` with `clientId` and `clientSecret`.
+    What admin holds wins over this; clearing a provider in admin goes back to the settings file.
+    `scopes` replaces the scopes Slatebox asks for, on purpose (for example to allow Gmail drafts),
+    and is settings only.
+  The provider's sign-in server and the only MCP servers its sign-in is sent to are built into
+  Slatebox (`enterprise/server/oauth.mjs` `KNOWN_PROVIDERS`), so nothing else is needed. Google is
+  settings only: `oauthApps.google` for its MCP servers, and `googleDocs.web` for Google Drive.
+- `SLATEBOX_KEY_ENCRYPTION_KEY` set, as for every sign-in (and to store a secret entered in admin).
 
 | Provider (`oauthApps.<provider>`) | Cards | Where to register | Scopes Slatebox asks for |
 | --- | --- | --- | --- |

@@ -263,7 +263,7 @@ export function createConnectorService({
   later = (fn, ms) => setTimeout(fn, ms),
   audit = () => {},
   promptOf = promptText, // (id, values) -> the prompt's text (the registry)
-  oauthApps = {}, // settings.connectors.oauthApps: a card with needsApp shows only once its vendor app is set up
+  oauthApps = {}, // the pre-registered apps, or an async getter of them (integration-apps.mjs): a card with needsApp shows only once its vendor app is set up
   gallery = async () => GALLERY, // the live gallery (aiAgents, edited in /admin/ai), else the built-in cards
   integrations = memoryStore(), // { insert, findOne, find, update, remove }: each person's connected agent servers, apart from any slate
   slateSettings = memoryStore(), // { findOne({ _id: slateId }), insert, update }: a slate owner's outsideAgents choice
@@ -725,7 +725,8 @@ export function createConnectorService({
     // until it is; the dialog still names it (notSetUp: no address, nothing to invite), so a search
     // for it says it is not set up on this server instead of finding nothing.
     const all = await gallery()
-    const ready = (card) => !card.needsApp || Boolean(oauthApps?.[card.needsApp]?.clientId)
+    const apps = typeof oauthApps === 'function' ? await oauthApps() : oauthApps
+    const ready = (card) => !card.needsApp || Boolean(apps?.[card.needsApp]?.clientId)
     const canInvite = signedInPerson(principal)
     return {
       cards: all.filter(ready).map(({ id, name, url, job, lands, try: tryThis, featured, signIn, keyHint, cost, group, origin, homepage, sharedBy, keywords }) => ({

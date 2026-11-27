@@ -16,6 +16,7 @@
 // on a self-hosted install; actions, methods and routes are already guarded by the app).
 import { connectorActions, integrationActions } from './actions.mjs'
 import { galleryActions } from './gallery-admin.mjs'
+import { integrationAppActions } from './integration-apps.mjs'
 import { googleActions } from './google/actions.mjs'
 import { signInRoutes } from './routes.mjs'
 import { registerTeamAddresses } from '../team-addresses/index.mjs'
@@ -52,6 +53,12 @@ export function register(api, context) {
     if (!started) throw starting()
     return started.findGallery
   }, async () => (started ? started.configured() : null), async () => (started ? started.community() : [])))
+  // /admin/ai › Integration apps: the OAuth client id and secret of each vendor with no automatic
+  // registration, entered by an administrator (the secret sealed, never returned; audited).
+  api.addActions(integrationAppActions(() => {
+    if (!started) throw starting()
+    return started.integrationApps
+  }))
   // Sign-in's own addresses: the client document, the popup's start and the fixed callback.
   for (const route of signInRoutes({
     signIn: () => {

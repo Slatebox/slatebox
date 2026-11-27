@@ -56,7 +56,9 @@ export async function probe(address, fetch) {
  *          takeByState(stateHash) -> doc|null (atomic: 'opened' → 'used'), update(id, set) }
  * clients: { get(id), put(doc) } (automatic registrations, kept per issuer and redirect address)
  * vault: credentials.mjs; master: the app's master key; fetch: the sign-in fetch (GET allowed, no redirects)
- * apps(): settings.connectors.oauthApps; origin(): this Slatebox's own origin
+ * apps(): the pre-registered apps (settings.connectors.oauthApps with Admin › Integration apps on top,
+ *   integration-apps.mjs), or a promise of them: asked again on every plan, start and callback
+ * origin(): this Slatebox's own origin
  */
 export function createSignIn({ flows, clients, vault, master, fetch, apps = () => ({}), origin, devOrigins = [], now = Date.now, random = randomBytes }) {
   const sealed = (owner, text) => seal({ master, owner, plaintext: text })
@@ -77,7 +79,7 @@ export function createSignIn({ flows, clients, vault, master, fetch, apps = () =
   async function plan({ address, challenge }) {
     if (!vault.available()) fail('vault_off', 'Agents that need sign-in are not available on this server.')
     const found = await discoverFor(address, challenge)
-    const registration = chooseRegistration({ server: found.server, apps: apps(), origin: origin(), resource: found.resource })
+    const registration = chooseRegistration({ server: found.server, apps: await apps(), origin: origin(), resource: found.resource })
     const provider = knownProvider(found.issuer)
     let authHost = ''
     let sendsTo = ''
@@ -122,7 +124,7 @@ export function createSignIn({ flows, clients, vault, master, fetch, apps = () =
     if (!vault.available()) fail('vault_off', 'Agents that need sign-in are not available on this server.')
     if (pasted !== null && (typeof pasted !== 'string' || !CLIENT_ID_PATTERN.test(pasted))) fail('bad_client_id', 'That client id doesn\'t look right.')
     const found = await discoverFor(address, challenge)
-    let registration = chooseRegistration({ server: found.server, apps: apps(), origin: origin(), pastedClientId: pasted, resource: found.resource })
+    let registration = chooseRegistration({ server: found.server, apps: await apps(), origin: origin(), pastedClientId: pasted, resource: found.resource })
     if (registration.kind === 'needs_client_id') fail('needs_client_id', 'This server needs a registered app. Paste a client id from the server, or paste a key or token.')
     if (registration.kind === 'dcr') registration = { kind: 'dcr', ...(await dcrClient(found.server)) }
     const scopes = chooseScopes({ app: registration.app, scopes: found.scopes, server: found.server, resource: found.resource })
@@ -207,7 +209,7 @@ export function createSignIn({ flows, clients, vault, master, fetch, apps = () =
       if (!flow.openedBy || flow.openedBy !== flow.userId) fail('unverified', 'Sign-in couldn\'t be verified. Start again from Slatebox.')
       const { code } = checkCallback(query, flow, now())
       const verifier = opened(flowOwner(flow), flow.verifier)
-      const app = flow.registration.kind === 'preregistered' ? (apps() || {})[flow.registration.provider] : null
+      const app = flow.registration.kind === 'preregistered' ? ((await apps()) || {})[flow.registration.provider] : null
       const clientSecret = app?.clientSecret || (flow.clientSecret ? opened(flowOwner(flow), flow.clientSecret) : null)
       const client = { clientId: flow.registration.clientId, ...(clientSecret && { clientSecret }) }
       const tokens = await exchangeCode({ server: flow.server, client, code, verifier, redirectUri: flow.redirectUri, resource: flow.resource, fetch, accept: flow.server.tokenAccept })

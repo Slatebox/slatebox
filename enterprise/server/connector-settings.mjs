@@ -15,8 +15,11 @@
 //                "resources" (https origins) adds servers. Any other
 //                provider name must also give "issuer" (https; a devOrigins origin in local
 //                development only) and "resources", or its sign-in is never used. The client id
-//                is public; the secret lives only here (or the environment that fills settings),
-//                never in code or the database.
+//                is public; the secret is never in code. An administrator can also enter a known
+//                provider's client id and secret in Admin › AI control › Integration apps
+//                (integration-apps.mjs): the secret is then stored encrypted with the vault, those
+//                values win over these, and these stay the fallback. Google is the exception: its
+//                apps are settings only (oauthApps.google, and googleDocs.web for Drive).
 // The vault's master key is not a setting: it is SLATEBOX_KEY_ENCRYPTION_KEY in the environment
 // (web/app/server/metering/vault.mjs), the same key the app already uses. Without it, servers that
 // need sign-in are not offered.
@@ -25,15 +28,17 @@ import { KNOWN_PROVIDERS } from './oauth.mjs'
 
 const ORIGIN = /^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):\d{2,5}$/
 const PROVIDER = /^[a-z][a-z0-9-]{1,30}$/
+// A client id or secret: one line of visible ASCII, at most 500 characters (settings and admin alike).
+export const CLIENT_TEXT = /^[\x21-\x7e]{1,500}$/
 
 function appsOf(raw, devOrigins) {
   const out = {}
   if (!raw || typeof raw !== 'object') return out
   for (const [name, app] of Object.entries(raw)) {
     if (!PROVIDER.test(name) || !app || typeof app !== 'object') continue
-    if (typeof app.clientId !== 'string' || !/^[\x21-\x7e]{1,500}$/.test(app.clientId)) continue
+    if (typeof app.clientId !== 'string' || !CLIENT_TEXT.test(app.clientId)) continue
     const entry = { clientId: app.clientId }
-    if (typeof app.clientSecret === 'string' && /^[\x21-\x7e]{1,500}$/.test(app.clientSecret)) entry.clientSecret = app.clientSecret
+    if (typeof app.clientSecret === 'string' && CLIENT_TEXT.test(app.clientSecret)) entry.clientSecret = app.clientSecret
     // The MCP servers (origins) this app's sign-in may be sent to; a known provider brings its own.
     if (Array.isArray(app.resources)) {
       const resources = app.resources.filter((r) => {

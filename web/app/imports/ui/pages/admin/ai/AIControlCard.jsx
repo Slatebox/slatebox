@@ -10,8 +10,8 @@ export default function AIControlCard() {
     <AccountPanel sx={{ maxWidth: COLUMN_WIDTH }}>
       <AccountSection title="AI control" data-testid="ai-control-card">
         <Typography variant="body2">
-          Add model providers and their keys, choose which model answers each part of Slatebox, and see every change
-          to the AI configuration with who made it and why.
+          Add model providers and their keys, choose which model answers each part of Slatebox, enter the apps
+          outside tools sign in through, and see every change with who made it and why.
         </Typography>
         <AccountActions>
           <Button variant="outlined" component={RouterLink} to="/admin/ai">Open AI control</Button>

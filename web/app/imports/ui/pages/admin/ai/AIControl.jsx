@@ -13,17 +13,20 @@ import Prompts from './Prompts'
 import Effective from './Effective'
 import Audit from './Audit'
 import Gallery from './Gallery'
+import IntegrationApps from './IntegrationApps'
 
 // Admin › AI control (/admin/ai): which model answers each part of Slatebox, the providers and
 // their keys (kept only in the backend), the models with their prices, one choice per part, the
-// prompts each part sends, the outside agents people can invite (Agent gallery), and every change
-// to the AI configuration. The page calls only the ai.control.*, ai.providers.*, ai.keys.*,
-// ai.models.*, ai.bindings.*, ai.prompts.*, ai.agents.gallery.* and ai.audit.* actions, the same
+// prompts each part sends, the outside agents people can invite (Agent gallery), the OAuth apps
+// outside tools sign in through (Integration apps), and every change to the AI configuration. The
+// page calls only the ai.control.*, ai.providers.*, ai.keys.*, ai.models.*, ai.bindings.*,
+// ai.prompts.*, ai.agents.gallery.*, connectors.apps.* and ai.audit.* actions, the same
 // ones an administrator's token, exec, MCP and the CLI call; the server checks the administrator on
 // every call.
 const TABS = [
   { id: 'overview', label: 'Overview', Panel: Overview },
   { id: 'providers', label: 'Providers and keys', Panel: Providers },
+  { id: 'integration-apps', label: 'Integration apps', Panel: IntegrationApps },
   { id: 'models', label: 'Models', Panel: Models },
   { id: 'bindings', label: 'Bindings', Panel: Bindings },
   { id: 'prompts', label: 'Prompts', Panel: Prompts },

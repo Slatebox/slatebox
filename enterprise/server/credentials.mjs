@@ -37,7 +37,8 @@ const ownerOf = (doc, field) => ({ ownerType: 'mcp', ownerId: doc.ownerId, provi
  * store: { get(id), put(doc), update(id, set), claim(id, leaseId, until, now) -> bool,
  *          release(id, leaseId), remove(id) }
  * master: loadMasterKey() result (null: sign-in servers are not offered)
- * fetch: the guarded sign-in fetch; secretFor(registration) -> the pre-registered app's secret from settings
+ * fetch: the guarded sign-in fetch; secretFor(registration) -> the pre-registered app's secret (or a
+ *   promise of it), asked on every refresh and revocation (Admin › Integration apps or settings)
  */
 export function createVault({ store, master, fetch, secretFor = () => null, now = Date.now, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), leaseMs = VAULT_LIMITS.leaseMs }) {
   const available = () => Boolean(master)
@@ -59,9 +60,9 @@ export function createVault({ store, master, fetch, secretFor = () => null, now 
     }
   }
 
-  function clientOf(doc) {
+  async function clientOf(doc) {
     const reg = doc.registration || {}
-    const secret = reg.kind === 'preregistered' ? secretFor(reg) : reg.clientSecret ? openField(doc, 'clientSecret') : null
+    const secret = reg.kind === 'preregistered' ? await secretFor(reg) : reg.clientSecret ? openField(doc, 'clientSecret') : null
     return { clientId: reg.clientId, ...(secret && { clientSecret: secret }) }
   }
 
@@ -127,7 +128,7 @@ export function createVault({ store, master, fetch, secretFor = () => null, now 
     try {
       result = await refreshTokens({
         server: doc.server,
-        client: clientOf(doc),
+        client: await clientOf(doc),
         refreshToken: openField(doc, 'refresh'),
         resource: doc.resource,
         fetch,
@@ -188,7 +189,7 @@ export function createVault({ store, master, fetch, secretFor = () => null, now 
       const access = openQuietly(doc, 'access')
       tried = Boolean(refresh || access)
       try {
-        const client = clientOf(doc)
+        const client = await clientOf(doc)
         if (refresh) revoked = (await revokeToken({ server: doc.server, client, token: refresh, hint: 'refresh_token', fetch })) || revoked
         if (access) revoked = (await revokeToken({ server: doc.server, client, token: access, hint: 'access_token', fetch })) || revoked
       } catch {}

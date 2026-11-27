@@ -34,6 +34,7 @@ import { createMcpFetch } from './mcp-fetch.mjs'
 import { callTool, discover } from './mcp-session.mjs'
 import { ConnectorRefused, createConnectorService, meterRefusal, profileIntegration, profileSource } from './service.mjs'
 import { connectorSettings } from './connector-settings.mjs'
+import { createIntegrationApps } from './integration-apps.mjs'
 import { cardFor, retiredFor } from '../common/gallery.mjs'
 import { communityCard, liveGallery } from './gallery-admin.mjs'
 import { CLOUD_LIBRARY_LIMITS, CLOUD_ORIGIN, cloudLibraryOn, createCloudCatalog } from './cloud-library.mjs'
@@ -64,6 +65,15 @@ const GoogleSlateFiles = new Mongo.Collection('googleSlateFiles')
 const OutsideActions = new Mongo.Collection('mcpOutsideActions')
 // A self-hosted install's last good copy of Slatebox Cloud's Community cards (cloud-library.mjs): one row.
 const CloudCatalog = new Mongo.Collection('connectorCloudCatalog')
+// The OAuth apps an administrator entered (Admin › AI control › Integration apps): one row per
+// provider, the client secret sealed. Never published: read through connectors.apps.list.
+const ConnectorOAuthApps = new Mongo.Collection('connectorOAuthApps')
+const oauthAppRows = {
+  get: (provider) => ConnectorOAuthApps.findOneAsync({ _id: provider }),
+  all: () => ConnectorOAuthApps.find({}).fetchAsync(),
+  put: (provider, { _id, ...doc }) => ConnectorOAuthApps.upsertAsync({ _id: provider }, { $set: doc }),
+  remove: (provider) => ConnectorOAuthApps.removeAsync({ _id: provider }),
+}
 
 const drawable = (slate) => !slate.creative || slate.nativeCanvasDrawing || slate.creative.model?.kind === 'workshop'
 
@@ -246,12 +256,25 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
   // The app's existing master key (never generated here). Without it, sign-in servers are not offered.
   const master = loadMasterKey()
   if (!master) console.warn('[connectors] SLATEBOX_KEY_ENCRYPTION_KEY is not set: agents that need sign-in are not offered')
+  // The pre-registered apps: settings.connectors.oauthApps with what an administrator entered in
+  // Admin › Integration apps on top, read again every few seconds (a pasted secret needs no restart).
+  const integrationApps = createIntegrationApps({
+    rows: oauthAppRows,
+    master,
+    settingsApps: () => settings.oauthApps,
+    origin: appOrigin,
+    audit: (entry) => {
+      console.log('[connectors]', JSON.stringify({ kind: entry.action, provider: entry.target.id, by: entry.actor?.userId ?? null, at: new Date().toISOString() }))
+      return deps.aiControlStore?.record(entry)
+    },
+  })
   const vault = createVault({
     store: credentialsStore,
     master,
     fetch: signInFetch,
-    // Google's sign-in is Slatebox's own OAuth client (settings.googleDocs.web); MCP servers' are settings.connectors.oauthApps.
-    secretFor: (registration) => (registration.provider === 'google' ? google().clientSecret : settings.oauthApps[registration.provider]?.clientSecret || null),
+    // Google's sign-in is Slatebox's own OAuth client (settings.googleDocs.web); MCP servers' are the
+    // integration apps (Admin › Integration apps, else settings.connectors.oauthApps), asked on every refresh.
+    secretFor: async (registration) => (registration.provider === 'google' ? google().clientSecret : (await integrationApps.apps())[registration.provider]?.clientSecret || null),
   })
   const signIn = createSignIn({
     flows: flowsStore,
@@ -259,7 +282,7 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     vault,
     master,
     fetch: signInFetch,
-    apps: () => settings.oauthApps,
+    apps: () => integrationApps.apps(),
     origin: appOrigin,
     devOrigins: settings.devOrigins,
   })
@@ -296,7 +319,7 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     callTool: (address, f, call, options) => (address === GOOGLE_ADDRESS ? googleService.driveSession.callTool(address, f, call, options) : callTool(address, f, call, options)),
   }
   const service = createConnectorService({
-    oauthApps: settings.oauthApps,
+    oauthApps: () => integrationApps.apps(),
     connections: connectionsStore,
     suggestions: suggestionsStore,
     fetch,
@@ -437,7 +460,7 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     google: googleConfiguration(google(), { vaultKey: Boolean(master) }),
     ...(cloud && { cloudLibrary: await cloud.catalog.status() }),
   })
-  return { service, google: googleService, signIn, origin: appOrigin, userFor, findGallery, configured, community: () => communitySource() }
+  return { service, google: googleService, signIn, origin: appOrigin, userFor, findGallery, configured, community: () => communitySource(), integrationApps }
 }
 
 // Slatebox Cloud's Community cards on a self-hosted install: pulled at start and every few hours by one
