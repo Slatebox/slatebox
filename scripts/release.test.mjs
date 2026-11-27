@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
-  addGeneratedLine, runsLines, artifactForTag, compareSemver, curatedUnreleased, extractSection, generatedBody, nextVersion,
+  addGeneratedLine, highlightsReminder, runsLines, artifactForTag, compareSemver, curatedUnreleased, extractSection, generatedBody, nextVersion,
   sectionBody, tagPattern, ARTIFACTS, writeSection,
 } from './release.mjs'
 
@@ -130,4 +130,21 @@ test('a pinned commit on a repository whose default branch is master (the relay)
   const run = (dir, args) => { seen.push(args.join(' ')); return { status: args[0] === 'merge-base' && args.at(-1) === 'master' ? 0 : 1 } }
   assert.doesNotThrow(() => checkSourceCommits({ engine: 'a'.repeat(40), relay: 'b'.repeat(40), engineDir: '.', relayDir: '.', run: (d, a) => (a[0] === 'merge-base' && a[2] === 'a'.repeat(40)) ? { status: 0 } : run(d, a) }))
   assert.ok(seen.includes('fetch --quiet origin HEAD'), 'fetches the default branch, not main')
+})
+
+test('a minor or major app release without Highlights gets a reminder, never a failure', () => {
+  assert.match(highlightsReminder({ name: 'app', current: '2.1.4', version: '2.2.0', curated: '' }), /^reminder: 2\.2\.0 is a minor release with no Highlights/)
+  assert.match(highlightsReminder({ name: 'app', current: '2.1.4', version: '3.0.0', curated: '' }), /major release/)
+  assert.equal(highlightsReminder({ name: 'app', current: '2.1.4', version: '2.2.0', curated: 'Notes.' }), '')
+  assert.equal(highlightsReminder({ name: 'app', current: '2.1.4', version: '2.1.5', curated: '' }), '')
+  assert.equal(highlightsReminder({ name: 'app', current: '2.1.4', version: '2.2.0-rc.1', curated: '' }), '')
+  assert.equal(highlightsReminder({ name: 'slatebox', current: '0.2.3', version: '0.3.0', curated: '' }), '')
+})
+
+test('an app release moves the version the app shows in What\'s new', async () => {
+  const { readFile } = await import('node:fs/promises')
+  const files = ARTIFACTS.app.versionFiles.map((f) => f.file)
+  assert.deepEqual(files, ['package.json', 'web/app/imports/ui/common/release.json'])
+  const read = async (f) => JSON.parse(await readFile(new URL('../' + f, import.meta.url), 'utf8')).version
+  assert.equal(await read(files[1]), await read(files[0]))
 })

@@ -66,6 +66,16 @@ their `packages/...` folder, the app everything else except the release tooling.
 Hand-written notes under `## [Unreleased]` in a changelog are kept: at release time they become the
 release's **Highlights**, above the generated list. Use them for what a commit list cannot say well.
 
+Every minor or major app release carries Highlights (owner rule, 2026-11-26). They are the public record:
+`scripts/build-changelog.mjs` in the site repository turns them into slatebox.com/changelog and its
+`feed.json`, and What's new in the app's Help and support opens that page at the release line. Write a
+few plain sentences for people who use Slatebox, not a commit list: what they can do now, in US spelling,
+saying "agent" rather than "AI" where it means something that acts. The rule never stops a ship: a minor or
+major `app` release with an empty `[Unreleased]` prints a reminder and carries on. Patch releases need none.
+
+The app's version lives in two files that move together: `package.json` and
+`web/app/imports/ui/common/release.json` (what What's new reads for its unread dot).
+
 To preview the app's next section: `npm run changelog:preview`.
 
 ## Cutting a release

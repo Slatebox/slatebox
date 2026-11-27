@@ -43,7 +43,8 @@ export const ARTIFACTS = {
     title: 'Slatebox',
     tagPrefix: 'v',
     changelog: 'CHANGELOG.md',
-    versionFiles: [{ file: 'package.json', keys: [['version']] }],
+    // web/app/imports/ui/common/release.json gives the app its own version (What's new in Help and support).
+    versionFiles: [{ file: 'package.json', keys: [['version']] }, { file: 'web/app/imports/ui/common/release.json', keys: [['version']] }],
     lockKeys: [['version'], ['packages', '', 'version']],
     // The app is everything except the separately versioned npm packages. The root
     // package-lock.json only moves with those packages' versions and dependencies. The
@@ -192,6 +193,20 @@ export function runsLines(runs, pinAt) {
     lines.push(`- Runs ${r.name} [${now}](${link})${before ? ` (was ${before})` : ''}.`)
   }
   return lines
+}
+
+/**
+ * Every minor or major app release carries hand-written Highlights (owner rule, 2026-11-26): they are what
+ * slatebox.com/changelog and the app's What's new show. A missing one is a reminder, never a failure, so it never
+ * stops a ship. Returns the reminder to print, or '' when none is due.
+ */
+export function highlightsReminder({ name, current, version, curated }) {
+  if (name !== 'app' || curated) return ''
+  const from = parseSemver(current), to = parseSemver(version)
+  if (to.pre.length || (from.major === to.major && from.minor === to.minor)) return ''
+  return `reminder: ${version} is a ${from.major === to.major ? 'minor' : 'major'} release with no Highlights. ` +
+    'Write a few plain sentences under ## [Unreleased] in CHANGELOG.md for slatebox.com/changelog and What\'s new ' +
+    '(see docs/releasing.md). Releasing anyway: this is a reminder, not a stop.'
 }
 
 export function sectionBody(curated, generated) {
@@ -364,7 +379,10 @@ function release(name, spec, opts) {
   for (const line of runsLines(artifact.runs, pinAt)) generated = addGeneratedLine(generated, 'Changed', line)
   const changelogPath = artifact.changelog
   const before = existsSync(changelogPath) ? readFileSync(changelogPath, 'utf8') : '# Changelog\n\n## [Unreleased]\n'
-  const body = sectionBody(curatedUnreleased(before), generated)
+  const curated = curatedUnreleased(before)
+  const reminder = highlightsReminder({ name, current, version, curated })
+  if (reminder) console.warn(reminder)
+  const body = sectionBody(curated, generated)
   const after = writeSection(before, { version, date: opts.date, body, tag, prevTag: prevTag || '' })
 
   // Version files, lock file and companions.
