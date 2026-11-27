@@ -47,10 +47,11 @@ export default function HelpMenu({ collapsed = false, onDone }) {
       <ListItemButton id="help-menu-button" aria-haspopup="menu" aria-expanded={anchor ? 'true' : undefined} aria-controls={anchor ? 'help-menu' : undefined}
         aria-label={unread ? 'Help and support, something new' : undefined}
         onClick={(e) => setAnchor(e.currentTarget)} sx={{ mx: .5, borderRadius: 1, color: 'shell.ink' }}>
+        {/* The row's dot sits on the icon, collapsed or not: at the 205px drawer the label fills the row, and a dot
+            after it overlapped the "t" of "support". */}
         <ListItemIcon sx={{ color: 'inherit', position: 'relative' }}><HelpOutlineIcon />
-          {unread && collapsed && <UnreadDot sx={{ position: 'absolute', top: 0, left: 18 }} />}</ListItemIcon>
+          {unread && <UnreadDot sx={{ position: 'absolute', top: 0, left: 18 }} />}</ListItemIcon>
         <ListItemText primary="Help and support" sx={{ ml: -2 }} />
-        {unread && !collapsed && <UnreadDot />}
       </ListItemButton>
     </Tooltip>
     <Menu id="help-menu" anchorEl={anchor} open={Boolean(anchor)} onClose={close}
