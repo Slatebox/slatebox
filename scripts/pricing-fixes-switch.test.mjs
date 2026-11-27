@@ -284,7 +284,7 @@ test('#9: an unconfirmed account is shown no free amount left, and can ask for t
   const users = source('server/methods/users.js')
   assert.match(users, /method\[CONSTANTS\.methods\.users\.sendVerification\] = async function resendVerification\(\)/)
   // opening an emailed login link confirms that address
-  assert.match(users, /if \(ll\.email\) await Meteor\.users\.updateAsync\(\{ _id: ll\.userId, 'emails\.0\.address': ll\.email \}, \{ \$set: \{ 'emails\.0\.verified': true \} \}\)/)
+  assert.match(users, /if \(ll\.email\) \{?\s*await Meteor\.users\.updateAsync\(\{ _id: ll\.userId, 'emails\.0\.address': ll\.email \}, \{ \$set: \{ 'emails\.0\.verified': true \} \}\)/)
   assert.ok(METER_RATE_LIMITS.some(r => r.method === 'users.sendVerification' && r.per === 'user'))
 })
 
