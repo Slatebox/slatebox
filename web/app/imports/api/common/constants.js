@@ -350,6 +350,18 @@ const CONSTANTS = {
       generateSpecialUseLoginToken: 'users.generateSpecialUseLoginToken',
       attemptLoginWithLink: 'users.attemptLoginWithLink',
     },
+    // Passkeys (server/passkeys): sign in, add, list, rename and remove; a guest saves with one.
+    passkeys: {
+      available: 'passkeys.available',
+      loginOptions: 'passkeys.loginOptions',
+      registerOptions: 'passkeys.registerOptions',
+      register: 'passkeys.register',
+      claimOptions: 'passkeys.claimOptions',
+      claim: 'passkeys.claim',
+      list: 'passkeys.list',
+      rename: 'passkeys.rename',
+      remove: 'passkeys.remove',
+    },
     images: {
       getColors: 'images.getColors',
       removeImage: 'images.removeImage',

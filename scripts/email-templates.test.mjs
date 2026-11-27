@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   DEFAULT_LOGO_URL, PRIVACY_URL, VML_MAX_WIDTH, enrollAccount, firstNameOf, greeting, joinMovedTeam, libraryDecision, loginLink, logoUrlFor,
-  meterAlert, proMergeLink, resetPassword, verifyEmail, vmlButton,
+  meterAlert, passkeyAdded, proMergeLink, resetPassword, verifyEmail, vmlButton,
 } from '../web/app/server/email/templates.mjs'
 import { SAMPLES } from './email-samples.mjs'
 import { libraryNotice } from '../web/app/server/library/notify.mjs'
@@ -26,6 +26,7 @@ const all = () => [
   libraryDecision({ firstName: 'Ada', subject: 's', headline: 'h', nextLine: 'n', libraryUrl: url }),
   meterAlert({ text: 'Half of the budget is spent.', adminUrl: url }),
   joinMovedTeam({ firstName: 'Ada', teamName: 'Acme', url, days: 14 }),
+  passkeyAdded({ firstName: 'Ada', passkeyName: 'iCloud Keychain', url }),
 ]
 
 test('every email has the layout: logo, preheader, one button, the raw link, why it came, privacy, and a text twin', () => {

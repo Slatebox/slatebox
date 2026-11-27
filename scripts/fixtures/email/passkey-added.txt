@@ -1,0 +1,16 @@
+Subject: A passkey was added to your Slatebox account
+Preheader: You can now sign in to Slatebox with this passkey.
+
+Hi Ada,
+
+A passkey was added
+
+A passkey named "iCloud Keychain" was just added to your Slatebox account. You can sign in with it from now on.
+
+Review your passkeys: https://app.slatebox.com/profile?tab=sign-in
+
+If you didn't add it, open your passkeys now and remove it, then change your password. A password reset alone does not remove a passkey.
+
+-- 
+You got this email because a passkey was added to this Slatebox account.
+Slatebox LLC · Privacy: https://slatebox.com/privacy/

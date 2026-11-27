@@ -16,6 +16,7 @@ import BrandBar from '../common/BrandBar'
 import { SsoSignIn, useSso } from '../sso/sso'
 import { loginReturn } from '../components/billing/pay/pay-url.mjs'
 import { loginWelcome, rememberSignedIn, signedInBefore } from '../common/accountCopy.mjs'
+import PasskeySignIn from '../passkeys/PasskeySignIn'
 
 export default function Login() {
   const history = useNavigate()
@@ -70,6 +71,14 @@ export default function Login() {
     }
   }
 
+  // A passkey sign-in (the button or the email field's autofill) lands where a password one does.
+  const passkeySignedIn = () => {
+    rememberSignedIn(globalThis.localStorage)
+    history(destination)
+    setGlobalMessage({ visible: false })
+  }
+  const passkeyFailed = (text) => setGlobalMessage({ visible: true, text, severity: 'error', autoHide: 10000 })
+
   const performLogin = (e) => {
     e.preventDefault()
     const em = document.getElementById('email').value
@@ -117,7 +126,8 @@ export default function Login() {
             id="email"
             label="Email address"
             name="email"
-            autoComplete="email"
+            // "webauthn" lets the browser offer this site's passkeys here (autofill, PasskeySignIn).
+            autoComplete="username webauthn"
             defaultValue={email}
             autoFocus={!email}
           />
@@ -138,6 +148,7 @@ export default function Login() {
             sx={{ mt: 2, mb: 1, borderRadius: 6 }}>
             Sign in
           </Button>
+          <PasskeySignIn onSignedIn={passkeySignedIn} onError={passkeyFailed} />
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
             <Button sx={quiet} component={RouterLink} to="/recover" size="small">Forgot password?</Button>
             <Button sx={quiet} type="button" size="small" onClick={oneTimeSignIn}>Email me a sign-in link</Button>

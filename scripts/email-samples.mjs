@@ -1,7 +1,7 @@
 // Sample data for every email Slatebox sends (web/app/server/email/templates.mjs), for the preview
 // script (scripts/email-preview.mjs) and the snapshot tests. Dev only: kept out of the server bundle.
 import {
-  enrollAccount, libraryDecision, loginLink, meterAlert, proMergeLink, resetPassword, verifyEmail,
+  enrollAccount, libraryDecision, loginLink, meterAlert, passkeyAdded, proMergeLink, resetPassword, verifyEmail,
 } from '../web/app/server/email/templates.mjs'
 
 export const SAMPLES = Object.freeze({
@@ -12,6 +12,7 @@ export const SAMPLES = Object.freeze({
   'enroll-account-long-team': () => enrollAccount({ firstName: 'Grace', teamName: 'The Northwest Regional Product Design and Research Collaborative', url: 'https://app.slatebox.com/enroll-account/sample-token' }),
   'enroll-account-no-team': () => enrollAccount({ firstName: null, teamName: '', url: 'https://app.slatebox.com/enroll-account/sample-token' }),
   'login-link': () => loginLink({ firstName: 'Ada', url: 'https://app.slatebox.com/login-link/sample-link' }),
+  'passkey-added': () => passkeyAdded({ firstName: 'Ada', passkeyName: 'iCloud Keychain', url: 'https://app.slatebox.com/profile?tab=sign-in' }),
   'pro-merge-link': () => proMergeLink({ firstName: 'Ada', url: 'https://app.slatebox.com/login-link/sample-link', days: 7 }),
   'library-approved': () => libraryDecision({
     firstName: 'Ada', subject: 'Slatebox: your slate "Kickoff notes" is published', headline: 'Your slate "Kickoff notes" was published',

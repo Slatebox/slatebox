@@ -290,6 +290,21 @@ export function loginLink({ firstName, url, logoUrl }) {
   })
 }
 
+/** A passkey was added to the account (server/passkeys): a notice, with the way to remove it. */
+export function passkeyAdded({ firstName, passkeyName, url, logoUrl }) {
+  return renderEmail({
+    subject: 'A passkey was added to your Slatebox account',
+    preheader: 'You can now sign in to Slatebox with this passkey.',
+    headline: 'A passkey was added',
+    firstName,
+    paragraphs: [`A passkey named "${String(passkeyName || 'Passkey').slice(0, 60)}" was just added to your Slatebox account. You can sign in with it from now on.`],
+    cta: { label: 'Review your passkeys', url, textLabel: 'Review your passkeys' },
+    after: ["If you didn't add it, open your passkeys now and remove it, then change your password. A password reset alone does not remove a passkey."],
+    reason: 'You got this email because a passkey was added to this Slatebox account.',
+    logoUrl,
+  })
+}
+
 /** The Pro move link: Pro bought by a guest with an address that already has an account. */
 export function proMergeLink({ firstName, url, days, logoUrl }) {
   return renderEmail({

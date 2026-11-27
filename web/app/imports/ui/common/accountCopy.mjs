@@ -20,8 +20,21 @@ export function loginWelcome(returning) {
 }
 
 // The account form (common/Register.jsx). A guest either chose to sign up (from the sign-in page's
-// Create an account) or is saving what they made; a signed-in person verifies their email.
-export function registrationCopy({ guest, intent, emailSent = false }) {
+// Create an account) or is saving what they made; a signed-in person verifies their email. A guest
+// may choose a passkey instead of a password (passkey: true).
+export function registrationCopy({ guest, intent, emailSent = false, passkey = false }) {
+  const base = passwordCopy({ guest, intent, emailSent })
+  if (!guest || !passkey) return base
+  return {
+    ...base,
+    lede: intent === 'signup'
+      ? 'Add your email, then create a passkey on this device. You sign in with your fingerprint, face, PIN or screen lock. No password to remember.'
+      : 'You’re working as a guest. Add an email, then create a passkey on this device to keep your slates on every device you sign in on.',
+    action: intent === 'signup' ? 'Create account with a passkey' : 'Save with a passkey',
+  }
+}
+
+function passwordCopy({ guest, intent, emailSent }) {
   if (guest && intent === 'signup') {
     return {
       heading: 'Create your account',

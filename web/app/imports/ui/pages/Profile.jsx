@@ -25,6 +25,7 @@ import AlertTitle from '@mui/material/AlertTitle'
 import DeveloperAccess from '../components/profile/DeveloperAccess'
 import AISettings from '../components/profile/AISettings'
 import AboutYou from '../components/profile/AboutYou'
+import SignInSettings from '../components/profile/SignInSettings'
 import { enterpriseState } from '../../api/common/edition.mjs'
 import { adminLinksFor } from '../../api/common/server-admin.mjs'
 import useServerAdmin from '../common/useServerAdmin'
@@ -34,9 +35,10 @@ import Link from '@mui/material/Link'
 const BASE_DAILY_URL = Meteor.settings.public.dailyBaseUrl
 // /profile?tab=developer opens the Developer tab (the instance description links there);
 // /profile?tab=credits opens Credits (Slatebox Pro, balance, own keys) on a server with a meter;
-// tab=free is where links from before Pro point, so it opens Credits too. /profile?tab=about opens About you.
+// tab=free is where links from before Pro point, so it opens Credits too. /profile?tab=about opens About you;
+// /profile?tab=sign-in opens Sign-in (passkeys and the password; the passkey notice email links there).
 const metered = Meteor.settings.public.metered === true
-const TABS = { profile: 1, about: 'about', developer: 4, ai: 'ai', ...(metered ? { credits: 'credits', free: 'credits' } : {}) }
+const TABS = { profile: 1, about: 'about', 'sign-in': 'sign-in', developer: 4, ai: 'ai', ...(metered ? { credits: 'credits', free: 'credits' } : {}) }
 
 export default function Profile() {
   const theme = useTheme()
@@ -261,6 +263,7 @@ export default function Profile() {
             {/* each tab names its panel, and each panel (TabPanel) is labelled by its tab */}
             <Tab label="Profile" value={1} id="scrollable-auto-tab-1" aria-controls="scrollable-auto-tabpanel-1" />
             <Tab label="About you" value="about" id="scrollable-auto-tab-about" aria-controls="scrollable-auto-tabpanel-about" />
+            <Tab label="Sign-in" value="sign-in" id="scrollable-auto-tab-sign-in" aria-controls="scrollable-auto-tabpanel-sign-in" />
             {metered && <Tab label="Credits" value="credits" id="scrollable-auto-tab-credits" aria-controls="scrollable-auto-tabpanel-credits" />}
             <Tab label="AI" value="ai" id="scrollable-auto-tab-ai" aria-controls="scrollable-auto-tabpanel-ai" />
             <Tab label="Developer" value={4} id="scrollable-auto-tab-4" aria-controls="scrollable-auto-tabpanel-4" />
@@ -305,82 +308,6 @@ export default function Profile() {
                 <FinePrint>{t('profile.reVerificationNote')}</FinePrint>
               </AccountSection>
 
-              <AccountSection title="Change Password">
-                <Tooltip
-                  title="Please enter your current password"
-                  placement="top"
-                >
-                  <TextField
-                    variant="outlined"
-                    required
-                    fullWidth
-                    color="secondary"
-                    name="currentPassword"
-                    label="Current Password"
-                    type="password"
-                    id="currentPassword"
-                    autoComplete="currentPassword"
-                    onChange={(e) => {
-                      setCurrentPassword(e.target.value)
-                    }}
-                    value={currentPassword}
-                    sx={{ ...field, mt: SPACE.tight }}
-                  />
-                </Tooltip>
-                <Tooltip
-                  title="At least 8 characters long"
-                  placement="top"
-                >
-                  <TextField
-                    variant="outlined"
-                    required
-                    fullWidth
-                    color="secondary"
-                    name="password"
-                    label="New Password"
-                    type="password"
-                    id="newPassword1"
-                    autoComplete="new-password-1"
-                    onChange={(e) => {
-                      setNewPassword1(e.target.value)
-                    }}
-                    value={newPassword1}
-                    error={newPassword1 !== newPassword2}
-                    sx={field}
-                  />
-                </Tooltip>
-                <Tooltip
-                  title="Type the same password again, at least 8 characters long"
-                  placement="top"
-                >
-                  <TextField
-                    variant="outlined"
-                    required
-                    fullWidth
-                    color="secondary"
-                    name="password"
-                    label="New Password Again"
-                    type="password"
-                    id="newPassword2"
-                    autoComplete="new-password-2"
-                    onChange={(e) => {
-                      setNewPassword2(e.target.value)
-                    }}
-                    value={newPassword2}
-                    error={newPassword2 !== newPassword1}
-                    sx={field}
-                  />
-                </Tooltip>
-                <AccountActions>
-                  <Button
-                    color="secondary"
-                    variant="contained"
-                    onClick={handlePasswordChange}
-                  >
-                    Change Password &rarr;
-                  </Button>
-                </AccountActions>
-              </AccountSection>
 
               {user && !user.isEducationCertified ? (
                 <AccountSection title="Education Certification">
@@ -479,6 +406,92 @@ export default function Profile() {
                   </Box>
                 </AccountSection>
               )}
+            </AccountPanel>
+          </TabPanel>
+          <TabPanel value={tabValue} index="sign-in">
+            <AccountPanel>
+              <SignInSettings
+                user={user}
+                onMessage={setMessage}
+                passwordForm={(
+                  <>
+                    <Tooltip
+                      title="Please enter your current password"
+                      placement="top"
+                    >
+                      <TextField
+                        variant="outlined"
+                        required
+                        fullWidth
+                        color="secondary"
+                        name="currentPassword"
+                        label="Current Password"
+                        type="password"
+                        id="currentPassword"
+                        autoComplete="currentPassword"
+                        onChange={(e) => {
+                          setCurrentPassword(e.target.value)
+                        }}
+                        value={currentPassword}
+                        sx={{ ...field, mt: SPACE.tight }}
+                      />
+                    </Tooltip>
+                    <Tooltip
+                      title="At least 8 characters long"
+                      placement="top"
+                    >
+                      <TextField
+                        variant="outlined"
+                        required
+                        fullWidth
+                        color="secondary"
+                        name="password"
+                        label="New Password"
+                        type="password"
+                        id="newPassword1"
+                        autoComplete="new-password-1"
+                        onChange={(e) => {
+                          setNewPassword1(e.target.value)
+                        }}
+                        value={newPassword1}
+                        error={newPassword1 !== newPassword2}
+                        sx={field}
+                      />
+                    </Tooltip>
+                    <Tooltip
+                      title="Type the same password again, at least 8 characters long"
+                      placement="top"
+                    >
+                      <TextField
+                        variant="outlined"
+                        required
+                        fullWidth
+                        color="secondary"
+                        name="password"
+                        label="New Password Again"
+                        type="password"
+                        id="newPassword2"
+                        autoComplete="new-password-2"
+                        onChange={(e) => {
+                          setNewPassword2(e.target.value)
+                        }}
+                        value={newPassword2}
+                        error={newPassword2 !== newPassword1}
+                        sx={field}
+                      />
+                    </Tooltip>
+                    <AccountActions>
+                      <Button
+                        color="secondary"
+                        variant="contained"
+                        onClick={handlePasswordChange}
+                      >
+                        Change Password &rarr;
+                      </Button>
+                    </AccountActions>
+                  </>
+                )}
+              />
             </AccountPanel>
           </TabPanel>
           <TabPanel value={tabValue} index="about">

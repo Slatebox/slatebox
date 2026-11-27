@@ -28,6 +28,7 @@ import { teamPerson } from '../common/team-person'
 import { roleChangeRefusal, clearedByAdmin } from '../team-guard.mjs'
 import { readCreditName } from '../../imports/api/common/library-model.mjs'
 import { removePersonalData } from '../profile/meteor'
+import { removePasskeysAddedUnverified, removePasskeysOf } from '../passkeys/meteor'
 
 import {
   Permissions,
@@ -459,6 +460,8 @@ method[CONSTANTS.methods.users.attemptLoginWithLink] = async (opts) => {
         throw new Meteor.Error('merge-failed', 'We could not move Slatebox Pro just now. Open the link again in a minute.')
       }
       await Meteor.users.updateAsync({ _id: ll.userId, 'emails.address': ll.email }, { $set: { 'emails.$.verified': true } })
+      // the address is proven: passkeys added before it was confirmed go (passkeys/core.mjs)
+      await removePasskeysAddedUnverified(ll.userId, 'sign-in-link')
       const stamped = Accounts._generateStampedLoginToken()
       await Accounts._insertLoginToken(ll.userId, stamped)
       return stamped.token
@@ -466,7 +469,11 @@ method[CONSTANTS.methods.users.attemptLoginWithLink] = async (opts) => {
     if (ll) {
       await LoginLinks.removeAsync({ _id: opts.token })
       // The emailed link reached that mailbox: the address is confirmed, if it is still the account's.
-      if (ll.email) await Meteor.users.updateAsync({ _id: ll.userId, 'emails.0.address': ll.email }, { $set: { 'emails.0.verified': true } })
+      if (ll.email) {
+        await Meteor.users.updateAsync({ _id: ll.userId, 'emails.0.address': ll.email }, { $set: { 'emails.0.verified': true } })
+        // and passkeys added before it was confirmed go, as a password reset removes them (passkeys/core.mjs)
+        await removePasskeysAddedUnverified(ll.userId, 'sign-in-link')
+      }
       return ll.token
     }
   }
@@ -619,6 +626,8 @@ method[CONSTANTS.methods.users.delete] = async function removeOwnAccount() {
   await AIChoices.removeAsync({ _id: 'user:' + user._id })
   // About you: every fact they kept and their personalization switches
   await removePersonalData(user._id)
+  // their passkeys (the devices keep theirs until the browser is told the account is gone)
+  await removePasskeysOf(user._id)
   // Meteor Accounts normally closes every connection watching a removed login token.
   // Release only this connection's observer so it can receive the deletion result.
   const connection = this.connection

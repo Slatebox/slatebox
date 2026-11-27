@@ -6,7 +6,7 @@
 //    another SSO identity. Slatebox must also have verified the address itself: anyone can type
 //    any address into their own account, so an unverified address is no proof that the account
 //    belongs to the person signing in. The one exception is an account nobody can use yet (a
-//    team invitation not yet accepted: no password, no session, no API token). Linking ends
+//    team invitation not yet accepted: no password, no session, no API token, no passkey). Linking ends
 //    every other way into the account (linkModifier, revokeCredentials).
 // 3. Otherwise a new account (just-in-time provisioning). It joins the default team (the team
 //    the setup link's first admin made) as a Member, unless the server is invite-first
@@ -35,12 +35,13 @@ const linkedTo = (user, identity) =>
 const ownsAddress = (user, email) =>
   (user?.emails || []).some(entry => entry?.verified === true && String(entry.address || '').toLowerCase() === email)
 
-/** Can anyone get into this account today: a password, a saved session or an API token? */
-export function hasCredentials(user, { apiTokens = 0 } = {}) {
+/** Can anyone get into this account today: a password, a saved session, an API token or a passkey? */
+export function hasCredentials(user, { apiTokens = 0, passkeys = 0 } = {}) {
   const password = user?.services?.password
   return Boolean(password?.bcrypt || password?.argon2 || password?.srp) ||
     (user?.services?.resume?.loginTokens?.length || 0) > 0 ||
-    apiTokens > 0
+    apiTokens > 0 ||
+    passkeys > 0
 }
 
 /** Whether the address is in one of the allowed domains; every address is when none are set. */
@@ -54,7 +55,7 @@ export function emailDomainAllowed(email, domains) {
 
 export const OUTSIDE_DOMAINS = 'the email address is not in a domain this Slatebox allows'
 
-export function decideAccount(identity, { bySubject, byEmail, byEmailApiTokens = 0, domains } = {}) {
+export function decideAccount(identity, { bySubject, byEmail, byEmailApiTokens = 0, byEmailPasskeys = 0, domains } = {}) {
   if (!emailDomainAllowed(identity.email, domains)) return { action: 'refuse', reason: OUTSIDE_DOMAINS }
   if (bySubject && linkedTo(bySubject, identity)) {
     if (bySubject.isDisabled) return { action: 'refuse', reason: 'this Slatebox account is disabled' }
@@ -68,7 +69,7 @@ export function decideAccount(identity, { bySubject, byEmail, byEmailApiTokens =
     if (byEmail.services?.sso && !linkedTo(byEmail, identity)) {
       return { action: 'refuse', reason: 'the account is linked to another single sign-on identity' }
     }
-    if (!ownsAddress(byEmail, identity.email) && hasCredentials(byEmail, { apiTokens: byEmailApiTokens })) {
+    if (!ownsAddress(byEmail, identity.email) && hasCredentials(byEmail, { apiTokens: byEmailApiTokens, passkeys: byEmailPasskeys })) {
       return { action: 'refuse', reason: 'an account with this address exists, but Slatebox never verified the address' }
     }
     return { action: 'link', userId: byEmail._id }
@@ -88,8 +89,8 @@ export function ssoService(identity, refreshToken, now = Date.now()) {
 
 /**
  * The update that links an existing account to its SSO identity. The account then signs in with
- * SSO only: its password and every saved session end here (API tokens and sign-in links end in
- * revokeCredentials).
+ * SSO only: its password and every saved session end here (API tokens, sign-in links and passkeys
+ * end in revokeCredentials).
  */
 export function linkModifier(user, identity, refreshToken, now = Date.now()) {
   const $set = { 'services.sso': ssoService(identity, refreshToken, now), 'services.resume.loginTokens': [] }
@@ -106,11 +107,12 @@ export function revokedModifier(now = Date.now()) {
   }
 }
 
-/** Revoke the account's API tokens and remove its one-time sign-in links. */
-export async function revokeCredentials({ apiTokens, loginLinks, apiLinks }, userId, now = Date.now()) {
+/** Revoke the account's API tokens and remove its one-time sign-in links and its passkeys. */
+export async function revokeCredentials({ apiTokens, loginLinks, apiLinks, passkeys }, userId, now = Date.now()) {
   await apiTokens.updateAsync({ userId, revokedAt: null }, { $set: { revokedAt: now } }, { multi: true })
   await loginLinks.removeAsync({ userId })
   await apiLinks.removeAsync({ userId })
+  if (passkeys) await passkeys.removeAsync({ userId })
 }
 
 /**

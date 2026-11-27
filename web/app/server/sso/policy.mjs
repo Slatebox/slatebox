@@ -43,14 +43,16 @@ export const NO_LONGER_HAS_ACCESS = 'Your single sign-on account no longer has a
  * - An account linked to SSO signs in with SSO or a saved session, never with a password or a
  *   password reset, in either mode; once the identity provider has refused it (revokedAt), not
  *   with a saved session either, until it signs in with SSO again.
- * - Under SSO only, no password, password reset or sign-up, and no guest, for anyone.
+ * - Under SSO only, no password, password reset or sign-up, no passkey, and no guest, for anyone.
+ *   (An account linked to SSO never signs in with a passkey either: the last rule refuses every
+ *   type but 'sso' and 'resume'.)
  */
 export function loginRefusal(attempt, sso) {
   const user = attempt?.user
   const linked = user?.services?.sso
   if (linked?.revokedAt && attempt?.type !== 'sso') return NO_LONGER_HAS_ACCESS
   if (sso?.only) {
-    if (attempt?.type === 'password') return SSO_ONLY
+    if (attempt?.type === 'password' || attempt?.type === 'passkey') return SSO_ONLY
     if (['resetPassword', 'createUser', 'changePassword'].includes(attempt?.methodName)) return SSO_ONLY
     if (user?.isAnonymous) return SSO_ONLY
   }
@@ -84,6 +86,13 @@ export const METHODS_CLOSED_UNDER_SSO_ONLY = [
   'users.createAnonymous',
   'creativeSlates.createGuest',
   'users.identify',
+  // Passkeys (server/passkeys): signing in, adding one, and saving a guest with one. Listing and
+  // removing stay open to a signed-in account.
+  'passkeys.loginOptions',
+  'passkeys.registerOptions',
+  'passkeys.register',
+  'passkeys.claimOptions',
+  'passkeys.claim',
 ]
 
 /** Pages the server answers without a session: closed under SSO only (the API keeps its tokens). */

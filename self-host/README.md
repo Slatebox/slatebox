@@ -169,6 +169,31 @@ This server also fetches the Community integrations Slatebox reviewed from
 gallery. To stop it, set
 `SLATEBOX_SETTINGS='{"enterprise":{"cloudLibrary":false}}'`.
 
+## Passkeys
+
+People can sign in with a passkey (their fingerprint, face, PIN or screen
+lock) instead of a password: they add one in Profile › Sign-in, choose
+**Sign in with a passkey** on the sign-in page, or create an account with
+only an email and a passkey. Nothing to turn on.
+
+- A passkey belongs to this server's address, the host of `SLATEBOX_URL`
+  (for example `boards.example.com` or `<name>.slatebox.team`). It needs an
+  `https://` address, or `http://localhost`. On a plain `http://` address or an
+  IP address, passkeys are off and people use passwords.
+- After you change the address, or move to or from Slatebox Cloud, passkeys
+  made for the old address no longer work there. People sign in with
+  **Email me a sign-in link** (or their password) and add a new passkey.
+- With `SLATEBOX_SSO=keycloak`, accounts that sign in with single sign-on
+  keep signing in that way, and their passkeys are removed when they are
+  linked. With `SLATEBOX_SSO_ONLY=true`, passkeys are off: single sign-on is
+  the only way in.
+- Lost a device? The sign-in link by email still works, and an account can
+  hold several passkeys and a password.
+- A passkey added before the account's email address was confirmed is removed
+  when someone resets the password or opens an emailed sign-in link. That
+  keeps a person who saved an account with someone else's address from
+  keeping a way in once the real owner takes it over.
+
 ## Move to Slatebox Cloud
 
 This server's administrator sees **Move to Cloud** in the app's header. It

@@ -121,3 +121,5 @@ import './self-host-setup/meteor'
 import './updates/meteor'
 // single sign-on (off unless settings.sso.enabled; see server/sso)
 import './sso'
+// passkeys: sign in, add one, save a guest with one (server/passkeys; on wherever ROOT_URL is https or localhost)
+import './passkeys/meteor'

@@ -37,6 +37,8 @@ import {
   markClaimFieldsInvalid,
 } from './guestRegistration.mjs'
 import { registrationCopy } from './accountCopy.mjs'
+import { PASSKEY_WORDS, browserErrorText } from '../passkeys/passkey-copy.mjs'
+import { passkeysAvailable, saveAccountWithPasskey } from '../passkeys/passkeys'
 
 let emailCheckTimer = null
 
@@ -76,6 +78,15 @@ export default function Register({ user = null }) {
   }, [getRegistrationDetails.registrationOpen])
   const [emailSent, setEmailSent] = React.useState(false)
   const [isSubmitting, setIsSubmitting] = React.useState(false)
+  // A guest may save (or sign up) with a passkey instead of a password, where browser and server can.
+  const [passkeyOffered, setPasskeyOffered] = React.useState(false)
+  const [usePasskey, setUsePasskey] = React.useState(false)
+  React.useEffect(() => {
+    if (!getRegistrationDetails.registrationOpen || !isAnon) return
+    let active = true
+    passkeysAvailable().then(available => { if (active) setPasskeyOffered(available) })
+    return () => { active = false }
+  }, [getRegistrationDetails.registrationOpen, isAnon])
 
   const handleClose = React.useCallback(() => {
     window.clearTimeout(emailCheckTimer)
@@ -137,6 +148,24 @@ export default function Register({ user = null }) {
     })
   }
 
+  // The same end as identifyUser, with a passkey made on this device instead of a password.
+  async function identifyWithPasskey() {
+    try {
+      const identify = await saveAccountWithPasskey({
+        email: formVals.email.value.trim(),
+        firstName: formVals.firstName.value.trim(),
+        lastName: formVals.lastName.value.trim(),
+      })
+      setEmailSent(identify === true)
+      if (identify?.verificationEmailSent === false) setMailAvailable(false)
+      return identify
+    } catch (err) {
+      const text = browserErrorText(err)
+      if (text) showError({ reason: text })
+      return false
+    }
+  }
+
   async function identifyUser() {
     try {
       // A guest saves its account by choosing a password in the same call.
@@ -186,19 +215,21 @@ export default function Register({ user = null }) {
   }
 
   async function claimGuestAccount() {
-    if (!isClaimFormComplete(formVals)) {
-      setFormVals(markClaimFieldsInvalid(formVals))
+    const passkey = passkeyOffered && usePasskey
+    if (!isClaimFormComplete(formVals, { passkey })) {
+      setFormVals(markClaimFieldsInvalid(formVals, { passkey }))
       return
     }
 
     setIsSubmitting(true)
     try {
-      const identified = await identifyUser()
+      const identified = passkey ? await identifyWithPasskey() : await identifyUser()
       if (identified) {
         if (identified.verificationEmailSent === false) handleClose()
+        const signInWith = passkey ? 'your passkey' : 'your email and password'
         setGlobalMessage({
           visible: true,
-          text: identified === true ? `Your work is saved. Check ${formVals.email.value.trim()} to verify your email.` : 'Your work is saved. You can sign in with your email and password.',
+          text: identified === true ? `Your work is saved. Check ${formVals.email.value.trim()} to verify your email.` : `Your work is saved. You can sign in with ${signInWith}.`,
           severity: 'info',
           autoHide: 60000,
         })
@@ -274,7 +305,8 @@ export default function Register({ user = null }) {
   }
 
   // A guest who chose Create an account is signing up; any other guest is saving their work.
-  const copy = registrationCopy({ guest: isAnon, intent: getRegistrationDetails.intent, emailSent })
+  const passkeyChosen = isAnon && passkeyOffered && usePasskey
+  const copy = registrationCopy({ guest: isAnon, intent: getRegistrationDetails.intent, emailSent, passkey: passkeyChosen })
   const actionLabel = copy.action
 
   return (
@@ -394,7 +426,7 @@ export default function Register({ user = null }) {
                   }
                   autoFocus
                 />
-                {isAnon && (
+                {isAnon && !passkeyChosen && (
                   <TextField
                     variant="outlined"
                     required
@@ -413,6 +445,18 @@ export default function Register({ user = null }) {
                         : 'At least 8 characters.'
                     }
                   />
+                )}
+                {isAnon && passkeyOffered && (
+                  <Button
+                    id="registerPasskeyChoice"
+                    type="button"
+                    variant="text"
+                    color="primary"
+                    onClick={() => setUsePasskey((current) => !current)}
+                    sx={{ alignSelf: 'flex-start', textTransform: 'none', fontWeight: 600 }}
+                  >
+                    {passkeyChosen ? PASSKEY_WORDS.usePassword : PASSKEY_WORDS.useInstead}
+                  </Button>
                 )}
               </Stack>
 

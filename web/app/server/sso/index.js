@@ -27,11 +27,12 @@ import {
   METHODS_CLOSED_UNDER_SSO_ONLY, SSO_ONLY_MESSAGE, closedPathUnderSsoOnly, loginRefusal, mayCreateUser, ssoSettings,
 } from './policy.mjs'
 import { createTicketStore } from './tickets.mjs'
+import { Passkeys } from '../passkeys/meteor'
 import { gateHandlers } from './gate.mjs'
 import { clearSetupCookie, completeSetupWith, defaultTeamId, pendingSsoSetup } from '../self-host-setup/meteor'
 
 const tickets = createTicketStore()
-const credentials = { apiTokens: SlateApiTokens, loginLinks: LoginLinks, apiLinks: APILinks }
+const credentials = { apiTokens: SlateApiTokens, loginLinks: LoginLinks, apiLinks: APILinks, passkeys: Passkeys }
 const log = (line) => console.log(`sso: ${line}`)
 
 function cookieValue(header, name) {
@@ -65,7 +66,8 @@ async function accountFor(sso, claims, refreshToken) {
   const bySubject = await Meteor.users.findOneAsync({ 'services.sso.issuer': sso.provider, 'services.sso.subject': identity.subject })
   const byEmail = !bySubject && identity.email ? await Accounts.findUserByEmail(identity.email) : undefined
   const byEmailApiTokens = byEmail ? await SlateApiTokens.find({ userId: byEmail._id, revokedAt: null }).countAsync() : 0
-  const decision = decideAccount(identity, { bySubject, byEmail, byEmailApiTokens, domains: sso.domains })
+  const byEmailPasskeys = byEmail ? await Passkeys.find({ userId: byEmail._id }).countAsync() : 0
+  const decision = decideAccount(identity, { bySubject, byEmail, byEmailApiTokens, byEmailPasskeys, domains: sso.domains })
   if (decision.action === 'refuse') throw new SsoError('account', decision.reason)
   if (decision.action === 'create') {
     // Null while the setup link makes the first admin: completeSetupWith gives that account its own team.
@@ -77,10 +79,10 @@ async function accountFor(sso, claims, refreshToken) {
   }
   if (decision.action === 'link') {
     // From here on the account signs in with SSO only: no password, no earlier session, no
-    // earlier API token or sign-in link.
+    // earlier API token, sign-in link or passkey.
     await Meteor.users.updateAsync({ _id: byEmail._id }, linkModifier(byEmail, identity, refreshToken))
     await revokeCredentials(credentials, byEmail._id)
-    log(`account ${byEmail._id} linked to its single sign-on identity; its password, sessions and API tokens ended`)
+    log(`account ${byEmail._id} linked to its single sign-on identity; its password, sessions, API tokens and passkeys ended`)
     // An invitation keeps the team it was made for; an account in no team joins the default one.
     await joinDefaultTeam(sso, byEmail)
     return byEmail._id
@@ -209,7 +211,7 @@ async function checkSessions(sso) {
       revoked += 1
       await Meteor.users.updateAsync({ _id: user._id }, revokedModifier())
       await revokeCredentials(credentials, user._id)
-      log(`account ${user._id} signed out: the identity provider refused its session; its API tokens are revoked`)
+      log(`account ${user._id} signed out: the identity provider refused its session; its API tokens are revoked; its passkeys are removed`)
     }
   }
   if (due > SESSION_CHECK_CAP && Date.now() - lastOverCapLog > 3600_000) {

@@ -36,18 +36,19 @@ export function buildRegistrationForm(user, mode) {
   }
 }
 
-export function isClaimFormComplete(form) {
-  return form.email.valid === true && form.password.valid === true
+// A guest saves with an email and a password, or with an email and a passkey (no password field).
+export function isClaimFormComplete(form, { passkey = false } = {}) {
+  return form.email.valid === true && (passkey || form.password.valid === true)
 }
 
-export function markClaimFieldsInvalid(form) {
+export function markClaimFieldsInvalid(form, { passkey = false } = {}) {
   return {
     ...form,
     email: {
       ...form.email,
       valid: form.email.valid === true,
     },
-    password: {
+    password: passkey ? form.password : {
       ...form.password,
       valid: form.password.valid === true,
     },
