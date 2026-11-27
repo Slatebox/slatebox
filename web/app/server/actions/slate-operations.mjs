@@ -2,6 +2,10 @@ import { postersIn } from '../media/media-lookup.mjs'
 
 /** Every photo a plan names (a photo note added). */
 export const photosIn = (plan) => (plan?.operations || []).filter((op) => op?.photo !== undefined).map((op) => op.photo?.url)
+/** Every background picture a plan sets (update_slate background.picture). */
+export const backgroundPicturesIn = (plan) => (plan?.operations || [])
+  .filter((op) => op?.kind === 'update_slate' && op.changes?.background?.picture !== undefined)
+  .map((op) => op.changes.background.picture?.url)
 import { defineAction } from './registry.mjs'
 import { problem } from './errors.mjs'
 import { loadSlate } from './slate-access.mjs'
@@ -125,6 +129,10 @@ function applyPlanTo(deps, target, plan, userMessage, requireMatches) {
   // host's address nor another path on the app.
   if (deps.photoAllowed && photosIn(plan).some((url) => !deps.photoAllowed(url)))
     throw problem(400, 'invalid_operation_plan', 'A photo note\'s picture must be a photo Slatebox stored. Add photos with slates.addPhoto, which stores them.')
+  // A background picture is an https address (the engine refuses any other scheme) or, on this
+  // app, a file a person uploaded: never another path on the app.
+  if (deps.photoAllowed && backgroundPicturesIn(plan).some((url) => typeof url === 'string' && url.startsWith('/') && !deps.photoAllowed(url)))
+    throw problem(400, 'invalid_operation_plan', 'A background picture is an https address or a picture a person uploaded to Slatebox (/files/...).')
   try {
     // A save refuses an operation that matched nothing (409 no_match); a preview reports it.
     return deps.applySlateOperationPlanToJSON(target, plan, { userMessage, requireMatches })
@@ -163,6 +171,10 @@ export async function applyToCanvas(principal, input, { deps, mode, now, idempot
         // A slate key the engine accepts but this route cannot save is a contract gap, not a silent no-op.
         if (!path) throw problem(500, 'unsaved_slate_key', `The slate key ${key} cannot be saved by this server.`)
         set[path] = path.split('.').reduce((value, part) => value?.[part], applied.slate)
+        // A slate that wears a style keeps its background in the style's record too (the engine
+        // writes overrides.bg and overrides.background), so Revert to original and the style worn
+        // again keep it: the record is saved with it.
+        if (key === 'background' && applied.slate.options?.style) set['options.style'] = applied.slate.options.style
       })
     }
     return set

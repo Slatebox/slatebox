@@ -186,6 +186,17 @@ method[CONSTANTS.methods.images.search] = async (opts) => {
   return runAIAction({ feature: 'image-search', kind: 'imageSearch' }, () => searchForNote(user, opts))
 }
 
+// Whether a picture search is there to offer: a registered person, on a server with a search key
+// (an administrator's, sealed in AI control, or the settings file's). A browser shows a search box
+// only when this says so, so it never offers a search that cannot run. Nothing secret is returned.
+method[CONSTANTS.methods.images.searchReady] = async () => {
+  const user = await Meteor.userAsync()
+  if (!user || user.isAnonymous) return false
+  const fromApp = await auxCredential('google-cse')
+  const keys = fromApp ? { apiKey: fromApp.apiKey, engineKey: fromApp.model } : Meteor.settings.googleImageSearch
+  return Boolean(keys?.apiKey && keys?.engineKey)
+}
+
 async function searchForNote(user, opts) {
   try {
     return await searchImagesForNote({

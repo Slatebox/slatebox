@@ -24,6 +24,7 @@ import * as shapes from 'slateboxjs/shapes'
 import { composeDeck, engineTextHeight, fitNoteFont, frameBox, localDirection, normalizeDirection, showsOn } from './presentationCompose.mjs'
 import { PRESENTATION_STYLES_MARKER, STYLES, cleanStyleRef, darkText, resolveStyle, textOn } from './presentationStyles.mjs'
 import { layoutOfNodes } from '../../../api/common/slate-layout-core.mjs'
+import { readBackground, withBackground } from './presentationBackground.mjs'
 
 /** The version of the deck a worn style plays: steps over the slate's own notes. */
 export const BAKED_DECK_VERSION = 5
@@ -423,19 +424,19 @@ export const drawsOnBackground = (options = {}) => !options.image && !options.ba
 const hex6 = (color) => /^#[0-9a-f]{6}$/i.test(String(color || '').trim())
 
 /**
- * The slate's background set by hand (a hex color), as part of its style: the background the
- * style wears from now on (its record's overrides.bg), so wearing it again keeps it and "Revert to
- * original" takes it back. Words drawn straight on the background (a note with no fill) that would
- * no longer read on it (light on light, dark on dark) take the ink that reads. The original is kept first.
+ * The slate's background set by hand, as part of its style: a color ('#1a2b3c' or { color }), a
+ * gradient ({ gradient: { type, colors, angle? } }) or a picture ({ color?, picture: { url, fit,
+ * dim } }; its color is laid over it by dim, and defaults to the slate's color now). It is the
+ * background the style wears from now on (its record's overrides.bg and overrides.background), so
+ * wearing it again keeps it and "Revert to original" takes it back. Words drawn straight on the
+ * background (a note with no fill) that would no longer read on it (light on light, dark on dark)
+ * take the ink that reads on its color. The original is kept first. Throws a plain sentence for a
+ * background that is not safe (presentationBackground.mjs readBackground).
  */
-export function setSlateBackground(slateJSON, color) {
-  if (typeof color !== 'string' || !hex6(color)) throw new Error('Use a color like #1a2b3c.')
-  const bg = color.trim().toLowerCase()
+export function setSlateBackground(slateJSON, value) {
   const doc = keepOriginal(parse(slateJSON))
-  const cs = { ...(doc.options.containerStyle || {}), backgroundColor: bg, backgroundColorAsGradient: false }
-  delete cs.backgroundImage
-  delete cs.backgroundEffect
-  doc.options.containerStyle = cs
+  const { color: bg, background } = readBackground(value, { color: doc.options.containerStyle?.backgroundColor })
+  doc.options.containerStyle = withBackground(doc.options.containerStyle, bg, background)
   const ink = textOn(bg)
   doc.nodes = (doc.nodes || []).map((node) => {
     const o = node?.options || {}
@@ -449,7 +450,12 @@ export function setSlateBackground(slateJSON, color) {
     return { ...node, options }
   })
   const worn = wornStyle(doc)
-  if (worn) doc.options.style = styleRecord({ id: worn.id, overrides: { ...(worn.overrides || {}), bg } })
+  if (worn) {
+    const overrides = { ...(worn.overrides || {}), bg }
+    if (background) overrides.background = background
+    else delete overrides.background
+    doc.options.style = styleRecord({ id: worn.id, overrides })
+  }
   return doc
 }
 
@@ -701,10 +707,8 @@ export function wearStyle(slateJSON, styleRef, { direction = null, name = '', am
   const front = art.filter(({ note }) => !(note.behind || note.deco)).map(({ node }) => node)
   doc.nodes = [...behind, ...nodes, ...keptPlain, ...front]
   // 4. The canvas background and the record of what the slate wears.
-  const cs = { ...(doc.options.containerStyle || {}), backgroundColor: style.bg, backgroundColorAsGradient: false }
-  delete cs.backgroundImage
-  delete cs.backgroundEffect
-  doc.options.containerStyle = cs
+  // The style's color, or the gradient or picture set on it by hand (its record's overrides).
+  doc.options.containerStyle = withBackground(doc.options.containerStyle, style.bg, style.background)
   doc.options.style = styleRecord(ref)
   doc.options.defaultLineColor = composed.lines[Object.keys(composed.lines)[0]]?.lineColor || doc.options.defaultLineColor
 

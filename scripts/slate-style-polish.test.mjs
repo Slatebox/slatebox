@@ -109,9 +109,10 @@ test('the add dock opens on hover only when the pointer comes to it, never becau
   assert.match(dock, /handleActionMenuOpen\(event, 'mouseEnter'\)/)
 })
 
-test('the slate\'s background is one small control under its style: swatches from the styles and a hex field, written as the style\'s own background', () => {
+test('the slate\'s background is one control under its style (its color: swatches from the styles and a hex field), written as the style\'s own background', () => {
   // Owner, 2026-11-25: the old Custom block (Background/Relationships tabs, gradients, complementary/shades, pattern
   // repeat/stretch, the picture search box) is gone; one background control replaced it, and Revert to original restores it.
+  // Owner, 2026-11-27: gradients and pictures are back as part of that control (scripts/style-background.test.mjs).
   const panel = read('imports/ui/components/slate/SlateStyle.jsx')
   assert.match(panel, /aria-label="Background color"/)
   assert.match(panel, /'aria-label': 'Background color \(hex\)'/)

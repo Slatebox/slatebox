@@ -20,6 +20,12 @@ shipped early. The next release is 2.0.0, which is above both lines.
 
 ## [Unreleased]
 
+- **slate style:** the Background control takes a gradient or a picture again, as part of the slate's
+  style. Gradients: one to start from per style, or your own (two or three colors, linear at an angle
+  or radial). Pictures: upload your own, or search where the server has picture search; fill, fit or
+  tile it, and dim it with a color so notes stay readable. Wearing the style again keeps it, and
+  Revert to original brings back the background from before. Agents set the same backgrounds with
+  update_slate (an https address or a picture uploaded to Slatebox).
 - **accounts:** Meteor 3.6.1. A link to verify an email address now expires after 3 days (before, it
   never did); an expired link offers a resend. Password hashing uses bcrypt 6.
 

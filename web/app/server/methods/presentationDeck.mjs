@@ -168,7 +168,9 @@ const PLAYER_NODE_KEYS = ['id', 'text', 'xPos', 'yPos', 'width', 'height', 'rota
   'backgroundColor', 'borderColor', 'borderWidth', 'borderStyle', 'borderOpacity', 'opacity', 'filters', 'imageFit', 'imageOrigWidth', 'imageOrigHeight',
   'isLocked', 'styleRole']
 const PLAYER_LINE_KEYS = ['parentId', 'childId', 'lineColor', 'lineWidth', 'lineType', 'lineCurviness', 'lineCurveType', 'lineDash', 'lineEffect', 'lineOpacity', 'isStraightLine', 'showChildArrow', 'showParentArrow']
-const PLAYER_BACKGROUND_KEYS = ['backgroundColor', 'backgroundColorAsGradient', 'backgroundGradientType', 'backgroundGradientColors', 'backgroundGradientStrategy']
+// A background picture is a person's own picture, so it stays unpublished like a note's: the player
+// shows the color laid over it. A gradient is published at its angle.
+const PLAYER_BACKGROUND_KEYS = ['backgroundColor', 'backgroundColorAsGradient', 'backgroundGradientType', 'backgroundGradientColors', 'backgroundGradientStrategy', 'backgroundGradientAngle']
 const pick = (source, keys) => Object.fromEntries(keys.filter((key) => source?.[key] !== undefined && typeof source[key] !== 'function').map((key) => [key, source[key]]))
 export function playerSlateCopy(slateDoc) {
   const nodes = Array.isArray(slateDoc?.nodes) ? slateDoc.nodes : null
@@ -196,9 +198,14 @@ export function playerSlateCopy(slateDoc) {
   return JSON.stringify(copy)
 }
 
-/** A style record made safe to publish: { id, overrides?, v }. */
+/** A style record made safe to publish: { id, overrides?, v }. A background picture is a person's own: left out. */
 function cleanStyleRecord(style) {
   const ref = cleanStyleRef(style)
+  if (ref.overrides?.background?.picture) {
+    const { background, ...overrides } = ref.overrides
+    ref.overrides = overrides
+    if (!Object.keys(overrides).length) delete ref.overrides
+  }
   return { ...ref, ...(Number.isInteger(style.v) ? { v: style.v } : {}) }
 }
 

@@ -4,6 +4,7 @@
 // fonts and the camera's motion. Nothing here is saved to the slate: the presenter plays a copy of
 // the slate with the style on it. Pure: shared by the presenter and the server.
 import * as P from './presentationPaths.mjs'
+import { cleanBackgroundOverride } from './presentationBackground.mjs'
 
 /** The marker that a build carries this module (checked against shipped bundles). */
 export const PRESENTATION_STYLES_MARKER = 'presentationStyles:v4'
@@ -373,20 +374,24 @@ const HEX = /^#[0-9a-f]{6}$/i
 const cleanColor = (value) => (typeof value === 'string' && HEX.test(value.trim()) ? value.trim() : null)
 
 /**
- * A style with what the AI or the chat changed (palette, background, fonts): an unknown id is the
- * default style, and only colours and font names that are safe are kept.
+ * A style with what the agent, the chat or a person changed (palette, background, fonts): an
+ * unknown id is the default style, and only colours, font names and backgrounds that are safe are
+ * kept. `background` is the gradient or picture the slate's background wears beside its color
+ * (overrides.background, presentationBackground.mjs), else null: the style's own color.
  */
 export function resolveStyle(styleRef) {
   const id = typeof styleRef === 'string' ? styleRef : styleRef?.id
-  const base = STYLES[id] || STYLES[DEFAULT_STYLE]
+  const base = { ...(STYLES[id] || STYLES[DEFAULT_STYLE]), background: null }
   const overrides = typeof styleRef === 'object' && styleRef ? styleRef.overrides || {} : {}
   const palette = Array.isArray(overrides.palette) ? overrides.palette.map(cleanColor).filter(Boolean).slice(0, 6) : []
   const bg = cleanColor(overrides.bg)
+  const background = cleanBackgroundOverride(overrides.background)
   const font = (value) => (typeof value === 'string' && /^[A-Za-z0-9 ]{2,40}$/.test(value.trim()) ? value.trim() : null)
   const display = font(overrides.fonts?.display)
-  if (!palette.length && !bg && !display) return base
+  if (!palette.length && !bg && !display && !background) return base
   return {
     ...base,
+    background,
     palette: palette.length >= 3 ? [...palette, ...base.palette].slice(0, 6) : base.palette,
     bg: bg || base.bg,
     fonts: { ...base.fonts, ...(display ? { display } : {}) },
@@ -404,6 +409,8 @@ export function cleanStyleRef(styleRef) {
   const palette = Array.isArray(overrides.palette) ? overrides.palette.map(cleanColor).filter(Boolean).slice(0, 6) : []
   if (palette.length >= 3) out.palette = palette
   if (cleanColor(overrides.bg)) out.bg = cleanColor(overrides.bg)
+  const background = cleanBackgroundOverride(overrides.background)
+  if (background) out.background = background
   const display = typeof overrides.fonts?.display === 'string' && /^[A-Za-z0-9 ]{2,40}$/.test(overrides.fonts.display.trim()) ? overrides.fonts.display.trim() : null
   if (display) out.fonts = { display }
   return Object.keys(out).length ? { id, overrides: out } : { id }

@@ -2922,6 +2922,16 @@ interface CanvasPlan {
           /** Each item: A CSS colour, such as #336699. (2–8 items) */
           colors: string[];
           direction?: "horizontal" | "vertical" | "diagonal";
+          /** Degrees, as CSS: 0 runs bottom to top, 90 left to right. Linear only. (0 to 359) */
+          angle?: number;
+        };
+        picture?: {
+          /** An https address, or a file this app stored (/files/...). (at most 2000 characters) */
+          url: string;
+          /** cover fills the canvas, contain shows the whole picture, repeat tiles it. */
+          fit?: "cover" | "contain" | "repeat";
+          /** How much of the color is laid over the picture, so notes stay readable. (0 to 0.8) */
+          dim?: number;
         };
       };
       style?: {
@@ -2936,6 +2946,25 @@ interface CanvasPlan {
           fonts?: {
             display?: string;
             body?: string;
+          };
+          /** The background beside bg: {gradient} or {picture}, as background takes them. */
+          background?: {
+            gradient?: {
+              type: "linear" | "radial";
+              /** Each item: A CSS colour, such as #336699. (2–8 items) */
+              colors: string[];
+              direction?: "horizontal" | "vertical" | "diagonal";
+              /** Degrees, as CSS: 0 runs bottom to top, 90 left to right. Linear only. (0 to 359) */
+              angle?: number;
+            };
+            picture?: {
+              /** An https address, or a file this app stored (/files/...). (at most 2000 characters) */
+              url: string;
+              /** cover fills the canvas, contain shows the whole picture, repeat tiles it. */
+              fit?: "cover" | "contain" | "repeat";
+              /** How much of the color is laid over the picture, so notes stay readable. (0 to 0.8) */
+              dim?: number;
+            };
           };
         };
       } | null;

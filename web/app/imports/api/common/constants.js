@@ -372,6 +372,8 @@ const CONSTANTS = {
       getColors: 'images.getColors',
       removeImage: 'images.removeImage',
       search: 'images.search',
+      // Whether this server has a picture search to offer a signed-in person (never a key).
+      searchReady: 'images.searchReady',
     },
     colors: {
       buildColorPalette: 'colors.buildColorPalette',

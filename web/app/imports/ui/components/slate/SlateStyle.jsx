@@ -5,11 +5,15 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import ButtonBase from '@mui/material/ButtonBase'
 import InputBase from '@mui/material/InputBase'
+import ToggleButton from '@mui/material/ToggleButton'
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Typography from '@mui/material/Typography'
 import UndoIcon from '@mui/icons-material/Undo'
 import CheckIcon from '@mui/icons-material/Check'
 import CONSTANTS from '../../../api/common/constants'
-import { STYLE_CHIPS, textOn } from '../presentations/presentationStyles.mjs'
+import { STYLE_CHIPS, STYLES, textOn } from '../presentations/presentationStyles.mjs'
+import { shownBackground } from '../presentations/presentationBackground.mjs'
+import { GradientPicker, PicturePicker } from './StyleBackground'
 import { hasStyleOriginal, playsWornStyle, revertToOriginal, revertedPresentation, setSlateBackground, takeOffStyle, wearStyle, wornStyle } from '../presentations/presentationBake.mjs'
 
 /**
@@ -62,7 +66,8 @@ export async function revertSlateAndPresentations(slate, { call = (...args) => M
  * adds its art and restyles notes, and the first time the slate wears one its original is kept, so
  * "Revert to original" brings back its notes, layout and background (keeping notes and words added
  * since). "Remove style" takes off the style's decoration and the words it wrote, and keeps every
- * note and word of the slate's own. The background below is part of the style too. A
+ * note and word of the slate's own. The background below (a color, a gradient or a picture) is
+ * part of the style too. A
  * presentation's title cards and captions come from Present's style picker, which wears the same
  * style with the deck's words. `slate` is the live engine the drawer holds (the shared slate atom
  * keeps only a JSON copy, which cannot wear anything).
@@ -81,6 +86,10 @@ export default function SlateStyle({ slate = null }) {
   const worn = doc ? wornStyle(doc) : null
   const original = doc ? hasStyleOriginal(doc) : false
   const background = String(doc?.options?.containerStyle?.backgroundColor || '').toLowerCase()
+  // What the background is now: a color, a gradient or a picture (with the color laid over it).
+  const shown = shownBackground(doc?.options?.containerStyle)
+  const [mode, setMode] = useState(shown.mode)
+  useEffect(() => { setMode(shown.mode) }, [shown.mode, version])
   const [hex, setHex] = useState(background)
   useEffect(() => { setHex(HEX.test(background) ? background : '') }, [background, version])
 
@@ -107,12 +116,22 @@ export default function SlateStyle({ slate = null }) {
       return
     }
     setHexProblem('')
-    if (value.toLowerCase() === background) return
+    if (value.toLowerCase() === background && shown.mode === 'color') return
     run((json) => setSlateBackground(json, value), 'style-background')
   }
+  // A gradient ({ gradient }) or a picture ({ color, picture }), the same one step of undo.
+  const applyBackground = (value) => { if (!busy) run((json) => setSlateBackground(json, value), 'style-background') }
+  // The colors to dim a picture with: the style's own background, black and white.
+  const styleBg = STYLES[worn?.id]?.bg?.toLowerCase()
+  const tints = [
+    ...(styleBg ? [{ color: styleBg, name: STYLES[worn.id].name }] : []),
+    { color: '#000000', name: 'Black' },
+    { color: '#ffffff', name: 'White' },
+    ...(shown.mode === 'picture' ? [{ color: shown.color, name: 'Now' }] : []),
+  ].filter((tint, index, all) => all.findIndex((other) => other.color === tint.color) === index)
   // The swatches are one radio group: one tab stop (the chosen swatch, else the first), and the
   // arrow keys move between them (and choose, as radios do).
-  const swatchIndex = Math.max(0, BACKGROUND_SWATCHES.findIndex((swatch) => swatch.color === background))
+  const swatchIndex = Math.max(0, BACKGROUND_SWATCHES.findIndex((swatch) => shown.mode === 'color' && swatch.color === background))
   const onSwatchKey = (event, index) => {
     const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key]
     const to = event.key === 'Home' ? 0 : event.key === 'End' ? BACKGROUND_SWATCHES.length - 1 : step ? (index + step + BACKGROUND_SWATCHES.length) % BACKGROUND_SWATCHES.length : null
@@ -174,9 +193,20 @@ export default function SlateStyle({ slate = null }) {
       </Typography>
 
       <Typography component="h3" variant="overline" sx={{ display: 'block', mt: 2, letterSpacing: '.1em' }}>Background</Typography>
+      <ToggleButtonGroup size="small" exclusive fullWidth value={mode} aria-label="Background kind" onChange={(_, next) => next && setMode(next)} sx={{ mt: 0.5, mb: 1 }}>
+        <ToggleButton value="color" data-slate-background-mode="color">Color</ToggleButton>
+        <ToggleButton value="gradient" data-slate-background-mode="gradient">Gradient</ToggleButton>
+        <ToggleButton value="picture" data-slate-background-mode="picture">Picture</ToggleButton>
+      </ToggleButtonGroup>
+      {mode === 'gradient' && <GradientPicker current={shown.mode === 'gradient' ? shown.gradient : null} busy={busy} onApply={(gradient) => applyBackground({ gradient })} />}
+      {mode === 'picture' && (
+        <PicturePicker current={shown.mode === 'picture' ? shown.picture : null} color={shown.color} tints={tints} busy={busy}
+          onApply={(picture, color) => applyBackground({ color, picture })} onRemove={() => applyBackground({ color: shown.color })} />
+      )}
+      {mode === 'color' && (<>
       <Box role="radiogroup" aria-label="Background color" sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(64px, 1fr))', gap: 0.75, mt: 0.5 }}>
         {BACKGROUND_SWATCHES.map((swatch, index) => {
-          const on = swatch.color === background
+          const on = shown.mode === 'color' && swatch.color === background
           return (
             <ButtonBase
               key={swatch.color}
@@ -218,6 +248,7 @@ export default function SlateStyle({ slate = null }) {
         />
       </Box>
       {hexProblem && <Typography id="slate-background-hex-problem" role="alert" variant="caption" color="error" sx={{ display: 'block', mt: 0.5 }} data-slate-background-hex-problem>{hexProblem}</Typography>}
+      </>)}
       {problem && <Typography role="alert" variant="caption" color="error" sx={{ display: 'block', mt: 1 }}>{problem}</Typography>}
     </Box>
   )

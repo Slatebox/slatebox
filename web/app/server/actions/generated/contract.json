@@ -3373,6 +3373,42 @@
                                         "vertical",
                                         "diagonal"
                                       ]
+                                    },
+                                    "angle": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 359,
+                                      "description": "Degrees, as CSS: 0 runs bottom to top, 90 left to right. Linear only."
+                                    }
+                                  }
+                                },
+                                "picture": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "url"
+                                  ],
+                                  "properties": {
+                                    "url": {
+                                      "type": "string",
+                                      "maxLength": 2000,
+                                      "pattern": "^(https:\\/\\/[A-Za-z0-9.-]+(:\\d{1,5})?(\\/[A-Za-z0-9._~!$&*+,;=:@%\\/?#-]*)?|\\/(?!\\/)[A-Za-z0-9._~%\\/-]+)$",
+                                      "description": "An https address, or a file this app stored (/files/...)."
+                                    },
+                                    "fit": {
+                                      "type": "string",
+                                      "enum": [
+                                        "cover",
+                                        "contain",
+                                        "repeat"
+                                      ],
+                                      "description": "cover fills the canvas, contain shows the whole picture, repeat tiles it."
+                                    },
+                                    "dim": {
+                                      "type": "number",
+                                      "minimum": 0,
+                                      "maximum": 0.8,
+                                      "description": "How much of the color is laid over the picture, so notes stay readable."
                                     }
                                   }
                                 }
@@ -3424,6 +3460,86 @@
                                         },
                                         "body": {
                                           "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "background": {
+                                      "type": "object",
+                                      "description": "The background beside bg: {gradient} or {picture}, as background takes them.",
+                                      "additionalProperties": false,
+                                      "minProperties": 1,
+                                      "maxProperties": 1,
+                                      "properties": {
+                                        "gradient": {
+                                          "type": "object",
+                                          "additionalProperties": false,
+                                          "required": [
+                                            "type",
+                                            "colors"
+                                          ],
+                                          "properties": {
+                                            "type": {
+                                              "type": "string",
+                                              "enum": [
+                                                "linear",
+                                                "radial"
+                                              ]
+                                            },
+                                            "colors": {
+                                              "type": "array",
+                                              "minItems": 2,
+                                              "maxItems": 8,
+                                              "items": {
+                                                "type": "string",
+                                                "maxLength": 64,
+                                                "description": "A CSS colour, such as #336699."
+                                              }
+                                            },
+                                            "direction": {
+                                              "type": "string",
+                                              "enum": [
+                                                "horizontal",
+                                                "vertical",
+                                                "diagonal"
+                                              ]
+                                            },
+                                            "angle": {
+                                              "type": "integer",
+                                              "minimum": 0,
+                                              "maximum": 359,
+                                              "description": "Degrees, as CSS: 0 runs bottom to top, 90 left to right. Linear only."
+                                            }
+                                          }
+                                        },
+                                        "picture": {
+                                          "type": "object",
+                                          "additionalProperties": false,
+                                          "required": [
+                                            "url"
+                                          ],
+                                          "properties": {
+                                            "url": {
+                                              "type": "string",
+                                              "maxLength": 2000,
+                                              "pattern": "^(https:\\/\\/[A-Za-z0-9.-]+(:\\d{1,5})?(\\/[A-Za-z0-9._~!$&*+,;=:@%\\/?#-]*)?|\\/(?!\\/)[A-Za-z0-9._~%\\/-]+)$",
+                                              "description": "An https address, or a file this app stored (/files/...)."
+                                            },
+                                            "fit": {
+                                              "type": "string",
+                                              "enum": [
+                                                "cover",
+                                                "contain",
+                                                "repeat"
+                                              ],
+                                              "description": "cover fills the canvas, contain shows the whole picture, repeat tiles it."
+                                            },
+                                            "dim": {
+                                              "type": "number",
+                                              "minimum": 0,
+                                              "maximum": 0.8,
+                                              "description": "How much of the color is laid over the picture, so notes stay readable."
+                                            }
+                                          }
                                         }
                                       }
                                     }
