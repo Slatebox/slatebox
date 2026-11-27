@@ -190,7 +190,11 @@ test('dynamic: the connectors ask for the apps on each use, so a pasted secret w
   assert.ok((await service.gallery(person)).cards.some((c) => c.id === 'slack'))
   assert.ok((await service.gallery(person)).notSetUp.some((c) => c.id === 'asana'))
 
-  // the vault's refresh and revocation (secretFor is asked each time): the secret goes with the revocation
+  // the vault's refresh and revocation (secretFor is asked each time): the secret goes with the
+  // revocation. Asana's is RFC 7009 (the client and its secret in the form); Slack's auth.revoke
+  // takes the token alone (oauth.mjs KNOWN_PROVIDERS.slack.revoke), so it cannot show the secret.
+  await store.set({ actor: ADMIN, provider: 'asana', clientId: 'asana-id', clientSecret: SECRET })
+  const asana = { issuer: KNOWN_PROVIDERS.asana.issuer, address: 'https://mcp.asana.com/sse' }
   const sent = []
   const fetch = async (url, init) => {
     sent.push({ url, body: init.body })
@@ -202,13 +206,14 @@ test('dynamic: the connectors ask for the apps on each use, so a pasted secret w
     master: newMaster(), fetch, secretFor: async (reg) => (await store.apps())[reg.provider]?.clientSecret || null,
   })
   await vault.save({
-    userId: 'ada', address: resource, resource, issuer: slackServer.issuer, kind: 'oauth', registration: { kind: 'preregistered', clientId: 'slack-id', provider: 'slack' },
-    server: { issuer: slackServer.issuer, tokenEndpoint: 'https://slack.com/api/oauth.v2.access', revocationEndpoint: 'https://slack.com/api/auth.revoke' }, tokens: { accessToken: 'access-1', refreshToken: 'refresh-1' },
+    userId: 'ada', address: asana.address, resource: 'https://mcp.asana.com', issuer: asana.issuer, kind: 'oauth', registration: { kind: 'preregistered', clientId: 'asana-id', provider: 'asana' },
+    server: { issuer: asana.issuer, tokenEndpoint: 'https://app.asana.com/-/oauth_token', revocationEndpoint: 'https://app.asana.com/-/oauth_revoke' }, tokens: { accessToken: 'access-1', refreshToken: 'refresh-1' },
   })
   // the administrator replaces the secret after the sign-in: the next revocation sends the new one
-  await store.set({ actor: ADMIN, provider: 'slack', clientSecret: 'rotated-secret' })
-  await vault.remove('ada', resource)
+  await store.set({ actor: ADMIN, provider: 'asana', clientSecret: 'rotated-secret' })
+  await vault.remove('ada', asana.address)
   assert.ok(sent.length >= 1)
+  assert.ok(sent.every((s) => s.url === 'https://app.asana.com/-/oauth_revoke'))
   assert.ok(sent.every((s) => new URLSearchParams(s.body).get('client_secret') === 'rotated-secret'), 'the revocation used the secret in effect now')
 })
 

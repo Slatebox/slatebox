@@ -14,7 +14,7 @@ import {
 } from '../enterprise/server/oauth.mjs'
 import { createVault, credentialId } from '../enterprise/server/credentials.mjs'
 import { createConnectorService, memoryStore } from '../enterprise/server/service.mjs'
-import { FORGET_LIMITS, INTEGRATION_ROWS, removeIntegrationsOf, setAccountIntegrations } from '../web/app/server/integrations/account-removal.mjs'
+import { FORGET_LIMITS, INTEGRATION_ROWS, removeIntegrationsOf, setAccountIntegrations, SUGGESTIONS } from '../web/app/server/integrations/account-removal.mjs'
 import { loadMasterKey } from '../web/app/server/metering/vault.mjs'
 import { sanitizeClientName } from '../web/app/imports/api/common/agent-label.mjs'
 
@@ -211,9 +211,51 @@ test('a Slack sign-in saved before Slatebox kept a revocation endpoint is still 
   await oldSlackSignIn(vault)
   assert.equal(store.rows.get(credentialId('ada', SLACK_ADDRESS)).server.revocationEndpoint, undefined)
   assert.deepEqual(await vault.remove('ada', SLACK_ADDRESS), { removed: true, revoked: true })
-  assert.deepEqual(slack.sent.map((s) => s.url), ['https://slack.com/api/auth.revoke', 'https://slack.com/api/auth.revoke'])
+  // auth.revoke ends an access token: the refresh token is never sent to it
+  assert.deepEqual(slack.sent.map((s) => s.url), ['https://slack.com/api/auth.revoke'])
+  assert.equal(form(slack.sent[0].init).get('token'), 'xoxp-secret-access')
   assert.equal(store.rows.size, 0)
   assert.deepEqual(logs, [])
+})
+
+test('Slack: an expired access token is renewed once so auth.revoke can end the grant; a failed renewal still forgets', async () => {
+  const store = credentialMemory()
+  const slack = vendor((url, init) => {
+    const body = form(init)
+    if (url === 'https://slack.com/api/oauth.v2.user.access') return body.get('refresh_token') === 'xoxe-secret-refresh' ? json({ ok: true, access_token: 'xoxp-renewed', refresh_token: 'xoxe-next', expires_in: 43200, token_type: 'Bearer' }) : json({ ok: false, error: 'invalid_refresh_token' }, 400)
+    return json(body.get('token') === 'xoxp-renewed' ? { ok: true, revoked: true } : { ok: false, error: 'token_expired' })
+  })
+  const vault = createVault({ store, master: newMaster(), fetch: slack.fetch, secretFor: () => 'slack-secret' })
+  await vault.save({
+    userId: 'ada', address: SLACK_ADDRESS, resource: 'https://mcp.slack.com', issuer: 'https://mcp.slack.com', kind: 'oauth',
+    registration: { kind: 'preregistered', clientId: 'slack-client', provider: 'slack' },
+    server: { issuer: 'https://mcp.slack.com', tokenEndpoint: 'https://slack.com/api/oauth.v2.user.access' },
+    tokens: { accessToken: 'xoxp-expired', refreshToken: 'xoxe-secret-refresh', expiresAt: Date.now() - 1000 },
+  })
+  assert.deepEqual(await vault.remove('ada', SLACK_ADDRESS), { removed: true, revoked: true })
+  assert.deepEqual(slack.sent.map((s) => s.url), ['https://slack.com/api/oauth.v2.user.access', 'https://slack.com/api/auth.revoke'])
+  assert.equal(form(slack.sent[1].init).get('token'), 'xoxp-renewed')
+  assert.equal(store.rows.size, 0)
+  // the renewal refused: the old token is tried, Slack says no, the sign-in is forgotten anyway
+  const refused = vendor((url) => (url.endsWith('oauth.v2.user.access') ? json({ ok: false, error: 'invalid_refresh_token' }, 400) : json({ ok: false, error: 'token_expired' })))
+  const store2 = credentialMemory()
+  const vault2 = createVault({ store: store2, master: newMaster(), fetch: refused.fetch, secretFor: () => 'slack-secret' })
+  await vault2.save({
+    userId: 'ada', address: SLACK_ADDRESS, resource: 'https://mcp.slack.com', issuer: 'https://mcp.slack.com', kind: 'oauth',
+    registration: { kind: 'preregistered', clientId: 'slack-client', provider: 'slack' },
+    server: { issuer: 'https://mcp.slack.com', tokenEndpoint: 'https://slack.com/api/oauth.v2.user.access' },
+    tokens: { accessToken: 'xoxp-expired', refreshToken: 'xoxe-old', expiresAt: Date.now() - 1000 },
+  })
+  assert.deepEqual(await vault2.remove('ada', SLACK_ADDRESS), { removed: true, revoked: false, revokeFailed: true })
+  assert.equal(store2.rows.size, 0)
+})
+
+test('Slack\'s auth.revoke named as a metadata endpoint is still read Slack\'s way ({"ok":false} on 200 is a failure)', async () => {
+  const server = { issuer: 'https://mcp.slack.com', tokenEndpoint: 'https://slack.com/api/oauth.v2.user.access', revocationEndpoint: 'https://slack.com/api/auth.revoke' }
+  assert.deepEqual(revocationOf(server), { url: 'https://slack.com/api/auth.revoke', style: 'slack' })
+  assert.equal(await revokeToken({ server, client: { clientId: 'c' }, token: 'xoxp-1', fetch: vendor(() => json({ ok: false, error: 'invalid_auth' })).fetch }), false)
+  // another endpoint the vendor's metadata names stays RFC 7009
+  assert.deepEqual(revocationOf({ ...server, revocationEndpoint: 'https://slack.com/oauth/revoke' }), { url: 'https://slack.com/oauth/revoke', style: 'rfc7009' })
 })
 
 test('Slack answering {"ok":false}: forgotten anyway, revokeFailed, and the log names hosts and a reason only (no token)', async () => {
@@ -359,17 +401,28 @@ test('account removal never stops for a vendor: Slack unreachable, every row of 
 
 function fakeDb({ fail = null } = {}) {
   const calls = []
+  const updates = []
   return {
     calls,
+    updates,
     collection: (name) => ({
       deleteMany: async (filter) => {
         if (fail === name) throw new Error('database down')
         calls.push([name, filter])
         return { deletedCount: 1 }
       },
+      updateMany: async (filter, update, options) => {
+        if (fail === name) throw new Error('database down')
+        updates.push([name, filter, update, options])
+        return { modifiedCount: 1 }
+      },
     }),
   }
 }
+
+// The suggestions filter as Mongo reads it, enough for these rows: owner, then "no item kept or applied".
+const matchesRemoval = (filter, row) => row.ownerId === filter.ownerId
+  && !row.items.some((item) => filter.items.$not.$elemMatch.state.$in.includes(item.state))
 
 test('removeIntegrationsOf: the enterprise hook first, then every integration collection by its owner field; a failing or slow hook never stops it', async () => {
   assert.deepEqual(INTEGRATION_ROWS.map(([name]) => name), ['integrations', 'mcpCredentials', 'mcpConnections', 'mcpOutsideActions', 'mcpSignins', 'googleDocLinks', 'googleSlateFiles'])
@@ -377,30 +430,49 @@ test('removeIntegrationsOf: the enterprise hook first, then every integration co
   const order = []
   const db = fakeDb()
   setAccountIntegrations({ forgetPerson: async (userId) => order.push(['hook', userId, db.calls.length]) })
-  assert.deepEqual(await removeIntegrationsOf('ada', { collection: db.collection, log: () => {} }), { removed: 7 })
+  assert.deepEqual(await removeIntegrationsOf('ada', { collection: db.collection, log: () => {} }), { removed: 8 })
   assert.deepEqual(order, [['hook', 'ada', 0]], 'the hook runs before any row is removed')
-  assert.deepEqual(db.calls, INTEGRATION_ROWS.map(([name, field]) => [name, { [field]: 'ada' }]))
+  assert.deepEqual(db.calls.slice(0, INTEGRATION_ROWS.length), INTEGRATION_ROWS.map(([name, field]) => [name, { [field]: 'ada' }]))
+  // her agents' suggestions: an action nothing was kept from goes; one a teammate kept part of stays
+  // for their undo with its waiting items withdrawn; a teammate's agent's suggestions are untouched
+  const [name, filter] = db.calls[INTEGRATION_ROWS.length]
+  assert.equal(name, SUGGESTIONS)
+  const rows = [
+    { _id: 'adaWaiting', ownerId: 'ada', items: [{ state: 'pending' }, { state: 'discarded' }] },
+    { _id: 'adaKept', ownerId: 'ada', items: [{ state: 'kept' }, { state: 'pending' }] },
+    { _id: 'adaApplied', ownerId: 'ada', items: [{ state: 'applied' }] },
+    { _id: 'samWaiting', ownerId: 'sam', items: [{ state: 'pending' }] },
+  ]
+  assert.deepEqual(rows.filter((row) => matchesRemoval(filter, row)).map((row) => row._id), ['adaWaiting'])
+  assert.equal(db.updates.length, 1)
+  const [updated, which, change, options] = db.updates[0]
+  assert.equal(updated, SUGGESTIONS)
+  assert.deepEqual(which, { ownerId: 'ada', 'items.state': 'pending' })
+  assert.equal(change.$set['items.$[waiting].state'], 'discarded')
+  assert.equal(change.$set['items.$[waiting].reason'], 'withdrawn')
+  assert.deepEqual(options, { arrayFilters: [{ 'waiting.state': 'pending' }] })
   // a hook that throws: logged (no token in it), rows removed anyway
   const logs = []
   setAccountIntegrations({ forgetPerson: async () => { throw new Error('vendor down') } })
   const second = fakeDb()
   await removeIntegrationsOf('ada', { collection: second.collection, log: (...args) => logs.push(args.join(' ')) })
-  assert.equal(second.calls.length, INTEGRATION_ROWS.length)
+  assert.equal(second.calls.length, INTEGRATION_ROWS.length + 1)
   assert.match(logs[0], /revoking sign-ins failed; removing them anyway: vendor down/)
   // a hook that hangs: bounded, rows removed anyway
   setAccountIntegrations({ forgetPerson: () => new Promise(() => {}) })
   const third = fakeDb()
   const slowLogs = []
   await removeIntegrationsOf('ada', { collection: third.collection, log: (text) => slowLogs.push(text), ms: 10 })
-  assert.equal(third.calls.length, INTEGRATION_ROWS.length)
+  assert.equal(third.calls.length, INTEGRATION_ROWS.length + 1)
   assert.match(slowLogs[0], /took too long/)
   // no enterprise code here: the rows still go
   setAccountIntegrations({})
   const fourth = fakeDb()
   await removeIntegrationsOf('ada', { collection: fourth.collection })
-  assert.equal(fourth.calls.length, INTEGRATION_ROWS.length)
+  assert.equal(fourth.calls.length, INTEGRATION_ROWS.length + 1)
   // a database error reaches the caller: the account is not removed with its sign-ins kept
   await assert.rejects(removeIntegrationsOf('ada', { collection: fakeDb({ fail: 'mcpCredentials' }).collection }), /database down/)
+  await assert.rejects(removeIntegrationsOf('ada', { collection: fakeDb({ fail: SUGGESTIONS }).collection }), /database down/)
   // nobody: nothing removed
   const none = fakeDb()
   assert.deepEqual(await removeIntegrationsOf('', { collection: none.collection }), { removed: 0 })

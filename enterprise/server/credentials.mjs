@@ -16,7 +16,7 @@
 // needed and stops: no retry loop.
 import { randomBytes, createHash } from 'node:crypto'
 import { open, seal } from '/server/metering/vault.mjs'
-import { refreshTokens, revocationOf, revokeToken } from './oauth.mjs'
+import { refreshTokens, revocationOf, revokesAccessOnly, revokeToken } from './oauth.mjs'
 
 export const VAULT_LIMITS = Object.freeze({ refreshAheadMs: 60000, leaseMs: 30000, waitStepMs: 200 })
 
@@ -203,11 +203,18 @@ export function createVault({ store, master, fetch, secretFor = () => null, log 
     if (doc.kind === 'oauth') {
       const revocation = revocationOf(doc.server)
       const refresh = master ? openQuietly(doc, 'refresh') : null
-      const access = master ? openQuietly(doc, 'access') : null
+      let access = master ? openQuietly(doc, 'access') : null
       if (revocation && (refresh || access)) {
         try {
           const client = await clientOf(doc)
-          if (refresh) revoked = (await revokeToken({ server: doc.server, client, token: refresh, hint: 'refresh_token', fetch })) || revoked
+          if (revokesAccessOnly(revocation)) {
+            // Slack's and GitHub's revocation take an access token only, and an expired one is
+            // refused: renew it once (best effort) so the grant itself can be ended.
+            if (refresh && (!access || !fresh(doc))) {
+              const renewed = await refreshTokens({ server: doc.server, client, refreshToken: refresh, resource: doc.resource, fetch, accept: doc.server?.tokenAccept }).catch(() => null)
+              if (renewed?.accessToken) access = renewed.accessToken
+            }
+          } else if (refresh) revoked = (await revokeToken({ server: doc.server, client, token: refresh, hint: 'refresh_token', fetch })) || revoked
           if (access) revoked = (await revokeToken({ server: doc.server, client, token: access, hint: 'access_token', fetch })) || revoked
         } catch {}
       }

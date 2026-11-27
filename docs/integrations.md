@@ -26,13 +26,14 @@ An integration is an outside agent (any MCP server) or your Google account, conn
   (RFC 7009), else the one each known vendor documents (Slack `auth.revoke`, GitHub's
   `DELETE /applications/{client_id}/token`, Zoom, HubSpot, Asana, Box, Pitch, Salesforce, Google),
   and counts it as done only when the vendor says so (Slack answers 200 with `"ok":false` when it
-  fails). Microsoft Entra offers no way to end one sign-in, so for it, and whenever a vendor does not
+  fails). Slack and GitHub end an access token only, so an expired one is renewed once first. Microsoft Entra offers no way to end one sign-in, so for it, and whenever a vendor does not
   confirm, the page says to remove Slatebox's access in that account's settings. The sign-in is
   forgotten here either way.
 - **Delete your account**, and every integration you connected is disconnected the same way, each
   sign-in revoked at its vendor, and every integration row you own removed: your integrations, your
-  sign-ins, the agents you invited onto slates and their action cards. A teammate's integrations on
-  the same slates stay.
+  sign-ins, the agents you invited onto slates and their action cards. Your agents' suggestions go
+  too, unless a teammate kept part of one: that one stays for their undo, with nothing left waiting.
+  A teammate's integrations on the same slates stay.
 
 Connecting a server from a slate's walkthrough makes the integration too, so the next slate only needs
 **Invite to this slate**.

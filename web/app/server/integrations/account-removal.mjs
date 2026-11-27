@@ -25,6 +25,13 @@ export const INTEGRATION_ROWS = Object.freeze([
   Object.freeze(['googleSlateFiles', 'userId']), // Google: the Drive files they picked for a slate
 ])
 
+// Their agents' suggestions (server/agents/suggestions.mjs, ownerId: the account an agent runs
+// as, so an integration's agent is its owner's): what an agent of theirs fetched (Slack messages, a
+// Drive file) waits there as text for up to 7 days. An action with nothing kept or applied from it
+// goes; one a teammate kept part of stays for that teammate's undo, its waiting items withdrawn.
+export const SUGGESTIONS = 'agentSuggestions'
+const KEPT_STATES = Object.freeze(['kept', 'applied'])
+
 const hooks = { forgetPerson: null }
 
 export function setAccountIntegrations(next = {}) {
@@ -54,6 +61,13 @@ export async function removeIntegrationsOf(userId, { collection, log = console.w
     if (!finished) log('[integrations] revoking sign-ins took too long; removing them anyway')
   }
   const results = await Promise.all(INTEGRATION_ROWS.map(([name, field]) => collection(name).deleteMany({ [field]: userId })))
+  const suggestions = collection(SUGGESTIONS)
+  results.push(await suggestions.deleteMany({ ownerId: userId, items: { $not: { $elemMatch: { state: { $in: KEPT_STATES } } } } }))
+  await suggestions.updateMany(
+    { ownerId: userId, 'items.state': 'pending' },
+    { $set: { 'items.$[waiting].state': 'discarded', 'items.$[waiting].reason': 'withdrawn', 'items.$[waiting].decidedAt': new Date() } },
+    { arrayFilters: [{ 'waiting.state': 'pending' }] },
+  )
   const removed = results.reduce((sum, result) => sum + (result?.deletedCount || 0), 0)
   return { removed }
 }

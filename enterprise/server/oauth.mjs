@@ -609,10 +609,18 @@ export function refreshTokens({ server, client, refreshToken, resource, scopes, 
  */
 export function revocationOf(server) {
   if (!server || typeof server !== 'object') return null
-  if (typeof server.revocationEndpoint === 'string' && server.revocationEndpoint) return { url: server.revocationEndpoint, style: server.revocation || 'rfc7009' }
   const known = knownOf(server.issuer)?.revoke
+  if (typeof server.revocationEndpoint === 'string' && server.revocationEndpoint) {
+    // The vendor's own endpoint named in its metadata (or saved without its style) is still read
+    // the vendor's way: Slack's auth.revoke answers 200 when it fails, wherever the URL came from.
+    const style = server.revocation || (known && known.url === server.revocationEndpoint && known.style) || 'rfc7009'
+    return { url: server.revocationEndpoint, style }
+  }
   return known ? { url: known.url, style: known.style || 'rfc7009' } : null
 }
+
+/** Vendors whose revocation ends an access token only (a refresh token cannot be sent to it). */
+export const revokesAccessOnly = (revocation) => revocation?.style === 'slack' || revocation?.style === 'github'
 
 async function answerOf(response) {
   try {
