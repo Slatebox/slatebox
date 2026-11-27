@@ -1,5 +1,5 @@
 // The panel the header's Move to Cloud opens on a self-hosted install (owner, 2026-11-25), for this
-// server's administrator: what moves and what changes, then one click. Move signs this server in to
+// server's administrator: what the team gets on Cloud, what moves and what changes, then one click. Move signs this server in to
 // Slatebox Cloud (a code and link, opened for the person, and printed for any other device; Cancel
 // at any time), sends the team there with progress, compares the counts, and goes live only on
 // Make it live. This server keeps its copy; a banner pointing everyone at Cloud can be switched on
@@ -25,7 +25,7 @@ import CheckIcon from '@mui/icons-material/Check'
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined'
 import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
-import { FLOW_WORDS, FREE_HERE, MOVE_LABEL, MOVE_WHAT_CHANGES, MOVE_WHAT_MOVES } from '../../../api/common/selfhost-options.mjs'
+import { COMPARE_LABEL, COMPARE_URL, FLOW_WORDS, FREE_HERE, MOVE_LABEL, MOVE_WHAT_CHANGES, MOVE_WHAT_MOVES, MOVE_WHAT_YOU_GET } from '../../../api/common/selfhost-options.mjs'
 import { refreshSelfhostStatus } from './useSelfhostStatus'
 
 const INK = '#193c2f'
@@ -213,7 +213,8 @@ function MoveCard({ status }) {
   const running = flow && ACTIVE.includes(state)
   return (
     <Card testid="card-move" icon={<CloudUploadOutlinedIcon />} title="Move your team to Slatebox Cloud"
-      lead="Nothing to run, update or back up. The same slates and the same people, on Slatebox Cloud.">
+      lead="Your team on Slatebox Cloud, in one click.">
+      <Box data-testid="move-what-you-get"><Typography variant="overline" sx={{ fontWeight: 800 }}>What you get on Cloud</Typography><Bullets items={MOVE_WHAT_YOU_GET} /></Box>
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
         <Box><Typography variant="overline" sx={{ fontWeight: 800 }}>What moves</Typography><Bullets items={MOVE_WHAT_MOVES} /></Box>
         <Box><Typography variant="overline" sx={{ fontWeight: 800 }}>What changes</Typography><Bullets items={MOVE_WHAT_CHANGES} icon={false} /></Box>
@@ -298,7 +299,10 @@ export default function MoveToCloudPanel({ open, onClose, status }) {
         </Box>
         <Box sx={{ display: 'grid', gap: 2 }}>
           <MoveCard status={status} />
-          <Typography variant="body2" data-testid="free-here" sx={{ color: 'text.secondary', px: 1 }}>{FREE_HERE}</Typography>
+          <Typography variant="body2" data-testid="free-here" sx={{ color: 'text.secondary', px: 1 }}>
+            {FREE_HERE}{' '}
+            <Link href={COMPARE_URL} target="_blank" rel="noopener" data-testid="compare-link">{COMPARE_LABEL}</Link>
+          </Typography>
         </Box>
       </DialogContent>
     </Dialog>

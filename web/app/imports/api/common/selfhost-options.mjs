@@ -38,6 +38,19 @@ export function cloudMoveOffer({ settings, signedIn, serverAdmin }) {
 // What stays the same whichever way the team goes (said once in the panel).
 export const FREE_HERE = 'Staying is fine too: integrations, single sign-on with Keycloak, the MCP server, the CLI, the API and every canvas feature are free on this server.'
 
+// Where the footer's Compare goes: the side-by-side of Slatebox Cloud and self-hosted on
+// slatebox.com (the comparison section, id "compare"; owner, 2026-11-26).
+export const COMPARE_URL = 'https://slatebox.com/plans/#compare'
+export const COMPARE_LABEL = 'Compare on slatebox.com'
+
+// What the team gets by moving (owner, 2026-11-26): only what is true on Cloud for every team.
+export const MOVE_WHAT_YOU_GET = Object.freeze([
+  'Calls and huddles ready, with no Daily account to set up',
+  'The agent ready, with no provider accounts or keys to manage (you can add your own keys there too)',
+  'Nothing to run, update or back up',
+  'The same slates and the same people',
+])
+
 export const MOVE_WHAT_MOVES = Object.freeze([
   'Slates and boards, versions, comments and presentations',
   'People (each invited to sign in on Cloud when you say so)',

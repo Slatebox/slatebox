@@ -154,6 +154,8 @@ if (PHASE === 'selfhost') {
     await expect(panel(page)).toContainText('Move to Cloud')
     await expect(panel(page).getByTestId('start-move')).toHaveText('Move to Slatebox Cloud')
     await expect(panel(page).getByTestId('free-here')).toContainText('integrations')
+    await expect(panel(page).getByTestId('move-what-you-get')).toContainText('no Daily account to set up')
+    await expect(panel(page).getByTestId('compare-link')).toHaveAttribute('href', 'https://slatebox.com/plans/#compare')
     await expect(panel(page)).not.toContainText(NOT_SAID)
     for (const id of ['start-move', 'free-here']) expect(await inView(panel(page).getByTestId(id)), id).toBe(true)
     await shot(page, '05-panel-move')

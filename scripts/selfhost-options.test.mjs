@@ -25,7 +25,7 @@ import { classifyUpload } from '../web/app/server/common/upload-kinds.mjs'
 import { memoryDb } from './team-export-store.mjs'
 import { startFakeCloud, testSigner } from './fake-slatebox-cloud.mjs'
 
-const { cloudMoveOffer, FLOW_WORDS, FREE_HERE, MOVE_LABEL, MOVED_LABEL, moveLabel, MOVE_WHAT_CHANGES, MOVE_WHAT_MOVES } = options
+const { cloudMoveOffer, COMPARE_LABEL, COMPARE_URL, FLOW_WORDS, FREE_HERE, MOVE_LABEL, MOVED_LABEL, moveLabel, MOVE_WHAT_CHANGES, MOVE_WHAT_MOVES, MOVE_WHAT_YOU_GET } = options
 const appRequire = createRequire(new URL('../web/app/package.json', import.meta.url))
 appRequire('slateboxjs/workshops/behaviour')
 appRequire('slateboxjs/workshops/rules')
@@ -53,9 +53,37 @@ test('who sees Move to Cloud: never on Cloud or signed out; this server\'s admin
     assert.deepEqual(cloudMoveOffer({ settings: selfHost({ enterprise }), signedIn: true, serverAdmin: true }), { show: 'move' })
 })
 
+test('the panel says what the team gets on Cloud, and Compare goes to the side-by-side on slatebox.com', () => {
+  // The owner's benefits (2026-11-26): calls without a Daily account, the agent without keys, nothing to run, the same team.
+  assert.deepEqual([...MOVE_WHAT_YOU_GET], [
+    'Calls and huddles ready, with no Daily account to set up',
+    'The agent ready, with no provider accounts or keys to manage (you can add your own keys there too)',
+    'Nothing to run, update or back up',
+    'The same slates and the same people',
+  ])
+  assert.ok(Object.isFrozen(MOVE_WHAT_YOU_GET))
+  // No payment words in what a person reads, and no all-caps tokens.
+  const PAYMENT = /pay|paid|price|pricing|\$|\bPro\b|Business|stripe|meter|credit|billing|subscri|per month|a year|free trial/i
+  for (const words of [...MOVE_WHAT_YOU_GET, FREE_HERE, COMPARE_LABEL]) {
+    assert.doesNotMatch(words, PAYMENT, words)
+    assert.doesNotMatch(words, /\b[A-Z]{4,}\b/, words)
+  }
+  // The link goes to the comparison section itself, not the top of the page.
+  assert.equal(COMPARE_URL, 'https://slatebox.com/plans/#compare')
+  assert.equal(new URL(COMPARE_URL).hash, '#compare')
+  assert.equal(COMPARE_LABEL, 'Compare on slatebox.com')
+  // The panel shows the list above What moves, and the footer carries the link (from the shared constants, so the URL is written once).
+  const panelSource = read('web/app/imports/ui/components/selfhost/MoveToCloudPanel.jsx')
+  const at = (marker) => { const i = panelSource.indexOf(marker); assert.ok(i >= 0, marker); return i }
+  assert.ok(at('What you get on Cloud') < at('What moves'), 'the benefits come first')
+  assert.match(panelSource, /<Bullets items=\{MOVE_WHAT_YOU_GET\} \/>/)
+  assert.match(panelSource, /<Link href=\{COMPARE_URL\} target="_blank" rel="noopener" data-testid="compare-link">\{COMPARE_LABEL\}<\/Link>/)
+  assert.ok(at('data-testid="free-here"') < at('data-testid="compare-link"'), 'the link sits in the footer line')
+})
+
 test('the header button is called Move to Cloud, and nothing it opens offers a trial, a license, an upgrade or a price', () => {
   assert.equal(MOVE_LABEL, 'Move to Cloud')
-  assert.deepEqual(Object.keys(options).sort(), ['CLOUD_ORIGIN', 'FLOW_WORDS', 'FREE_HERE', 'MOVED_LABEL', 'MOVE_LABEL', 'MOVE_WHAT_CHANGES', 'MOVE_WHAT_MOVES', 'cloudMoveOffer', 'moveLabel'])
+  assert.deepEqual(Object.keys(options).sort(), ['CLOUD_ORIGIN', 'COMPARE_LABEL', 'COMPARE_URL', 'FLOW_WORDS', 'FREE_HERE', 'MOVED_LABEL', 'MOVE_LABEL', 'MOVE_WHAT_CHANGES', 'MOVE_WHAT_MOVES', 'MOVE_WHAT_YOU_GET', 'cloudMoveOffer', 'moveLabel'])
   // After a finished move the header says where the team is, and still opens the panel.
   assert.equal(MOVED_LABEL, 'On Slatebox Cloud')
   assert.equal(moveLabel(null), MOVE_LABEL)
@@ -63,7 +91,7 @@ test('the header button is called Move to Cloud, and nothing it opens offers a t
   assert.equal(moveLabel({ serverAdmin: true, move: { state: 'moved' }, movedSaved: null }), MOVED_LABEL)
   assert.equal(moveLabel({ serverAdmin: true, move: null, movedSaved: { url: 'https://app.slatebox.com/', banner: false } }), MOVED_LABEL)
   assert.deepEqual(Object.keys(FLOW_WORDS).sort(), ['cancelled', 'confirming', 'exporting', 'failed', 'moved', 'review', 'signing_in', 'uploading'])
-  for (const words of [MOVE_LABEL, MOVED_LABEL, FREE_HERE, ...MOVE_WHAT_MOVES, ...MOVE_WHAT_CHANGES, ...Object.values(FLOW_WORDS)]) assert.doesNotMatch(words, NOT_SAID, words)
+  for (const words of [MOVE_LABEL, MOVED_LABEL, FREE_HERE, COMPARE_LABEL, ...MOVE_WHAT_YOU_GET, ...MOVE_WHAT_MOVES, ...MOVE_WHAT_CHANGES, ...Object.values(FLOW_WORDS)]) assert.doesNotMatch(words, NOT_SAID, words)
   assert.match(FREE_HERE, /integrations[\s\S]*free on this server/)
   const ui = ['web/app/imports/ui/components/selfhost/MoveToCloudButton.jsx', 'web/app/imports/ui/components/selfhost/MoveToCloudPanel.jsx']
   for (const path of ui) {
