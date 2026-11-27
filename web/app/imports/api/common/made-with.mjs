@@ -6,7 +6,7 @@
 // - embed: a slate drawn inside another site (always, whoever looks);
 // - present: a published presentation (/present/:shareId);
 // - follow: following someone else's live presentation;
-// - library: a published library item (/library/:slug), for anyone but its author.
+// - library: a published library item (/library/:slug), a public page: shown to whoever opens it.
 //
 // Slatebox Cloud always shows it. A self-hosted server shows it until its administrator switches it
 // off (Admin › Overview); its link still goes to slatebox.com.
@@ -49,11 +49,13 @@ export function madeWithPolicy({ cloud = false, hidden = false } = {}) {
  * - enabled: this server's policy (madeWithPolicy);
  * - embedded: drawn inside another site (shown whoever looks);
  * - isOwner: the person made it (the slate's owner, the item's author, the presenter);
- * - sameTeam: the person is in the team the slate belongs to (their own team's canvas).
- * A shared or public surface shows it to everyone else, guests and visitors from other teams alike.
+ * - sameTeam: the person is in the team the slate belongs to (their own team's canvas);
+ * - editing: the person can change it here (an edit link, a joined workshop): never while they work on it;
+ * - loading: who is looking is not known yet (signed in, their account not here): wait rather than flash it.
+ * A shared or public surface shows it to everyone else who only views it, guests and other teams alike.
  */
-export function showMadeWith({ enabled = true, surface, embedded = false, isOwner = false, sameTeam = false } = {}) {
-  if (!enabled || !MADE_WITH_SURFACES.includes(surface)) return false
+export function showMadeWith({ enabled = true, surface, embedded = false, isOwner = false, sameTeam = false, editing = false, loading = false } = {}) {
+  if (!enabled || editing || loading || !MADE_WITH_SURFACES.includes(surface)) return false
   if (embedded || surface === 'embed') return true
   return !isOwner && !sameTeam
 }

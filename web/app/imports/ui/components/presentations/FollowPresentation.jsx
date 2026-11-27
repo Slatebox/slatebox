@@ -22,9 +22,9 @@ export default function FollowPresentation({ slate, deck, step, workshop }) {
   const setPresentation = useSetAtom(currentPresentation)
   const [failed, setFailed] = useState(false)
   // "Made with Slatebox" (made-with.mjs) for a follower from outside the slate's team; not for its owner or team.
-  const viewer = useTracker(() => ({ userId: Meteor.userId(), orgId: Meteor.user()?.orgId ?? null }))
+  const viewer = useTracker(() => ({ userId: Meteor.userId(), orgId: Meteor.user()?.orgId ?? null, loading: Boolean(Meteor.userId() && !Meteor.user()) }))
   const madeWith = showMadeWith({
-    surface: 'follow',
+    surface: 'follow', loading: viewer.loading,
     isOwner: Boolean(viewer.userId && viewer.userId === slate?.userId),
     sameTeam: Boolean(viewer.orgId && viewer.orgId === slate?.orgId),
   })

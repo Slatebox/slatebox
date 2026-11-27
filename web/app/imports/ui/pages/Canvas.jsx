@@ -1428,12 +1428,13 @@ export default function Canvas() {
   const showTools = Boolean(boardLoaded && slate.current && !overlayKind && !viewOnly &&
     !asEmbed && !slate.current.options?.isEmbedded)
   // "Made with Slatebox" (made-with.mjs): on an embed, and on a slate opened by someone outside its team
-  // (a share link); never on a slate its owner or their team works on.
-  const viewer = useTracker(() => ({ userId: Meteor.userId(), orgId: Meteor.user()?.orgId ?? null }))
+  // (a share link) who only views it; never on a slate its owner or their team works on, nor while anyone
+  // edits (their undo and redo have that corner).
+  const viewer = useTracker(() => ({ userId: Meteor.userId(), orgId: Meteor.user()?.orgId ?? null, loading: Boolean(Meteor.userId() && !Meteor.user()) }))
   const embeddedView = Boolean(asEmbed || slate.current?.options?.isEmbedded)
   const madeWithSurface = canvasSurface({ embedded: embeddedView })
   const madeWithShown = Boolean(boardLoaded && slate.current && showMadeWith({
-    surface: madeWithSurface, embedded: embeddedView,
+    surface: madeWithSurface, embedded: embeddedView, editing: showTools, loading: viewer.loading,
     isOwner: Boolean(viewer.userId && viewer.userId === (nativeBoard?.userId ?? slate.current?.userId)),
     sameTeam: Boolean(viewer.orgId && viewer.orgId === slateOrgId.current),
   }))
