@@ -14,6 +14,8 @@ import { mountMcp } from './mcp/meteor'
 import { mountOAuth } from './oauth/meteor'
 import { mountLicenses } from './licenses/meteor'
 import { mountAppLinks } from './mobile/app-links.mjs'
+import { madeWith } from './made-with/meteor'
+import { MADE_WITH_STRIP_PX, MADE_WITH_STRIP_STYLE, madeWithStripHtml } from '../imports/api/common/made-with.mjs'
 
 // /.well-known/apple-app-site-association and assetlinks.json: links and sign-ins for the Slatebox
 // viewer app (settings.mobile), 404 JSON until it is set up; ahead of the app's page.
@@ -50,7 +52,10 @@ if (Meteor.settings.public.env === 'selfhost') {
     }
     response.set('Content-Security-Policy', `default-src 'none'; img-src ${image.origin}; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'`)
     const src = image.href.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;')
-    return response.type('html').send(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Slatebox board</title><style>body{margin:0}img{display:block;width:100vw;height:100vh;object-fit:contain}</style><img alt="Published Slatebox board" src="${src}"></html>`)
+    // "Made with Slatebox" (made-with.mjs) in a strip under the picture, unless this server's administrator hid it.
+    const mark = (await madeWith.status().catch(() => ({ enabled: true }))).enabled
+    const height = mark ? `calc(100vh - ${MADE_WITH_STRIP_PX}px)` : '100vh'
+    return response.type('html').send(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Slatebox board</title><style>body{margin:0}img{display:block;width:100vw;height:${height};object-fit:contain}${mark ? MADE_WITH_STRIP_STYLE : ''}</style><img alt="Published Slatebox board" src="${src}">${mark ? madeWithStripHtml('embed') : ''}</html>`)
   })
 }
 

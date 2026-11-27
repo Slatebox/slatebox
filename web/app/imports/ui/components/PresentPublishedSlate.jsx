@@ -14,10 +14,10 @@ import Box from '@mui/material/Box'
 import IconButton from '@mui/material/IconButton'
 import Typography from '@mui/material/Typography'
 import Tooltip from '@mui/material/Tooltip'
-import Link from '@mui/material/Link'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 
 import BasePresent from './presentations/BasePresent'
+import MadeWithSlatebox from './MadeWithSlatebox'
 import CONSTANTS from '../../api/common/constants'
 import { currentPresentation, isMobileOrTouchDevice } from '../jotai/atoms'
 import { isBakedDeck, playableDeck } from './presentations/presentationBake.mjs'
@@ -253,6 +253,8 @@ export default function PresentPublishedSlate({ slateShareId, surfaceId = 'prese
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
           />
+          {/* The last step's Restart (the mark in the corner says Made with Slatebox). */}
+          {curPresentation.currentView === curPresentation.viewpoints.length - 1 && (
           <Box
             className="footer-slide"
             sx={{
@@ -278,11 +280,6 @@ export default function PresentPublishedSlate({ slateShareId, surfaceId = 'prese
             onMouseEnter={() => setShowFooter(true)}
             onMouseLeave={() => setShowFooter(false)}
           >
-            <Typography variant="caption" sx={{ color: '#000' }}>
-              Built with <Link href="https://slatebox.com">Slatebox</Link>
-            </Typography>
-            {curPresentation.currentView ===
-              curPresentation.viewpoints.length - 1 && (
               <Tooltip title="Restart">
                 <IconButton
                   sx={{
@@ -298,10 +295,13 @@ export default function PresentPublishedSlate({ slateShareId, surfaceId = 'prese
                   <ReplayIcon />
                 </IconButton>
               </Tooltip>
-            )}
           </Box>
+          )}
         </>
       )}
+      {/* "Made with Slatebox" (made-with.mjs): a published presentation is shared with whoever opens it. */}
+      <MadeWithSlatebox surface={curPresentation.isEmbedded ? 'embed' : 'present'} show={Boolean(published)}
+        placement={curPresentation.isEmbedded ? 'bottom-right' : 'present'} tone="dark" zIndex={11} />
       <BasePresent
         ref={refMethods}
         containerRef={containerRef}

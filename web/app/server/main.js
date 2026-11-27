@@ -78,6 +78,8 @@ import './metering/meteor'
 import './admin/meteor'
 // The header's Move to Cloud on a self-hosted install: move the team to Slatebox Cloud
 import './selfhost-options/meteor'
+// The "Made with Slatebox" mark's setting (server/made-with/meteor.js)
+import './made-with/meteor'
 import './agent-reach/sov-meteor' // share of voice: the weekly job (Cloud) and its admin methods
 
 // AI control: the snapshot of providers, models, bindings and prompts administrators manage at runtime

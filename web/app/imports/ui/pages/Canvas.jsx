@@ -122,6 +122,8 @@ import '../common/main.css'
 import { noteSelection } from '../../api/common/chat-selection.mjs'
 import LibrarySlot from '../components/library/LibrarySlot'
 import { reloadPage } from '../voice/voiceReload'
+import MadeWithSlatebox from '../components/MadeWithSlatebox'
+import { canvasSurface, showMadeWith } from '../../api/common/made-with.mjs'
 
 // Viewport and presence packages can save a snapshot without changing the team's work.
 const viewEvents = new Set(['onZoom', 'onCanvasMove', 'onMouseMoved', 'onCursorMoved', 'onPresenceChanged',
@@ -1425,6 +1427,16 @@ export default function Canvas() {
   const shapeNotes = (notes, shape) => updateNode((n) => customShapePackage(shape, n.options), notes)
   const showTools = Boolean(boardLoaded && slate.current && !overlayKind && !viewOnly &&
     !asEmbed && !slate.current.options?.isEmbedded)
+  // "Made with Slatebox" (made-with.mjs): on an embed, and on a slate opened by someone outside its team
+  // (a share link); never on a slate its owner or their team works on.
+  const viewer = useTracker(() => ({ userId: Meteor.userId(), orgId: Meteor.user()?.orgId ?? null }))
+  const embeddedView = Boolean(asEmbed || slate.current?.options?.isEmbedded)
+  const madeWithSurface = canvasSurface({ embedded: embeddedView })
+  const madeWithShown = Boolean(boardLoaded && slate.current && showMadeWith({
+    surface: madeWithSurface, embedded: embeddedView,
+    isOwner: Boolean(viewer.userId && viewer.userId === (nativeBoard?.userId ?? slate.current?.userId)),
+    sameTeam: Boolean(viewer.orgId && viewer.orgId === slateOrgId.current),
+  }))
   React.useLayoutEffect(() => {
     const drawing = slate.current
     if (!conversationVisible || !drawing || pendingConversationFit.current !== drawing) return
@@ -1472,6 +1484,7 @@ export default function Canvas() {
             {/* A grid sheet's Print / Export PDF: this page or all pages, as its notes are drawn (gridPrint.js). */}
             {workshopSlate && !asEmbed && !phone && boards.filter(board => board.model?.kind === 'grid').slice(0, 1).map(board =>
               <GridPrintButton key={board.boardId} board={board} engine={slate.current?.v2} />)}
+            {!overlayKind && <MadeWithSlatebox surface={madeWithSurface} show={madeWithShown} tone={theme.palette.mode} />}
           </div>
           {/* On a phone the strip has a row of its own under the canvas, so it covers no card. */}
           {/* On a phone Print / Export PDF has a row of its own under the canvas too. */}
@@ -1549,6 +1562,7 @@ export default function Canvas() {
         <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
           <CreativeSlate key={id} shareId={id} readOnly={Boolean(asEmbed) || phoneView} guestAdmitted={guestEditLink === id} />
         </div>
+        <MadeWithSlatebox surface={madeWithSurface} show={madeWithShown} tone={theme.palette.mode} />
       </div>}
       {newerDrawing && <div role="status" style={{position:'fixed',left:16,bottom:72,zIndex:6,background:theme.palette.background.paper,padding:8}}>A teammate updated this drawing. <button onClick={()=>window.location.reload()}>Reload drawing</button></div>}
       {!asEmbed && !creativeKind && !phoneView && keepOffer?.key === id &&

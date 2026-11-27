@@ -236,6 +236,12 @@ const CONSTANTS = {
       cancel: 'updates.cancel',
       rollback: 'updates.rollback',
     },
+    // The "Made with Slatebox" mark on shared pages (server/made-with/meteor.js): whether it shows
+    // here, and a self-hosted server's administrator hiding it.
+    madeWith: {
+      status: 'madeWith.status',
+      setHidden: 'madeWith.setHidden',
+    },
     // Server admin (server/admin/meteor.js): whether the signed-in account administers this server,
     // and the admin home's Overview. Plain methods for the admin pages, not registry actions.
     admin: {

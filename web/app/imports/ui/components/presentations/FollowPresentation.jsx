@@ -1,12 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react'
 import Typography from '@mui/material/Typography'
 import { useSetAtom } from 'jotai'
+import { Meteor } from 'meteor/meteor'
+import { useTracker } from 'meteor/react-meteor-data'
 import BasePresent from './BasePresent'
 import prepareSlateSurface from './prepareSlateSurface'
 import { reconcileViewpoints } from './buildFallbackPresentation.mjs'
 import { workshopScenes } from './workshopScenes.mjs'
 import { currentPresentation } from '../../jotai/atoms'
 import { isBakedDeck, playableDeck } from './presentationBake.mjs'
+import MadeWithSlatebox from '../MadeWithSlatebox'
+import { showMadeWith } from '../../../api/common/made-with.mjs'
 
 /**
  * Following a live presentation: the presenter's sequence (`deck`), played over this person's own
@@ -17,6 +21,13 @@ export default function FollowPresentation({ slate, deck, step, workshop }) {
   const containerRef = useRef(null)
   const setPresentation = useSetAtom(currentPresentation)
   const [failed, setFailed] = useState(false)
+  // "Made with Slatebox" (made-with.mjs) for a follower from outside the slate's team; not for its owner or team.
+  const viewer = useTracker(() => ({ userId: Meteor.userId(), orgId: Meteor.user()?.orgId ?? null }))
+  const madeWith = showMadeWith({
+    surface: 'follow',
+    isOwner: Boolean(viewer.userId && viewer.userId === slate?.userId),
+    sameTeam: Boolean(viewer.orgId && viewer.orgId === slate?.orgId),
+  })
   useEffect(() => {
     let active = true
     // The lanes the presenter's deck frames are drawn before this drawing is taken.
@@ -56,5 +67,8 @@ export default function FollowPresentation({ slate, deck, step, workshop }) {
   }, [slate, deck])
 
   if (failed) return <Typography role="alert" sx={{ p: 3 }}>This slate could not be drawn for the presentation. Leave and follow again.</Typography>
-  return <BasePresent containerRef={containerRef} viewIndex={step} showControls={false} isEditable />
+  return <>
+    <BasePresent containerRef={containerRef} viewIndex={step} showControls={false} isEditable />
+    <MadeWithSlatebox surface="follow" show={madeWith} placement="bottom-right" tone="dark" zIndex={11} />
+  </>
 }

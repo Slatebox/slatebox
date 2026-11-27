@@ -18,6 +18,7 @@ import { categoryLabel } from '../../api/common/library-model.mjs'
 import LibraryStill, { rememberContent } from '../components/library/gallery/LibraryStill'
 import AddToSlateDialog from '../components/library/gallery/AddToSlateDialog'
 import usePhoneView from '../common/usePhoneView'
+import MadeWithSlatebox from '../components/MadeWithSlatebox'
 import {
   authorLine, forkErrorText, KIND_NAMES, licenseLine, previewLabel, provenanceLine, readCopyRequest, actionLabel, usesLine, versionLine,
 } from '../components/library/gallery/galleryCopy.mjs'
@@ -197,6 +198,8 @@ export default function LibraryItem() {
           </Box>
         )}
       </Box>
+      {/* "Made with Slatebox" (made-with.mjs): a published item is open to everyone. */}
+      {item && <Box sx={{ display: 'flex' }}><MadeWithSlatebox surface="library" placement="inline" /></Box>}
       {item && <AddToSlateDialog open={picking} title={item.title} busy={busy} onPick={use} onClose={() => setPicking(false)} />}
     </AppPage>
   )

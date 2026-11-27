@@ -27,6 +27,7 @@ import IntegrationsStatus from './admin/IntegrationsStatus'
 import LibraryQueueCard from './admin/LibraryQueueCard'
 import AIControlCard from './admin/ai/AIControlCard'
 import UpdatesCard from './admin/updates/UpdatesCard'
+import MadeWithCard from './admin/MadeWithCard'
 import EnterpriseSlot from '../common/EnterpriseSlot'
 
 export default function AdminTools() {
@@ -128,6 +129,10 @@ export default function AdminTools() {
                 <UpdatesCard />
               </Grid>
             )}
+            {/* The "Made with Slatebox" mark on shared slates: a self-hosted server may hide it (draws nothing on Cloud). */}
+            <Grid size={12}>
+              <MadeWithCard />
+            </Grid>
             <Grid size={12}>
               <IntegrationsStatus />
             </Grid>
