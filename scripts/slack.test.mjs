@@ -297,7 +297,7 @@ test('install: connecting again updates the workspace row (the newest bot token 
   assert.equal((await world.integrations.find({ ownerId: 'ada' })).length, 1)
 })
 
-test('install: an MCP Slack integration moves in place with its slates, name and colour; its old sign-in is revoked', async () => {
+test('install: an MCP Slack integration moves in place with its slates, name and color; its old sign-in is revoked', async () => {
   const world = makeWorld()
   const at = new Date(world.clock.t)
   await world.integrations.insert({ _id: 'iOldSlack', ownerType: 'user', ownerId: 'ada', kind: 'mcp', address: SLACK_MCP_ADDRESS, host: 'mcp.slack.com', galleryId: 'slack', name: 'Team chat', colorIndex: 7, rule: 'my_slates', tools: [{ name: 'slack_send_message', hash: 'h', policy: 'allow' }], status: 'needs_sign_in', createdAt: at, updatedAt: at })
@@ -501,6 +501,14 @@ test('signature check: a valid request passes; a wrong signature, a stale timest
     assert.deepEqual([refused.statusCode, refused.body], [401, null])
   }
   assert.ok(world.logs.some((l) => l.kind === 'slack_unsigned'))
+  // the exact bytes are signed, never a decoded copy: a byte that is not UTF-8 still verifies, and a
+  // body that decodes to the same text but has other bytes does not
+  const bytes = Buffer.from([0x70, 0x3d, 0xff, 0x61])
+  const ts = String(Math.floor(now / 1000))
+  const byteSig = 'v0=' + (await import('node:crypto')).createHmac('sha256', SIGNING).update(Buffer.concat([Buffer.from(`v0:${ts}:`), bytes])).digest('hex')
+  assert.equal(signatureOf(SIGNING, ts, bytes), byteSig)
+  assert.equal(verifySlackRequest({ signingSecret: SIGNING, timestamp: ts, signature: byteSig, raw: bytes, now }), true)
+  assert.equal(verifySlackRequest({ signingSecret: SIGNING, timestamp: ts, signature: byteSig, raw: Buffer.from([0x70, 0x3d, 0xfe, 0x61]), now }), false)
   // the modal's metadata is signed the same way: a changed one is refused
   const meta = signMetadata(SIGNING, { c: 'C0LAUNCH01', t: '1764000001.000100', k: 'k' })
   assert.deepEqual(openMetadata(SIGNING, meta), { c: 'C0LAUNCH01', t: '1764000001.000100', k: 'k' })

@@ -339,7 +339,7 @@ export function createSlackService({
     }
     // One Slack workspace per person: connecting another replaces the first.
     const row = await integrationOf(flow.userId)
-    // Connected before as Slack's MCP server: moved in place (its name, colour and slates stay).
+    // Connected before as Slack's MCP server: moved in place (its name, color and slates stay).
     const old = !row && moveNative ? await integrations.findOne({ ownerId: flow.userId, address: SLACK_MCP_ADDRESS }) : null
     if (row) await integrations.update(row._id, set)
     else if (old) await moveNative(old, set)

@@ -1748,7 +1748,7 @@ export function createConnectorService({
   /**
    * "Let it make changes too" for an agent connected at its card's read-only address: the person
    * signed in at the card's own address and consented to its tools there (hashes they saw), and the
-   * integration moves to it in place. Its name, colour, rule and slates stay; each slate's copy moves
+   * integration moves to it in place. Its name, color, rule and slates stay; each slate's copy moves
    * with it (a tool turned off on one slate stays off there); the read-only sign-in is removed.
    */
   async function replaceAddress(principal, { replaces, address, host, name, chosen, rule }) {
@@ -2158,7 +2158,7 @@ export function createConnectorService({
 
   /**
    * An MCP integration that became native (Slack, 2026-11-27) moves in place: set is the native
-   * integration's row (its address, kind, tools, sign-in). Its name, colour, rule and slates stay,
+   * integration's row (its address, kind, tools, sign-in). Its name, color, rule and slates stay,
    * each slate's copy moves with it (a tool turned off on one slate stays off there), and the old
    * MCP sign-in is revoked and forgotten. → the integration as it is now
    */

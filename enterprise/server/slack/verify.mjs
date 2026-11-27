@@ -18,8 +18,9 @@ const same = (a, b) => {
 }
 
 /** Slack's signature for a body at a timestamp (what a test, or Slack, sends). */
+// Over the exact bytes (never decoded and encoded again: a byte that is not UTF-8 would change).
 export const signatureOf = (signingSecret, timestamp, raw) =>
-  'v0=' + createHmac('sha256', signingSecret).update(`v0:${timestamp}:${Buffer.isBuffer(raw) ? raw.toString('utf8') : String(raw)}`).digest('hex')
+  'v0=' + createHmac('sha256', signingSecret).update(`v0:${timestamp}:`).update(Buffer.isBuffer(raw) ? raw : Buffer.from(String(raw))).digest('hex')
 
 /** Whether this request is Slack's: the right signature over this exact body, signed in the last five minutes. */
 export function verifySlackRequest({ signingSecret, timestamp, signature, raw, now = Date.now() }) {
