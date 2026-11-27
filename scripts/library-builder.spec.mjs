@@ -92,7 +92,8 @@ async function openPanel(page) {
 
 for (const size of [{ name: 'desktop', width: 1440, height: 900 }, { name: 'phone', width: 390, height: 844 }]) {
   test(`build a smart component from scratch, by chat and by the board's controls, save, add and submit (${size.name})`, async ({ browser }) => {
-    const context = await browser.newContext({ viewport: { width: size.width, height: size.height }, ...(size.name === 'phone' && { hasTouch: true, isMobile: true }) })
+    // A touch phone views slates and builds none (phone-view.spec.mjs): the phone width is a narrow window with a mouse.
+    const context = await browser.newContext({ viewport: { width: size.width, height: size.height } })
     const page = await context.newPage()
     const errors = []
     page.on('pageerror', e => errors.push(e.message))
@@ -269,7 +270,8 @@ test('a branch off Retro keeps Meetings, locked; its controls are on the board f
 })
 
 test('on a phone the build bar is one Builder button in the header; its sheet holds the rest; a card\'s toolbar is clear of it', async ({ browser }) => {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
+  // A narrow window with a mouse: a touch phone views slates and builds none (phone-view.spec.mjs).
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } })
   const page = await context.newPage()
   const errors = []
   page.on('pageerror', e => errors.push(e.message))

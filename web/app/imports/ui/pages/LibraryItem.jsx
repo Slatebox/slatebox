@@ -17,6 +17,7 @@ import libraryApi from '../../api/client/library'
 import { categoryLabel } from '../../api/common/library-model.mjs'
 import LibraryStill, { rememberContent } from '../components/library/gallery/LibraryStill'
 import AddToSlateDialog from '../components/library/gallery/AddToSlateDialog'
+import usePhoneView from '../common/usePhoneView'
 import {
   authorLine, forkErrorText, KIND_NAMES, licenseLine, previewLabel, provenanceLine, readCopyRequest, actionLabel, usesLine, versionLine,
 } from '../components/library/gallery/galleryCopy.mjs'
@@ -46,6 +47,8 @@ export default function LibraryItem() {
   const [picking, setPicking] = useState(false)
   const [moves, setMoves] = useState([])
   const copyAsked = useRef(readCopyRequest(location.search).copy)
+  // A phone reads the library; using an item makes or changes a slate, so that waits for a computer or tablet.
+  const phoneView = usePhoneView()
 
   // The item's title is the tab's while the page is open; leaving (to a copy, say) gives the tab its title back.
   useEffect(() => {
@@ -94,12 +97,13 @@ export default function LibraryItem() {
   }
 
   // The deep link from slatebox.com: once, then the flag leaves the URL so a reload or Back never copies again.
+  // Not on a phone: the flag stays, so the same link opened on a computer still makes the copy.
   useEffect(() => {
-    if (!item || !copyAsked.current) return
+    if (!item || !copyAsked.current || phoneView) return
     copyAsked.current = false
     navigate({ search: readCopyRequest(location.search).rest }, { replace: true })
     use(null)
-  }, [item?.id])
+  }, [item?.id, phoneView])
 
   if (error) {
     return (
@@ -145,6 +149,9 @@ export default function LibraryItem() {
               {uses && <Typography variant="body2" color="text.secondary">{uses}</Typography>}
 
               {failure && <Alert severity="warning" sx={{ mt: 2 }}>{failure}</Alert>}
+              {phoneView ? (
+                <Typography color="text.secondary" sx={{ mt: 2.5 }} data-library-phone>Open this on a computer to use it.</Typography>
+              ) : (<>
               <Stack direction={{ xs: 'column', sm: 'row', md: 'column', lg: 'row' }} spacing={1} sx={{ mt: 2.5 }}>
                 {item.kind === 'component' ? (
                   <Button variant="contained" startIcon={<AddIcon />} onClick={() => setPicking(true)} disabled={busy} data-library-use>{actionLabel(item.kind)}</Button>
@@ -160,6 +167,7 @@ export default function LibraryItem() {
                   ? 'Branch off to change how it works by chatting with Slatebox, then share your version with the library.'
                   : 'Your copy is private to you until you share it.'}
               </Typography>
+              </>)}
 
               {item.description && <Typography sx={{ mt: 3, whiteSpace: 'pre-line' }}>{item.description}</Typography>}
 

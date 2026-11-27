@@ -17,6 +17,7 @@ import CONSTANTS from '../api/common/constants'
 import CSSUnicorn from './components/ai/Unicorn'
 import { enterpriseState } from '../api/common/edition.mjs'
 import { signedOutPath } from '../api/client/signOut'
+import PhoneViewGate from './components/PhoneViewGate'
 
 // Pages a first visit never opens (a slate, the start page and My Slates stay in the first load): each loads
 // when its route is first opened.
@@ -218,7 +219,7 @@ export default function SBRoutes() {
       />
       <Route path="/library/:slug" element={<LibraryItem />} />
       <Route path="/canvas/:id?/:nodeId?/:asEmbed?" element={<CanvasForSlate />} />
-      <Route path="/ai/:prompt?" element={<SlateCreateRoute />} />
+      <Route path="/ai/:prompt?" element={<PhoneViewGate><SlateCreateRoute /></PhoneViewGate>} />
       <Route path="/verify-email/:token" element={<VerifyEmail />} />
       <Route path="/login-link/:token" element={<LoginLink />} />
       <Route

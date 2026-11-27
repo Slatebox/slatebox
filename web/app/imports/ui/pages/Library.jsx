@@ -17,6 +17,7 @@ import SearchIcon from '@mui/icons-material/Search'
 import libraryApi from '../../api/client/library'
 import LibraryCard from '../components/library/gallery/LibraryCard'
 import ForYou from '../components/personal/ForYou'
+import usePhoneView from '../common/usePhoneView'
 import { CATEGORY_CHIPS, countLine, galleryQuery, KIND_TABS, listInput, readGalleryQuery, SORTS } from '../components/library/gallery/galleryCopy.mjs'
 
 /**
@@ -29,6 +30,8 @@ export default function Library() {
   const location = useLocation()
   const navigate = useNavigate()
   const filters = readGalleryQuery(location.search)
+  // Building a component makes a slate: not on a phone (phoneView.mjs).
+  const phoneView = usePhoneView()
   const [query, setQuery] = useState(filters.q)
   const [stats, setStats] = useState(null)
   const [list, setList] = useState({ items: [], total: null, next: undefined })
@@ -88,7 +91,7 @@ export default function Library() {
         </Box>
         {stats && <Typography variant="body2" color="text.primary" sx={{ mt: 1 }} data-library-count-line>{countLine(stats)}</Typography>}
       </>}
-      actions={<Button component={RouterLink} to="/new#build=new" variant="outlined" sx={{ flexShrink: 0 }}>Build your own component</Button>}
+      actions={phoneView ? undefined : <Button component={RouterLink} to="/new#build=new" variant="outlined" sx={{ flexShrink: 0 }}>Build your own component</Button>}
     >
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
         <Tabs value={filters.kind ?? 'all'} onChange={(_e, value) => setFilters({ kind: value === 'all' ? null : value })} variant="scrollable" allowScrollButtonsMobile aria-label="Kind">

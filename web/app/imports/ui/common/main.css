@@ -229,3 +229,5 @@ html[data-sb-add-open] .slatebox-zoom-slider{visibility:hidden}
 /* A note drawn with no fill (a text note) stays clear while it is presented: the presenter's highlight sets every
    shape's opacity, which would otherwise show its hidden white box. */
 .sb-presentation-camera [data-node-background-path][opacity="0"]{opacity:0!important}
+/* The phone banner (PhoneAppBanner.jsx), while it shows: a page's own top starts below it. */
+[data-app-page]{margin-top:var(--sb-phone-banner,0px)}

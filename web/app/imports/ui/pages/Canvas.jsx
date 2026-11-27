@@ -115,6 +115,8 @@ import SlateOutputDialog from '../components/slate/SlateOutputDialog'
 import SlateWelcome from '../components/SlateWelcome'
 import SlateLoading from '../components/SlateLoading'
 import useMinimapWhenNeeded from '../common/useMinimapWhenNeeded'
+import usePhoneView from '../common/usePhoneView'
+import { PHONE_CANVAS_WELCOME } from '../common/phoneView.mjs'
 import { useNoteOnDoubleClick } from '../common/newNote.mjs'
 import '../common/main.css'
 import { noteSelection } from '../../api/common/chat-selection.mjs'
@@ -283,6 +285,11 @@ export default function Canvas() {
   })
   // What the slate's sharing grants this person, before a workshop's join rule is applied.
   const grantedReadOnly = React.useRef(false)
+  // On a phone the slate is for viewing (phoneView.mjs): pan, zoom and live updates, no edits, whatever the
+  // sharing grants. The engine asks per gesture, so turning the phone or resizing applies at once.
+  const phoneView = usePhoneView()
+  const phoneViewRef = React.useRef(phoneView)
+  React.useLayoutEffect(() => { phoneViewRef.current = phoneView }, [phoneView])
   const renameTimer = React.useRef(null)
   const collabRef = React.useRef()
   const collaborator = React.useRef()
@@ -374,7 +381,7 @@ export default function Canvas() {
       slateId: slate.current.options.id,
       shareId: slate.current.shareId,
       // Readers read; the comment role (or edit) posts and resolves. The server checks it too.
-      canComment: Boolean(Meteor.userId()) && !accessLevel.current.isReadOnly,
+      canComment: Boolean(Meteor.userId()) && !accessLevel.current.isReadOnly && !phoneViewRef.current,
       slateName: slate.current.options.name,
       orgId: slateOrgId.current,
       open: true,
@@ -699,9 +706,11 @@ export default function Canvas() {
           await confirmService.show({
             theme,
             title: 'Welcome to Slatebox!',
-            message: isGuest
-              ? `You have ${verb} access to this slate by ${trackGuest.slateOwnerUserName}.`
-              : `You have ${verb} access to this slate.`,
+            message: phoneViewRef.current
+              ? PHONE_CANVAS_WELCOME
+              : isGuest
+                ? `You have ${verb} access to this slate by ${trackGuest.slateOwnerUserName}.`
+                : `You have ${verb} access to this slate.`,
             actionItems: [{ label: 'OK', return: true }],
           })
         }
@@ -801,8 +810,8 @@ export default function Canvas() {
         }
         get()
       },
-      isReadOnly: () => accessLevel.current.isReadOnly,
-      isCommentOnly: () => accessLevel.current.isCommentOnly,
+      isReadOnly: () => Boolean(accessLevel.current.isReadOnly || phoneViewRef.current),
+      isCommentOnly: () => !phoneViewRef.current && Boolean(accessLevel.current.isCommentOnly),
     }
 
     // Destroy any prior slate before creating a new one (a canvas switch that re-runs
@@ -1039,11 +1048,12 @@ export default function Canvas() {
         await leaveWithoutAccess()
         return
       }
-      setCanManageSlate(
+      setCanManageSlate(Boolean(
         Meteor.userId() &&
+          !phoneViewRef.current &&
           !accessLevel.current.isReadOnly &&
           !accessLevel.current.isCommentOnly
-      )
+      ))
       const requiresTracking =
         !Meteor.user() ||
         (!isNew && Meteor.user() && Meteor.user().orgId !== slateBase.orgId)
@@ -1292,7 +1302,11 @@ export default function Canvas() {
   const workshopPreview = React.useMemo(() => workshopFrame ? { frame: workshopFrame, focus: workshopFocus } : null,
     [workshopFrame?.x, workshopFrame?.y, workshopFrame?.width, workshopFrame?.height, JSON.stringify(workshopFocus)])
   useConversationPreview(boardLoaded ? slate.current?.v2 : null, drawingPreview ?? workshopPreview)
-  const canShowConversation = boardLoaded && (workshopSlate ? Boolean(workshop.editable && workshop.ready) : !creativeKind && nativeBoard.canConverse)
+  // Viewing only: on a phone (whatever the sharing grants), or with read access.
+  const viewOnly = phoneView || Boolean(accessLevel.current.isReadOnly)
+  const commentOnly = !phoneView && Boolean(accessLevel.current.isCommentOnly)
+  // A phone views the slate: no Ask Slatebox (it makes and changes notes), so an empty slate opens no chat.
+  const canShowConversation = boardLoaded && !phoneView && (workshopSlate ? Boolean(workshop.editable && workshop.ready) : !creativeKind && nativeBoard.canConverse)
   const phone = useMediaQuery('(max-width:599.95px)')
   // Below 1000px the header is one row and the slate's tools sit in a bar under the canvas.
   const narrow = useMediaQuery('(max-width:999.98px)')
@@ -1348,7 +1362,16 @@ export default function Canvas() {
   React.useEffect(() => { if (!nativeChatOpen && !askKept) for (const board of boardsRef.current) board.leaveFocus?.() }, [nativeChatOpen, askKept, boards.some(board => board.focusLocked)])
   // Another slate: nothing is kept from this one.
   React.useEffect(() => { askKeptNow.current = false; setAskKept(false); setSlateOutput(null) }, [id])
-  const showHuddle = Boolean(boardLoaded && getHuddleType !== 'disabled')
+  // A phone keeps the view to the slate itself: no call controls either.
+  const showHuddle = Boolean(boardLoaded && !phoneView && getHuddleType !== 'disabled')
+  // The menu's Rename, Settings, Style, History, Export, Embed and Delete, and leading a presentation, follow
+  // the phone turning or a window resizing as well as the sharing (set first when the slate loads).
+  React.useEffect(() => {
+    if (!boardLoaded) return
+    setCanManageSlate(Boolean(Meteor.userId() && !viewOnly && !accessLevel.current.isCommentOnly))
+  }, [phoneView, boardLoaded])
+  // Turning to the phone view mid-selection: the selection's handles go with it.
+  React.useEffect(() => { if (phoneView) slate.current?.v2?.clearSelection?.() }, [phoneView])
   // Controls fixed to the canvas's corner (quick add) keep clear of the panel and the bar.
   const canvasArea = React.useRef(null)
   React.useLayoutEffect(() => {
@@ -1386,7 +1409,7 @@ export default function Canvas() {
   React.useLayoutEffect(() => { keepBoardStill(() => slate.current?.v2?.resizePanZoom?.()) }, [conversationVisible, slateDrawerOpen])
   React.useLayoutEffect(() => { sheetBefore.current = { open: nativeChatOpen, minimised } })
   // The style bar edits only for someone who may edit; the tool dock (on a phone, "+ Add") likewise.
-  const barEditable = Boolean(!accessLevel.current.isReadOnly && !accessLevel.current.isCommentOnly && !asEmbed)
+  const barEditable = Boolean(!viewOnly && !commentOnly && !asEmbed)
   // Custom Shape with notes selected shapes them (one change, one undo step); with none, adds a note.
   const selectedOwnNotes = () => {
     const v2 = slate.current?.v2
@@ -1394,7 +1417,7 @@ export default function Canvas() {
     return (selectionFrame.ids || []).map((nid) => v2.getNode(nid)).filter((n) => n && !v2.governanceOf?.(n) && !n.options?.isLocked)
   }
   const shapeNotes = (notes, shape) => updateNode((n) => customShapePackage(shape, n.options), notes)
-  const showTools = Boolean(boardLoaded && slate.current && !overlayKind && !accessLevel.current.isReadOnly &&
+  const showTools = Boolean(boardLoaded && slate.current && !overlayKind && !viewOnly &&
     !asEmbed && !slate.current.options?.isEmbedded)
   React.useLayoutEffect(() => {
     const drawing = slate.current
@@ -1425,7 +1448,7 @@ export default function Canvas() {
                 builds or reviews a smart component: its own bar says what to do first (the shapes in Ask Slatebox). */}
             <SlateWelcome slate={slate.current} canvasId={containerId} phone={phone} askOpen={conversationVisible} canPick={canShowConversation}
               active={Boolean(boardLoaded && slate.current && !creativeKind && !overlayKind && !asEmbed && !proposing && !nativeBoard?.library?.mode &&
-                !accessLevel.current.isReadOnly && !accessLevel.current.isCommentOnly)} />
+                !viewOnly && !commentOnly)} />
             {/* While the slate opens (a new one, or one reopened), the same calm moment as /new, over the canvas. */}
             {!boardLoaded && !asEmbed && <SlateLoading fill={false} />}
             {/* The bar over the selection, inside the canvas's own area: never under the panel beside it. */}
@@ -1439,7 +1462,7 @@ export default function Canvas() {
             {drawingLine && !overlayKind && !asEmbed &&
               <LineToolStatus phone={phone} onCancel={() => slate.current?.v2?.cancelLineTool?.()} />}
             {workshopSlate && workshop.active && !phone &&
-              <WorkshopStatus board={boards.find(board => board.error || board.saving || board.failure) ?? current} conversationOpen={conversationVisible} onReview={() => setNativeChatOpen(true)} />}
+              <WorkshopStatus board={boards.find(board => board.error || board.saving || board.failure) ?? current} conversationOpen={conversationVisible} onReview={() => setNativeChatOpen(true)} viewing={phoneView} />}
             {/* A grid sheet's Print / Export PDF: this page or all pages, as its notes are drawn (gridPrint.js). */}
             {workshopSlate && !asEmbed && !phone && boards.filter(board => board.model?.kind === 'grid').slice(0, 1).map(board =>
               <GridPrintButton key={board.boardId} board={board} engine={slate.current?.v2} />)}
@@ -1449,7 +1472,7 @@ export default function Canvas() {
           {workshopSlate && !asEmbed && phone && boards.filter(board => board.model?.kind === 'grid').slice(0, 1).map(board =>
             <GridPrintButton key={board.boardId} docked board={board} engine={slate.current?.v2} />)}
           {workshopSlate && workshop.active && phone &&
-            <WorkshopStatus docked board={boards.find(board => board.error || board.saving || board.failure) ?? current} conversationOpen={conversationVisible} onReview={() => setNativeChatOpen(true)} />}
+            <WorkshopStatus docked board={boards.find(board => board.error || board.saving || board.failure) ?? current} conversationOpen={conversationVisible} onReview={() => setNativeChatOpen(true)} viewing={phoneView} />}
           {workshopSlate && current.ready && <WorkshopOutcomes workshop={current.visible} />}
           {/* A shaped note that became a card, or a card that is its shape again: said once, to the
               person who moved it. Screen readers already hear the engine's own sentence, which names the
@@ -1513,16 +1536,16 @@ export default function Canvas() {
         {/* On a phone the tool dock folds into "+ Add", first in the bar under the canvas. */}
         {narrow && !asEmbed && !overlayKind && (canShowConversation || showHuddle || (phone && showTools)) &&
           <CanvasBottomBar conversation={canShowConversation} huddle={showHuddle}
-            add={phone && showTools ? <AddTools slate={slate.current} onAdded={handleNodeCreated} selectedNotes={selectedOwnNotes} onShapeNotes={shapeNotes} commentOnly={accessLevel.current.isCommentOnly}
+            add={phone && showTools ? <AddTools slate={slate.current} onAdded={handleNodeCreated} selectedNotes={selectedOwnNotes} onShapeNotes={shapeNotes} commentOnly={commentOnly}
               canComment={Boolean(Meteor.user()?.orgId)} /> : null} />}
       </Grid>
       {overlayKind && <div style={{ position: 'fixed', inset: asEmbed ? '0' : '64px 0 0', zIndex: 2, display: 'flex', flexDirection: 'column', background: theme.palette.background.default }}>
         <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-          <CreativeSlate key={id} shareId={id} readOnly={Boolean(asEmbed)} guestAdmitted={guestEditLink === id} />
+          <CreativeSlate key={id} shareId={id} readOnly={Boolean(asEmbed) || phoneView} guestAdmitted={guestEditLink === id} />
         </div>
       </div>}
       {newerDrawing && <div role="status" style={{position:'fixed',left:16,bottom:72,zIndex:6,background:theme.palette.background.paper,padding:8}}>A teammate updated this drawing. <button onClick={()=>window.location.reload()}>Reload drawing</button></div>}
-      {!asEmbed && !creativeKind && keepOffer?.key === id &&
+      {!asEmbed && !creativeKind && !phoneView && keepOffer?.key === id &&
         <KeepNativeSlate key={id} routeKey={id} proof={keepOffer.proof} slateId={keepOffer.slateId} visitor={keepOffer.visitor} />}
       <NeuralThinking />
       {/* Undo and Redo of this person's own steps (the drawing's and their board changes), on every screen. */}
@@ -1534,7 +1557,7 @@ export default function Canvas() {
             selectedNotes={selectedOwnNotes}
             onShapeNotes={shapeNotes}
             isMU={accessLevel.current.isMU}
-            commentAccessOnly={accessLevel.current.isCommentOnly}
+            commentAccessOnly={commentOnly}
           />
         )}
       <CommentDrawer {...commentDrawerOpts} />
@@ -1557,7 +1580,7 @@ export default function Canvas() {
                   options: { name: getCurrentSlateName, isPublic: getSlatePrivacy?.isPublic === true },
                   creative: workshop?.model ? { model: { kind: 'workshop', workshop: workshop.model } } : undefined,
                 }}
-                canEdit={!accessLevel.current.isReadOnly && !accessLevel.current.isCommentOnly}
+                canEdit={!viewOnly && !commentOnly}
                 onClose={(result) => {
                   setMermaidOpen(null)
                   if (result?.created?.length) revealImported(result.created)
@@ -1577,8 +1600,8 @@ export default function Canvas() {
             slate={slate.current}
           />
           {Meteor.userId() && !workshopSlate &&
-            !accessLevel.current.isReadOnly &&
-            !accessLevel.current.isCommentOnly && (
+            !viewOnly &&
+            !commentOnly && (
               <SlateAIRunner
                 slate={slate.current}
                 possibleInitialPrompt={possibleInitialPrompt}
@@ -1629,13 +1652,13 @@ export default function Canvas() {
         </>
       )}
       {slate.current && <SlateOperationListener slate={slate.current} revision={loadedRevision.current} />}
-      {slate.current && <AgentPresenceListener slate={slate.current} canEdit={!accessLevel.current.isReadOnly && !accessLevel.current.isCommentOnly} />}
+      {slate.current && <AgentPresenceListener slate={slate.current} canEdit={!viewOnly && !commentOnly} />}
       {slate.current && !asEmbed && Meteor.userId() && (
-        <AgentTasksPanel shareId={slate.current.shareId} canEdit={!accessLevel.current.isReadOnly && !accessLevel.current.isCommentOnly && !Meteor.user()?.isAnonymous} />
+        <AgentTasksPanel shareId={slate.current.shareId} canEdit={!viewOnly && !commentOnly && !Meteor.user()?.isAnonymous} />
       )}
       {/* Outside agents invited onto this slate (enterprise code: Slatebox Cloud and every self-hosted install whose build carries it): their chips and "+ Invite agent". Empty where the build has no enterprise code. */}
       {slate.current && !asEmbed && (
-        <EnterpriseSlot name="canvas.agents" slate={slate.current} canEdit={!accessLevel.current.isReadOnly && !accessLevel.current.isCommentOnly}
+        <EnterpriseSlot name="canvas.agents" slate={slate.current} canEdit={!viewOnly && !commentOnly}
           readSelection={() => selectedOwnNotes().map((n) => n.options?.id).filter(Boolean)}
           readView={() => visibleCanvasArea(slate.current, canvasArea.current)} chatOpen={Boolean(sheetOpen)} />
       )}

@@ -67,7 +67,8 @@ for (const size of [{ name: 'desktop', width: 1440, height: 900 }, { name: 'phon
   test(`the owner's sentence on a builder's Impact × effort, the look kept everywhere, and Pro in the refusing message (${size.name})`, async ({ browser }) => {
     const phone = size.name === 'phone'
     const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: `${SHOTS}/verify-${size.name}-${name}.png` }) }
-    const device = { viewport: { width: size.width, height: size.height }, ...(phone && { hasTouch: true, isMobile: true }) }
+    // A touch phone views slates and edits none (phone-view.spec.mjs): the phone width is a narrow window with a mouse.
+    const device = { viewport: { width: size.width, height: size.height } }
     const context = await browser.newContext(device)
     const page = await context.newPage()
     const errors = []

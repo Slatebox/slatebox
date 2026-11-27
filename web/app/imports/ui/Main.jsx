@@ -79,6 +79,7 @@ import LoadHeap from './components/LoadHeap'
 import { rememberSignedIn } from './common/accountCopy.mjs'
 import { enterpriseState } from '../api/common/edition.mjs'
 import MoveToCloudButton from './components/selfhost/MoveToCloudButton'
+import usePhoneView from './common/usePhoneView'
 import MovedBanner from './components/selfhost/MovedBanner'
 // logo color: #0F4C75
 const shrunkDrawerWidth = '50px !important'
@@ -104,6 +105,7 @@ export default function Main() {
   const setSlatePanel = useSetAtom(whichSlatePanelIsExpanded)
   const saveYourWork = useSaveYourWork()
   const narrow = useMediaQuery('(max-width:999.98px)')
+  const phoneView = usePhoneView()
   // const setVideoGuideOpen = useSetAtom(videoGuideOpen)
   const setSlateDrawerOpen = useSetAtom(isSlateDrawerOpen)
   const setSlateOutput = useSetAtom(slateOutputOpen)
@@ -264,10 +266,11 @@ export default function Main() {
   const Team = loadedUser?.isEducationCertified ? 'Classroom' : 'Team'
   const drawerItems = [
     {
+      // Slates are made on a computer or tablet; a phone views them (phoneView.mjs).
       title: 'Create slate',
       path: '/new',
       icon: <AddIcon />,
-      show: true,
+      show: !phoneView,
       primary: true,
     },
     {

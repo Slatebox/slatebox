@@ -18,11 +18,14 @@ import { loginReturn } from '../components/billing/pay/pay-url.mjs'
 import { loginWelcome, rememberSignedIn, signedInBefore } from '../common/accountCopy.mjs'
 import PasskeySignIn from '../passkeys/PasskeySignIn'
 import { focusOnLoad } from '../passkeys/passkey-request.mjs'
+import usePhoneView from '../common/usePhoneView'
 
 export default function Login() {
   const history = useNavigate()
 
   const [query] = useSearchParams()
+  // A phone views slates and makes none (phoneView.mjs): no "Start a slate" there.
+  const phoneView = usePhoneView()
   // A workshop room being joined, an app's consent page (?oauth=), or the pay sheet a &pay= link
   // asked for (billing/pay/pay-url.mjs), else home.
   const signedInPlace = loginDestination(query)
@@ -163,9 +166,9 @@ export default function Login() {
           <Button fullWidth variant="outlined" color="primary" size="large" component={RouterLink} to="/signup" sx={{ borderRadius: 6 }}>
             Create an account
           </Button>
-          <Button fullWidth variant="text" color="primary" component={RouterLink} to="/start" sx={{ borderRadius: 6, fontWeight: 600 }}>
+          {!phoneView && <Button fullWidth variant="text" color="primary" component={RouterLink} to="/start" sx={{ borderRadius: 6, fontWeight: 600 }}>
             Start a slate, no account needed
-          </Button>
+          </Button>}
         </Box>
         </>}
         <Box sx={{ pt: 4, textAlign: 'center' }}>

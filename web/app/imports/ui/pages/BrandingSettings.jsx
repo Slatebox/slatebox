@@ -40,6 +40,7 @@ import StyleSection from '../components/brand/StyleSection'
 import BrandPreview from '../components/brand/BrandPreview'
 import pullColors from '../components/brand/pullColors'
 import AppPage, { AppPageHeader } from '../common/AppPage'
+import usePhoneView from '../common/usePhoneView'
 
 const SAVE_DELAY = 600
 
@@ -70,6 +71,7 @@ SaveState.propTypes = {
 export default function BrandingSettings() {
   const theme = useTheme()
   const phone = useMediaQuery(theme.breakpoints.down('md'))
+  const phoneView = usePhoneView()
   const [admin, setAdmin] = useState(null)
   const userId = Meteor.userId()
   useEffect(() => {
@@ -245,7 +247,7 @@ export default function BrandingSettings() {
   // ── What the preview and the warnings show ────────────────────────────────────────────────
   const style = useMemo(() => effectiveStyle(draft, typography), [JSON.stringify(draft), typography])
   const warnings = contrastWarnings(style)
-  const uses = brandUses({ squareLogo: logos.squareLogo, primaryLogo: logos.primaryLogo, palette, defaultPreset: draft })
+  const uses = brandUses({ squareLogo: logos.squareLogo, primaryLogo: logos.primaryLogo, palette, defaultPreset: draft }, { phone: phoneView })
   const editable = admin === true
   // On a phone the preview starts folded (a "Show preview" bar), so the kit's first control is on the
   // first screen; on a wider screen it is always open beside the kit.
@@ -377,7 +379,7 @@ export default function BrandingSettings() {
                 <Typography variant="caption" sx={{ color: u.state === 'on' ? 'success.main' : 'text.secondary', fontWeight: 650 }}>{u.state === 'on' ? 'Using your kit' : 'Slatebox defaults'}</Typography>
               </Box>
               <Typography variant="body2" color="text.secondary">{u.what}</Typography>
-              <Typography variant="caption" color="text.secondary">From: {u.from} · <Link component={RouterLink} to={u.link.to}>{u.link.label}</Link></Typography>
+              <Typography variant="caption" color="text.secondary">From: {u.from}{u.link && <> · <Link component={RouterLink} to={u.link.to}>{u.link.label}</Link></>}</Typography>
             </Box>
           ))}
         </Box>

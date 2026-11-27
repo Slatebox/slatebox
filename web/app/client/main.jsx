@@ -22,6 +22,8 @@ import { STORAGE_KEY } from '../imports/api/common/first-slate.mjs'
 import CONSTANTS from '../imports/api/common/constants'
 import Login from '../imports/ui/pages/Login'
 import GuestStartGate from '../imports/ui/components/GuestStartGate'
+import PhoneViewGate from '../imports/ui/components/PhoneViewGate'
+import PhoneAppBanner from '../imports/ui/components/PhoneAppBanner'
 import { SsoDone, SsoGate } from '../imports/ui/sso/sso'
 import { globalMessage } from '../imports/ui/jotai/atoms'
 // Sign out, and a session ending while a page is open, lead to the sign-in page.
@@ -129,14 +131,17 @@ function AppWrapper() {
       </Snackbar>
       <Router>
         <SsoGate />
+        {/* On a phone: viewing only, and the app is where slates are made (once, until dismissed). */}
+        <PhoneAppBanner />
         <Suspense fallback={null}>
         <Routes>
           <Route path="/workshops" element={<Workshops />} />
           <Route path="/present/:slateShareId" element={<Present />} />
-          <Route path="/start" element={<CreationEntry alias />} />
-          <Route path="/canvas/new" element={<CreationEntry alias />} />
-          <Route path="/new/:creativeKind" element={<GuestStartGate><NewCreativeSlate /></GuestStartGate>} />
-          <Route path="/new" element={<CreationEntry />} />
+          {/* Making a slate: on a phone, a note instead (PhoneViewGate), before any guest is made. */}
+          <Route path="/start" element={<PhoneViewGate><CreationEntry alias /></PhoneViewGate>} />
+          <Route path="/canvas/new" element={<PhoneViewGate><CreationEntry alias /></PhoneViewGate>} />
+          <Route path="/new/:creativeKind" element={<PhoneViewGate><GuestStartGate><NewCreativeSlate /></GuestStartGate></PhoneViewGate>} />
+          <Route path="/new" element={<PhoneViewGate><CreationEntry /></PhoneViewGate>} />
           <Route path="/login/:email?" element={<Login />} />
           <Route path="/oauth/consent" element={<OAuthConsent />} />
           <Route path="/device" element={<DeviceSignIn />} />

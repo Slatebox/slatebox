@@ -367,7 +367,8 @@ test("the For you cards: My slates, the library's first group, Ask Slatebox's li
   assert.match(card, /if \(freshAtMount\.current && !asked\.current\) \{\n\s+asked\.current = true/);
   // personalization off: no section; a stale idea offers no Build it; buttons stay focusable while busy; names match what shows
   assert.match(card, /if \(state\.empty\?\.code === 'personalization-off'\) return null/);
-  assert.match(card, /: !stale && <Button/);
+  // (and on a phone, which makes no slate, no Build it either: phone-view.test.mjs)
+  assert.match(card, /: !stale && canBuild && <Button/);
   assert.doesNotMatch(card, /disabled=\{busy\}|disabled=\{Boolean\(busy\)\}/);
   assert.match(card, /aria-label=\{`Open it: \$\{idea\.title\}`\}>Open it</);
   assert.match(card, /aria-label=\{building \? words\.building : words\.button\}/);

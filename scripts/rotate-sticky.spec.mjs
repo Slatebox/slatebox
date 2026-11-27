@@ -2,13 +2,13 @@
 //   (1) "the rotate icon should look like a rotate icon or something, and be a bit more prominent?"
 //   (2) "the post it note svg object should be the shape of the default note that is added - not these square svgs
 //       ... no border, ... a yellow sticky note color, and then also use the sticky note drop shadow effect right away"
-// In the real app, on a fresh guest slate, at 1440 and on a 390 phone:
+// In the real app, on a fresh guest slate, at 1440, in a 390 window and on a touch tablet:
 //   - the + menu's Sticky Note makes the default rounded note (160 x noteAt height), Lemon #fdeea6, dark text, no
 //     border, the "Sticky note" effect (postItNote shadow) on; and it keeps all that through a reload, a copy and
 //     paste, a sibling added from its plug, and the SVG export;
 //   - the dock tile is drawn as that yellow note;
 //   - the rotate knob (engine) is a screen-sized circle with a rotate icon outside the top-right corner, and a drag on
-//     it (mouse, or a finger on the phone) turns the note, with Shift snapping to 15°;
+//     it (mouse, or a finger on a tablet) turns the note, with Shift snapping to 15°;
 //   - with Ask Slatebox open and a note at its edge, the knob is not hidden under the panel: it moves to the note's
 //     top-left corner, where nothing covers it, and turns the note from there.
 //
@@ -30,7 +30,7 @@ const LEMON = '#fdeea6'
 const DARK_TEXT = '#1b1f1d'
 
 async function freshSlate(browser, { viewport, colorScheme = 'light', touch = false }) {
-  const context = await browser.newContext({ viewport, colorScheme, ...(touch && { hasTouch: true, isMobile: true }) })
+  const context = await browser.newContext({ viewport, colorScheme, ...(touch && { hasTouch: true }) })
   await context.addInitScript((mode) => localStorage.setItem('mui-mode', mode), colorScheme)
   const page = await context.newPage()
   const errors = []
@@ -239,8 +239,10 @@ test('desktop 1440: the rotate knob is a visible rotate control; drag turns the 
   await context.close()
 })
 
-test('phone 390: the add sheet Sticky Note is the yellow default note; a finger on the knob turns it', async ({ browser }) => {
-  const { context, page, errors } = await freshSlate(browser, { viewport: { width: 390, height: 844 }, touch: true })
+// A touch phone views slates and edits none (phone-view.spec.mjs). The phone-width "+ Add" sheet is checked in a
+// narrow window with a mouse (it still edits); a finger on the knob on a touch tablet (iPad mini, 744 by 1133).
+test('narrow 390: the add sheet Sticky Note is the yellow default note, with a screen-sized knob', async ({ browser }) => {
+  const { context, page, errors } = await freshSlate(browser, { viewport: { width: 390, height: 844 } })
   await page.locator('button.sb-add').click()
   const sheet = page.locator('#sb-add-sheet')
   await expect(sheet).toBeVisible({ timeout: 15000 })
@@ -259,12 +261,31 @@ test('phone 390: the add sheet Sticky Note is the yellow default note; a finger 
   await shot(page, 'after-knob-390')
   const k = await knobOf(page)
   expect(Math.abs(k.size - 28)).toBeLessThan(2)
+  expect(errors).toEqual([])
+  await context.close()
+})
+
+test('tablet 744: a finger on the knob turns a Sticky Note', async ({ browser }) => {
+  const { context, page, errors } = await freshSlate(browser, { viewport: { width: 744, height: 1133 }, touch: true })
+  // The + menu opens on a press (no hover on a touch screen).
+  await page.locator('.MuiSpeedDial-fab').click()
+  const tile = page.locator('.MuiSpeedDial-root [aria-label="stickyNote"]')
+  await expect(tile).toBeVisible({ timeout: 15000 })
+  const before = await notes(page)
+  await tile.click()
+  const [sticky] = await newest(page, before)
+  expectSticky(sticky)
+  await page.waitForTimeout(800)
+  await selectNote(page, sticky.id)
+  await page.waitForTimeout(400)
+  const k = await knobOf(page)
+  expect(Math.abs(k.size - 28)).toBeLessThan(2)
   const cdp = await context.newCDPSession(page)
   const touch = (type, pt) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pt ? [{ x: Math.round(pt.x), y: Math.round(pt.y) }] : [] })
   await touch('touchStart', k)
   for (const deg of [20, 45, 70, 88]) await touch('touchMove', around(k.centre, k, deg))
   expect(await angleOf(page, sticky.id)).toBe(90)
-  await shot(page, 'after-rotating-390')
+  await shot(page, 'after-rotating-744')
   await touch('touchEnd')
   await expect(page.locator('.slatebox-rotate-readout')).toHaveCount(0)
   expect(errors).toEqual([])

@@ -42,6 +42,7 @@ import confirmService from '../common/confirm'
 import { builderHeaderSlot, collaborationUsers, conversationArrival, conversationAvailable, conversationOpen, isPresentOpen, mermaidDialog } from '../jotai/atoms'
 import { toggledConversation } from '../../api/common/conversation-toggle.mjs'
 import { presentedBoards } from './presentations/workshopScenes.mjs'
+import usePhoneView from '../common/usePhoneView'
 
 // One entry per person (presentPeople), named as every viewer and their pointer name them.
 const peerName = p => p.userName
@@ -102,6 +103,10 @@ export default function CanvasToolbar({ slate, title, privacy, user, manage, bus
 
   const guest = Boolean(user?.isAnonymous)
   const owner = Boolean(user && user._id === slate?.userId)
+  // On a phone the slate is for viewing: no Share or Invite people (they change who may edit) and no
+  // Make a copy (it makes a slate). Copy link, Mermaid, Present and the account stay.
+  const phoneView = usePhoneView()
+  const sharer = owner && !phoneView
   // A slate opened from the library credits its author, as its licence asks (libraryOrigin, kept on every copy).
   const credit = useTracker(() => originCredit(slate?.options?.id ? Slates.findOne({ _id: slate.options.id }, { fields: { libraryOrigin: 1 } })?.libraryOrigin : null), [slate?.options?.id])
   const visibility = privacy.isPrivate ? 'Private' : privacy.isUnlisted ? 'Unlisted' : privacy.isPublic ? 'Public' : ''
@@ -190,7 +195,7 @@ export default function CanvasToolbar({ slate, title, privacy, user, manage, bus
     'divider',
     // A copy goes into your own account: for people who can edit this slate, or anyone on a public one.
     // A read-only link is for looking; it does not hand over the owner's slate.
-    user && (manage || privacy.isPublic) && !overlayKind && { key: 'copy', label: 'Make a copy', icon: <ContentCopy />, run: makeCopy },
+    user && (manage || privacy.isPublic) && !overlayKind && !phoneView && { key: 'copy', label: 'Make a copy', icon: <ContentCopy />, run: makeCopy },
     owner && manage && { key: 'delete', label: 'Delete slate…', icon: <Delete />, run: deleteSlate, danger: true },
   ].filter(Boolean).filter((item, i, list) => item !== 'divider' || (i > 0 && list[i - 1] !== 'divider' && i < list.length - 1))
 
@@ -275,7 +280,7 @@ export default function CanvasToolbar({ slate, title, privacy, user, manage, bus
           </IconButton>
         </span>
       </Tooltip>}
-      {!narrow && visibility && (owner
+      {!narrow && visibility && (sharer
         ? <ButtonBase className="sb-board-privacy" onClick={onShare} aria-label={`${visibility}. Change who can see this slate`}>
             {privacy.isPublic ? <Public /> : <Lock />}{visibility}</ButtonBase>
         : <span className="sb-board-privacy">{privacy.isPublic ? <Public /> : <Lock />}{visibility}</span>)}
@@ -295,7 +300,7 @@ export default function CanvasToolbar({ slate, title, privacy, user, manage, bus
       slotProps={{ paper: { role: 'dialog', 'aria-label': 'On this slate', sx: { width: 280, mt: 1, p: 2, pb: 1 } } }}>
       <Typography variant="overline" component="h2" sx={{ fontWeight: 700, lineHeight: 1.5 }}>On this slate</Typography>
       <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>{peerList}</Box>
-      {owner && <><Divider sx={{ my: 1 }} />
+      {sharer && <><Divider sx={{ my: 1 }} />
         <Button fullWidth color="inherit" startIcon={<GroupAdd />} sx={{ justifyContent: 'flex-start' }}
           onClick={() => { setPeopleAnchor(null); onShare() }}>Invite people</Button></>}
     </Popover>
@@ -304,7 +309,7 @@ export default function CanvasToolbar({ slate, title, privacy, user, manage, bus
     {!narrow && canAsk && <Button className="sb-ask" data-conversation-toggle color="inherit" variant="outlined" aria-pressed={Boolean(askOpen)}
       startIcon={<AutoAwesome />} aria-label="Ask Slatebox" onClick={() => { setAskOpen(toggledConversation({ open: askOpen, arrival: askArrival, now: performance.now() })); setAskArrival(null) }}><span className="sb-btn-text">Ask Slatebox</span></Button>}
     {presentButton}
-    {owner && <Button className="sb-board-share" variant="contained" color="primary" disableElevation onClick={openShare}>{shareLabel}</Button>}
+    {sharer && <Button className="sb-board-share" variant="contained" color="primary" disableElevation onClick={openShare}>{shareLabel}</Button>}
     {!narrow && !owner && slate && (privacy.isPublic || privacy.isUnlisted) &&
       <Button color="inherit" variant="outlined" startIcon={<LinkIcon />} onClick={copyLink}>Copy link</Button>}
     {!narrow && <span className="sb-board-divider" aria-hidden="true" />}

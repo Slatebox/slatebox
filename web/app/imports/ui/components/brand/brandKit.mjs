@@ -355,9 +355,10 @@ export function cleanPreset(preset) {
 // ── Where it shows up ──────────────────────────────────────────────────────────────────────────
 /**
  * What the kit changes today, item by item, for the page's "Where your brand shows up". `kit` is
- * { squareLogo, primaryLogo, palette, defaultPreset } as the page holds them.
+ * { squareLogo, primaryLogo, palette, defaultPreset } as the page holds them. `phone`: a phone views
+ * slates and makes none (phoneView.mjs), so the two links to a new slate are left off there.
  */
-export function brandUses(kit = {}) {
+export function brandUses(kit = {}, { phone = false } = {}) {
   const preset = kit.defaultPreset || null
   const style = effectiveStyle(preset)
   const has = (v) => (v ? 'on' : 'off')
@@ -368,7 +369,7 @@ export function brandUses(kit = {}) {
       what: 'Background, and the color, font and size of every new note.',
       from: 'Slate style',
       state: has(style.custom.background || style.custom.headings || style.custom.headingFont || style.custom.headingSize),
-      link: { to: '/new', label: 'Start a slate' },
+      link: phone ? null : { to: '/new', label: 'Start a slate' },
     },
     {
       key: 'ai-slates',
@@ -376,7 +377,7 @@ export function brandUses(kit = {}) {
       what: 'The AI is told to use your heading and note colors, fonts, sizes and background.',
       from: 'Slate style',
       state: has(!presetIsEmpty(preset)),
-      link: { to: '/new', label: 'Try it on a new slate' },
+      link: phone ? null : { to: '/new', label: 'Try it on a new slate' },
     },
     {
       key: 'presentations',

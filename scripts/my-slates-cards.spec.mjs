@@ -49,7 +49,8 @@ async function addNote(page, text, at = { x: 0.5, y: 0.5 }) {
 
 for (const width of [1440, 390]) {
   test(`at ${width}: a signed-in person's dark slate: its card is dark, named after the slate, one picture, and follows edits`, async ({ browser }) => {
-    const context = await browser.newContext({ viewport: { width, height: width > 600 ? 900 : 844 }, ...(width < 600 && { isMobile: true, hasTouch: true }) })
+    // At 390 a narrow window with a mouse: a touch phone views slates and makes none (phone-view.spec.mjs).
+    const context = await browser.newContext({ viewport: { width, height: width > 600 ? 900 : 844 } })
     const page = await context.newPage()
     const errors = []
     page.on('pageerror', error => errors.push(error.message))

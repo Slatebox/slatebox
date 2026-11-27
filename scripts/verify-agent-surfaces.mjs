@@ -199,7 +199,7 @@ return slatebox.slates.applyOperations({ shareId: ${JSON.stringify(share)}, expe
   if(await ok.waitFor({timeout:4000}).then(()=>true,()=>false))await ok.click()
   const cookies=editorPage.getByRole('button',{name:/^(Accept cookies|Got it)$/})
   if(await cookies.isVisible())await cookies.click()
-  const fit=editorPage.getByTitle('Fit to content',{exact:true}).first()
+  const fit=editorPage.getByTitle('Fit to screen',{exact:true}).first()
   if(await fit.isVisible())await fit.click()
   await note.dblclick()
   const editor=note.locator('[contenteditable="true"]')

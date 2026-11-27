@@ -462,7 +462,10 @@ test("the roster: people, then agents as their own group; an agent with suggesti
   assert.match(listener, /expectOwnRuns\(slate, asked, \(out\) => \(out\?\.kept\?\.length \? out\.revision : null\)\)/);
   assert.match(listener, /keepers\.set\(shareId, slate\)/);
   const canvas = await readFile(new URL("../web/app/imports/ui/pages/Canvas.jsx", import.meta.url), "utf8");
-  assert.match(canvas, /<AgentPresenceListener slate=\{slate\.current\} canEdit=\{!accessLevel\.current\.isReadOnly && !accessLevel\.current\.isCommentOnly\} \/>/);
+  // viewOnly and commentOnly are the sharing's read and comment levels, with a phone viewing only (phone-view.test.mjs).
+  assert.match(canvas, /<AgentPresenceListener slate=\{slate\.current\} canEdit=\{!viewOnly && !commentOnly\} \/>/);
+  assert.match(canvas, /const viewOnly = phoneView \|\| Boolean\(accessLevel\.current\.isReadOnly\)/);
+  assert.match(canvas, /const commentOnly = !phoneView && Boolean\(accessLevel\.current\.isCommentOnly\)/);
 });
 
 test("an agent's video note is a live suggestion like any canvas edit; a person's is saved", async (t) => {

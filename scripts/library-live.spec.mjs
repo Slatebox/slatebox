@@ -172,7 +172,9 @@ test('a board given its first rule shows it live on a page that never loaded the
 })
 
 test.describe('on a phone', () => {
-  test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true })
+  // The phone's width with a mouse: a touch phone views slates and edits none (phone-view.spec.mjs), while a
+  // narrow window keeps the chat sheet under the canvas that this checks.
+  test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 })
   test('a board kept from the chat sheet takes the screen at once (no reload), and a card drags between lanes', async ({ page }) => {
     const errors = []
     page.on('pageerror', e => errors.push(e.message))

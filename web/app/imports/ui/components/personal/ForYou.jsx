@@ -12,6 +12,7 @@ import AutoAwesomeOutlined from '@mui/icons-material/AutoAwesomeOutlined'
 import CONSTANTS from '../../../api/common/constants'
 import { IDEA_KIND_LABELS, IDEA_WORDS, buildingWords, ideasMadeLine } from '../../../api/common/personal-ideas.mjs'
 import { SECTION_HEADING, SPACE } from '../../common/AccountLayout'
+import usePhoneView from '../../common/usePhoneView'
 
 // For you: smart components and printable pages Slatebox suggests for this person's work, from what
 // they keep in About you and the tools they connected (server/personal/core.mjs). Each card shows
@@ -29,7 +30,7 @@ const reason = (error, fallback) => error?.reason || error?.message || fallback
 const waitingSx = (busy) => (busy ? { opacity: 0.6, cursor: 'default' } : null)
 const visuallyHidden = { position: 'absolute', width: '1px', height: '1px', p: 0, m: '-1px', overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0 }
 
-function IdeaCard({ idea, busy, building, stale, onBuild, onDismiss, compact }) {
+function IdeaCard({ idea, busy, building, stale, onBuild, onDismiss, compact, canBuild }) {
   const titleId = useId()
   const words = buildingWords(idea)
   return (
@@ -50,7 +51,8 @@ function IdeaCard({ idea, busy, building, stale, onBuild, onDismiss, compact }) 
         {idea.built
           ? <Button size="small" variant="contained" color="secondary" component={RouterLink} to={`/canvas/${idea.built.shareId}`} aria-label={`Open it: ${idea.title}`}>Open it</Button>
           // an idea About you no longer fits cannot be built (the section says to get new ideas)
-          : !stale && <Button size="small" variant="contained" color="secondary" onClick={() => { if (!busy) onBuild(idea) }} aria-disabled={busy || undefined} sx={waitingSx(busy)}
+          // Build it makes a slate: on a phone (phoneView.mjs) the card waits for a computer or tablet
+          : !stale && canBuild && <Button size="small" variant="contained" color="secondary" onClick={() => { if (!busy) onBuild(idea) }} aria-disabled={busy || undefined} sx={waitingSx(busy)}
             aria-label={building ? words.building : words.button} data-idea-build="">
             {building ? 'Building…' : 'Build it'}
           </Button>}
@@ -76,11 +78,13 @@ IdeaCard.propTypes = {
   onBuild: PropTypes.func.isRequired,
   onDismiss: PropTypes.func.isRequired,
   compact: PropTypes.bool.isRequired,
+  canBuild: PropTypes.bool.isRequired,
 }
 
 export default function ForYou({ variant, fresh }) {
   const signedIn = useTracker(() => Boolean(Meteor.userId() && !Meteor.user()?.isAnonymous), [])
   const navigate = useNavigate()
+  const phoneView = usePhoneView()
   const headingId = useId()
   const heading = useRef(null)
   const [state, setState] = useState(null)
@@ -198,7 +202,7 @@ export default function ForYou({ variant, fresh }) {
           sx={{ m: 0, p: 0, display: 'grid', gap: panel ? 1 : SPACE.text,
             gridTemplateColumns: panel ? 'minmax(0, 1fr)' : { xs: 'minmax(0, 1fr)', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(3, minmax(0, 1fr))' } }}>
           {ideas.map((idea) => (
-            <IdeaCard key={idea.id} idea={idea} busy={Boolean(busy)} building={busy === idea.id && !idea.built} stale={Boolean(state.stale)} onBuild={build} onDismiss={dismiss} compact={panel} />
+            <IdeaCard key={idea.id} idea={idea} busy={Boolean(busy)} building={busy === idea.id && !idea.built} stale={Boolean(state.stale)} onBuild={build} onDismiss={dismiss} compact={panel} canBuild={!phoneView} />
           ))}
         </Box>
       )}

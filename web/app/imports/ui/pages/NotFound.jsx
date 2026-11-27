@@ -6,10 +6,13 @@ import { useTracker } from 'meteor/react-meteor-data'
 import { Box, Button, Typography } from '@mui/material'
 import { TileArt } from '../components/EmptyState'
 import AppPage from '../common/AppPage'
+import usePhoneView from '../common/usePhoneView'
 
 export default function NotFound() {
   // A visitor who is not signed in is offered Sign in, not a list they do not have.
   const signedIn = useTracker(() => Boolean(Meteor.userId()), [])
+  // A phone views slates and makes none (phoneView.mjs): no Start a new slate there.
+  const phoneView = usePhoneView()
   const home = { variant: 'contained', color: 'primary', disableElevation: true, size: 'large', sx: { borderRadius: 6, px: 3 } }
   return (
     // the shared page layout's edges; the message itself sits in the middle of the page, as an empty list's does
@@ -30,9 +33,9 @@ export default function NotFound() {
         {signedIn
           ? <Button component={Link} to="/" {...home}>Open My slates</Button>
           : <Button component={Link} to="/login" {...home}>Sign in</Button>}
-        <Button component={Link} to="/new" variant="outlined" color="primary" size="large" sx={{ borderRadius: 6, px: 3 }}>
+        {!phoneView && <Button component={Link} to="/new" variant="outlined" color="primary" size="large" sx={{ borderRadius: 6, px: 3 }}>
           Start a new slate
-        </Button>
+        </Button>}
       </Box>
     </AppPage>
   )

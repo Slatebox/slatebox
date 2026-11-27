@@ -1,6 +1,7 @@
 // What a slate list says when it has nothing to show (components/DisplaySlates.jsx): a title, a
-// line on why, and the one thing to do next. A filter that matched nothing offers to clear it.
-export function emptySlatesCopy({ type, signedIn, filter = '', privateOnly = false }) {
+// line on why, and the one thing to do next. A filter that matched nothing offers to clear it. On a phone
+// (phoneView.mjs) slates are viewed, not made: the list says where they come from and offers no start.
+export function emptySlatesCopy({ type, signedIn, filter = '', privateOnly = false, phone = false }) {
   const words = (filter || '').trim()
   if (words) {
     const what = type === 'team' ? 'team slates' : 'slates'
@@ -8,9 +9,11 @@ export function emptySlatesCopy({ type, signedIn, filter = '', privateOnly = fal
   }
   const start = { label: 'Start a slate', to: '/new' }
   if (type === 'team') {
-    return { title: 'No team slates yet', body: 'Slates your teammates make, and the ones you share with the team, show up here.', action: start }
+    const body = 'Slates your teammates make, and the ones you share with the team, show up here.'
+    return phone ? { title: 'No team slates yet', body } : { title: 'No team slates yet', body, action: start }
   }
   if (privateOnly) return { title: 'No private slates', body: 'Every slate you have is shared. Turn off Private to see them all.' }
+  if (phone) return { title: 'No slates yet', body: 'Slates you make on a computer or tablet show up here.' }
   return {
     title: 'No slates yet',
     body: 'Start with a blank slate, a board or a diagram. Ask Slatebox can draw the first one with you.',

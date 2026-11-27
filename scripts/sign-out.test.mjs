@@ -131,7 +131,8 @@ test('private pages send someone who signed out to sign in; guest-making pages a
   // /new with no hash: the first run or a blank slate, both behind the same gate (each makes a guest).
   assert.match(main, /<GuestStartGate>\{route === 'first' \? <FirstSlate \/> : <GetStarted \/>\}<\/GuestStartGate>/)
   assert.match(main, /<GuestStartGate><NewCreativeSlate fromBrief \/><\/GuestStartGate>/)
-  assert.match(main, /path="\/new\/:creativeKind" element=\{<GuestStartGate><NewCreativeSlate \/><\/GuestStartGate>\}/)
+  // (on a phone, PhoneViewGate around it shows a note first and makes no guest: phone-view.test.mjs)
+  assert.match(main, /path="\/new\/:creativeKind" element=\{<PhoneViewGate><GuestStartGate><NewCreativeSlate \/><\/GuestStartGate><\/PhoneViewGate>\}/)
   const gate = app('imports/ui/components/GuestStartGate.jsx')
   assert.match(gate, /if \(!userId && !loggingIn && !mayStart\) return <Navigate replace to=\{SIGN_IN_PATH\} \/>/)
   // The canvas makes no guest by itself: a shared link opened signed out is a visitor, as before.

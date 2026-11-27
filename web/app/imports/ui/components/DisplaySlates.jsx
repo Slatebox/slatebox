@@ -30,6 +30,7 @@ import RecentlyJoined from './RecentlyJoined'
 import ForYou from './personal/ForYou'
 import EmptyState from './EmptyState'
 import { emptySlatesCopy, slateListView, SLATES_FAILED_COPY } from '../common/emptySlates.mjs'
+import usePhoneView from '../common/usePhoneView'
 import Title from './Title'
 import SnapSlate from './SnapSlate'
 import SlateMenu from './SlateMenu'
@@ -59,6 +60,8 @@ export default function DisplaySlates({
   const theme = useTheme()
   const t = useTranslator()
   const mdmq = useMediaQuery(theme.breakpoints.up('md'))
+  // A phone opens and browses slates; it does not make them (phoneView.mjs).
+  const phoneView = usePhoneView()
   const lgmq = useMediaQuery(theme.breakpoints.up('lg'))
   const xlmq = useMediaQuery(theme.breakpoints.up('xl'))
 
@@ -267,7 +270,7 @@ export default function DisplaySlates({
   }
   const view = slateListView({ signedIn: Boolean(Meteor.userId()), loading, answer })
   const empty = emptySlatesCopy({ type, signedIn: Boolean(Meteor.userId()), filter: slateFilter.filterString,
-    privateOnly: type === 'mine' && slateFilter.privateOnly })
+    privateOnly: type === 'mine' && slateFilter.privateOnly, phone: phoneView })
 
   let headerMessage = getTranslation('slates', 'mySlates')
   let subHeaderMessage = getTranslation('slates', 'mySlatesSubHeader')
@@ -328,7 +331,7 @@ export default function DisplaySlates({
         >
           <Title
             key={titleKey}
-            showAdd
+            showAdd={!phoneView}
             showSearch
             searchOptions={tags.map((t) => t.tag)}
             // New, among slates already made: a blank slate (the first run is for Create slate before any).
