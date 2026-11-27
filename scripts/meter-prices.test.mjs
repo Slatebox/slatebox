@@ -74,6 +74,8 @@ test('fixed prices, estimates and per-action ceilings', () => {
     'personal.build': 5000,
     // learning from a connected tool (S3, 2026-11-26): one call, chat's estimate
     'profile.sources': 2000,
+    // learning from a data export (S3, 2026-11-26): one call over a slightly longer sample
+    'profile.import': 3000,
     // the start page's use-case interview (S6, 2026-11-26): one conversation turn, chat's estimate
     'start.interview': 2000,
     // a guest's build of a start page tile (S6): board drafts under the guest allowance's key, board drafting's estimate
@@ -84,6 +86,7 @@ test('fixed prices, estimates and per-action ceilings', () => {
   assert.equal(actionCeilingMicros('interview'), 50_000)
   assert.equal(actionCeilingMicros('personal.suggest'), 50_000)
   assert.equal(actionCeilingMicros('profile.sources'), 50_000)
+  assert.equal(actionCeilingMicros('profile.import'), 50_000)
   // the most one minute of voice may spend
   for (const feature of ['voice', 'voice-chat', 'voice-interview']) assert.equal(actionCeilingMicros(feature), 200_000, feature)
   assert.equal(actionCeilingMicros('generation'), 200_000)

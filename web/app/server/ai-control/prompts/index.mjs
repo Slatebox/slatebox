@@ -13,9 +13,10 @@ import interview from './interview.mjs'
 import personal from './personal.mjs'
 import voice from './voice.mjs'
 import profileSources from './profile-sources.mjs'
+import profileImport from './profile-import.mjs'
 import start from './start.mjs'
 
-export const prompts = createPromptRegistry([shape, workshop, exec, agent, presentation, library, connectors, interview, personal, voice, profileSources, start])
+export const prompts = createPromptRegistry([shape, workshop, exec, agent, presentation, library, connectors, interview, personal, voice, profileSources, profileImport, start])
 
 /** The text a call site sends for a prompt: a pinned or published version, else version 0. */
 export const promptText = (id, values) => prompts.text(id, values)

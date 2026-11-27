@@ -339,6 +339,31 @@ switch off stops Slatebox using it, and you can edit, hide or remove it like any
 - Methods: `profile.sources.list`, `profile.sources.read`, `profile.sources.keep`, for the signed-in
   person in the app only (no token reads your tools for personalization).
 
+### Learn from a data export
+
+Profile › About you › **Learn from a data export** takes the copy of your data that LinkedIn (*Get a
+copy of your data*), Facebook or Instagram (*Download your information*, with only your profile
+information, in the format other services can import) sends you, as the .zip file it came in, up to
+15 MB. It works on every install, with or without integrations.
+
+- The server reads only a few files of the export (on LinkedIn your profile, positions, skills,
+  education, certifications, languages and projects; on Facebook and Instagram your profile
+  information and your topics) and only a few fields of those: a headline, job titles and
+  employers, skills, schools, a bio and topics. Messages, connections, contacts, photos, names,
+  addresses, birthdays and anything about your private life are never read, and email addresses,
+  links and phone numbers are taken out of what is.
+- The file is read in memory and dropped: nothing from it is stored. The zip is read within fixed
+  limits (how many entries, how many files, how large each may grow), and a file built to exhaust
+  the server is refused.
+- What it read is sent to the model wrapped as data, never as instructions. The agent proposes a few
+  facts, shown as chips: **Keep** or **Skip** each. A kept fact says *From your LinkedIn upload*;
+  keeping one switches that upload on, and **Use your LinkedIn upload to personalize** turns it off.
+- Counted like any other agent request (feature `profile.import`). Administrators bind or turn off its model in /admin/ai (part
+  *Learning from your data exports*, which follows the conversation until bound) and edit its prompts
+  there (`profile.import.facts`, `.sample`, `.tool`, `.retry`).
+- Methods: `profile.import.list`, `profile.import.read`, `profile.import.keep`, for the signed-in
+  person in the app only.
+
 ## For agents and scripts (exec, API, MCP)
 
 | Action | Route | MCP tool |

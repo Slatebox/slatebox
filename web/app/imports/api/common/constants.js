@@ -292,6 +292,12 @@ const CONSTANTS = {
         read: 'profile.sources.read',
         keep: 'profile.sources.keep',
       },
+      // Learn from a data export (server/methods/profile-import.js): the uploads kept, reading one, keeping what it proposed
+      import: {
+        list: 'profile.import.list',
+        read: 'profile.import.read',
+        keep: 'profile.import.keep',
+      },
     },
     // For you (server/actions/personal.mjs): ideas made for the person, from About you, and building one
     personal: {

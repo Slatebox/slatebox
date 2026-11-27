@@ -14,7 +14,8 @@
 // describe; the shapes methods the conversation calls keep their lines): generated from the registry, no prompt text changed.
 // The wide gallery (2026-11-26) gave every gallery card its planner hint (connectors:plan:<card> after the first
 // eight), and learning from a connected tool (S3) two sites of its own (profile.sources:look, :lookKnown): all born
-// in the registry, recorded new, and every site before them kept its bytes.
+// in the registry, recorded new, and every site before them kept its bytes. Learning from a data export (S3, same day)
+// added two (profile.import:linkedin, :known), born in the registry and recorded new; every site before them kept its bytes.
 // The start page (S6, 2026-11-26) added five (start:first, start:known, start:plan, tile:draft:component, tile:draft:grid):
 // the use-case interview's turns and a tile's board drafted, born in the registry; every site before them kept its bytes.
 // Its review (same day) recorded those five again: the agent's earlier questions wrapped as data, each board named in the
@@ -59,7 +60,7 @@ test('every prompt in the registry is one those sites ask for, so the golden pro
 
 test('the registry: S5 surfaces, unique slots, declared variables, no all-caps placeholder tokens', () => {
   const surfaces = new Set(SURFACES.map((s) => s.id))
-  for (const id of ['shape', 'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'presentation', 'library', 'interview', 'personal.suggest', 'profile.sources', 'start.interview']) assert.ok(CODE_SLOTS[id], `${id} has prompts`)
+  for (const id of ['shape', 'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'presentation', 'library', 'interview', 'personal.suggest', 'profile.sources', 'profile.import', 'start.interview']) assert.ok(CODE_SLOTS[id], `${id} has prompts`)
   for (const prompt of prompts.list) {
     assert.ok(surfaces.has(prompt.surface), prompt.id)
     assert.equal(CODE_SLOTS[prompt.surface][prompt.slot], prompt.id)

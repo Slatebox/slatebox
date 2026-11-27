@@ -44,11 +44,12 @@ const ESTIMATES_BEFORE = {
 // drafting's estimate and the meter's default ceiling (5,000 and 50,000 µ$). The start page's use-case interview (S6,
 // 2026-11-26) is a conversation turn, metered as chat's (2,000 and 50,000 µ$); a guest's build of its tile is a board draft
 // on workshop.draft under a meter key of its own (start.build, the guest allowance's), so board drafting's (5,000 and 50,000 µ$).
-// Learning from a connected tool (S3, 2026-11-26) is one call, metered as a conversation turn (2,000 and 50,000 µ$).
+// Learning from a connected tool (S3, 2026-11-26) is one call, metered as a conversation turn (2,000 and 50,000 µ$); learning
+// from a data export (S3) is one call over a slightly longer sample (3,000 and 50,000 µ$).
 // Voice (2026-11-26) is metered by the minute under each voice part's own feature: a minute is held for
 // 50,000 µ$ and may spend at most 200,000 µ$ (server/voice/meter.mjs).
-const ESTIMATES_ADDED = { interview: 2000, 'personal.suggest': 3000, 'personal.build': 5000, 'start.interview': 2000, 'start.build': 5000, 'profile.sources': 2000, voice: 50_000, 'voice-chat': 50_000, 'voice-interview': 50_000 }
-const CEILINGS_ADDED = { interview: 50_000, 'personal.suggest': 50_000, 'personal.build': 50_000, 'start.interview': 50_000, 'start.build': 50_000, 'profile.sources': 50_000, voice: 200_000, 'voice-chat': 200_000, 'voice-interview': 200_000 }
+const ESTIMATES_ADDED = { interview: 2000, 'personal.suggest': 3000, 'personal.build': 5000, 'start.interview': 2000, 'start.build': 5000, 'profile.sources': 2000, 'profile.import': 3000, voice: 50_000, 'voice-chat': 50_000, 'voice-interview': 50_000 }
+const CEILINGS_ADDED = { interview: 50_000, 'personal.suggest': 50_000, 'personal.build': 50_000, 'start.interview': 50_000, 'start.build': 50_000, 'profile.sources': 50_000, 'profile.import': 50_000, voice: 200_000, 'voice-chat': 200_000, 'voice-interview': 200_000 }
 const CEILINGS_BEFORE = { generation: 200_000, vision: 200_000, presentation: 200_000, shape: 60_000 }
 
 test('every request feature reaches the same choice as before the catalogue', () => {
@@ -112,10 +113,13 @@ test('library and connectors have landed: both are in this build; connectors run
   assert.equal(surface('connectors').edition, null)
   const inBuild = SURFACES.filter((s) => s.inBuild && s.useKey).map((s) => s.id)
   assert.deepEqual(inBuild, ['default', 'chat', 'chat.route', 'generation', 'generation.notes', 'presentation', 'vision', 'images', 'shape',
-    'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors', 'interview', 'personal.suggest', 'profile.sources', 'start.interview', 'voice', 'voice.chat', 'voice.interview'])
+    'workshop', 'workshop.draft', 'canvas', 'agent.slatebox', 'library', 'connectors', 'interview', 'personal.suggest', 'profile.sources', 'profile.import', 'start.interview', 'voice', 'voice.chat', 'voice.interview'])
   // learning from a connected tool follows the conversation until an administrator binds it, like the interview
   assert.deepEqual(followChain('profile.sources'), ['profile.sources', 'chat', 'default'])
   assert.equal(surfaceForRequest('profile.sources'), 'profile.sources')
+  // and so does learning from a data export
+  assert.deepEqual(followChain('profile.import'), ['profile.import', 'chat', 'default'])
+  assert.equal(surfaceForRequest('profile.import'), 'profile.import')
 })
 
 test('the features people choose first are the catalogue rows that follow default, unchanged, then library (a row of its own that follows chat)', () => {

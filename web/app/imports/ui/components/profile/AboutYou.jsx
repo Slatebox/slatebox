@@ -17,6 +17,7 @@ import { AccountActions, AccountPanel, AccountSection, FinePrint, SPACE } from '
 import { agentInviteOn } from '../../../api/common/edition.mjs'
 import Interview from './Interview'
 import ToolSources from './ToolSources'
+import ExportUpload from './ExportUpload'
 
 // Profile › About you: what Slatebox knows about the person, so it can suggest boards and slates
 // made for their work. Only they see it. Every fact says where it came from and can be changed,
@@ -25,6 +26,8 @@ import ToolSources from './ToolSources'
 // Slatebox about your work" opens the interview (Interview.jsx): the agent asks, the person keeps.
 // "Use your tools to personalize" (ToolSources.jsx, where integrations run): a switch per connected
 // tool, off until turned on, and a look around it whose proposals the person keeps or skips.
+// "Learn from a data export" (ExportUpload.jsx, every install): a LinkedIn, Facebook or Instagram
+// export the person uploads, read on the server and dropped, whose proposals they keep or skip.
 const M = CONSTANTS.methods.profile
 const reason = (error, fallback) => error?.reason || error?.message || fallback
 const field = { maxWidth: 480 }
@@ -351,9 +354,17 @@ export default function AboutYou() {
           <FinePrint>Slatebox only looks things up, never changes anything there, and reads nothing from a tool whose switch is off.</FinePrint>
           {loaded && !settings.on && <FinePrint>Turn on personalization above to use your tools.</FinePrint>}
           {loaded && <ToolSources settings={settings} setSource={setSource} onKept={load} announce={announce} />}
-          {error.at.startsWith('source:') && <Alert severity="warning" role="alert">{error.message}</Alert>}
+          {error.at.startsWith('source:integration:') && <Alert severity="warning" role="alert">{error.message}</Alert>}
         </AccountSection>
       )}
+
+      <AccountSection title="Learn from a data export" data-about-you-uploads="">
+        <Typography>Upload the copy of your data that LinkedIn, Facebook or Instagram sends you. Slatebox reads a few things from it, such as your headline, your job titles, your skills and your topics, and suggests what to keep. Nothing is kept until you choose Keep.</Typography>
+        <FinePrint>LinkedIn: Settings › Data privacy › Get a copy of your data. Facebook and Instagram: Accounts Center › Your information and permissions › Download your information, with only your profile information, in the format other services can import. Slatebox never reads your messages, contacts or photos, and keeps none of the file.</FinePrint>
+        {loaded && !settings.on && <FinePrint>Turn on personalization above to learn from an export.</FinePrint>}
+        {loaded && <ExportUpload settings={settings} setSource={setSource} onKept={load} announce={announce} />}
+        {error.at.startsWith('source:upload:') && <Alert severity="warning" role="alert">{error.message}</Alert>}
+      </AccountSection>
 
       <AccountSection title="Add something about you">
         <Box component="form" onSubmit={add} sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: SPACE.text }} aria-label="Add something about you">

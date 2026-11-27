@@ -116,6 +116,10 @@ export const SURFACES = defineSurfaces([
   // Learning from a connected tool (About you › "Use <tool> to personalize", S3): one call turns a small, quarantined
   // sample of the tool into a few proposed facts with its propose_facts tool. One call, metered as a conversation turn.
   { id: 'profile.sources', title: 'Learning from your tools (About you)', follows: 'chat', needs: ['tools'], requestFeatures: ['profile.sources'], meterFeatures: ['profile.sources'], estimate: 2000, ceiling: 50000 },
+  // Learning from a data export (About you › "Learn from a data export", S3): one call turns a few scrubbed fields of the
+  // person's LinkedIn, Facebook or Instagram export into a few proposed facts with its propose_facts tool. Its sample is a
+  // little longer than a tool's, so a little more than a conversation turn is held (3,000 µ$; the default 50,000 ceiling).
+  { id: 'profile.import', title: 'Learning from your data exports (About you)', follows: 'chat', needs: ['tools'], requestFeatures: ['profile.import'], meterFeatures: ['profile.import'], estimate: 3000, ceiling: 50000 },
   // The use-case interview on the start page (/new, "Talk it through with Slatebox", server/start): the agent asks what the
   // person wants Slatebox to make and a few specific questions with its ask tool, one at a time, and ends with a plan of one
   // to four boards (propose_plan), kept as their own tile. A conversation turn, metered as one (chat's estimate and

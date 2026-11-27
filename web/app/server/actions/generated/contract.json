@@ -10297,6 +10297,14 @@
                 "maxLength": 48,
                 "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
               },
+              "profile.import": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 48,
+                "description": "me:<name> or team:<name> for a connection, builtin for this server's model (Admin → AI control), null to clear."
+              },
               "start.interview": {
                 "type": [
                   "string",
@@ -10950,6 +10958,7 @@
               "interview",
               "personal.suggest",
               "profile.sources",
+              "profile.import",
               "start.interview",
               "voice",
               "voice.chat",
@@ -11113,6 +11122,10 @@
               "profile.sources.sample",
               "profile.sources.retry",
               "profile.sources.tool",
+              "profile.import.facts",
+              "profile.import.sample",
+              "profile.import.retry",
+              "profile.import.tool",
               "start.interview.system",
               "start.interview.plan",
               "start.interview.retry",
@@ -12123,7 +12136,7 @@
           "changes": {
             "type": "array",
             "minItems": 1,
-            "maxItems": 22,
+            "maxItems": 23,
             "items": {
               "type": "object",
               "properties": {
@@ -12147,6 +12160,7 @@
                     "interview",
                     "personal.suggest",
                     "profile.sources",
+                    "profile.import",
                     "start.interview",
                     "voice",
                     "voice.chat",
@@ -12457,6 +12471,10 @@
               "profile.sources.sample",
               "profile.sources.retry",
               "profile.sources.tool",
+              "profile.import.facts",
+              "profile.import.sample",
+              "profile.import.retry",
+              "profile.import.tool",
               "start.interview.system",
               "start.interview.plan",
               "start.interview.retry",
@@ -12696,6 +12714,10 @@
               "profile.sources.sample",
               "profile.sources.retry",
               "profile.sources.tool",
+              "profile.import.facts",
+              "profile.import.sample",
+              "profile.import.retry",
+              "profile.import.tool",
               "start.interview.system",
               "start.interview.plan",
               "start.interview.retry",
@@ -12964,6 +12986,10 @@
               "profile.sources.sample",
               "profile.sources.retry",
               "profile.sources.tool",
+              "profile.import.facts",
+              "profile.import.sample",
+              "profile.import.retry",
+              "profile.import.tool",
               "start.interview.system",
               "start.interview.plan",
               "start.interview.retry",
@@ -13231,6 +13257,10 @@
               "profile.sources.sample",
               "profile.sources.retry",
               "profile.sources.tool",
+              "profile.import.facts",
+              "profile.import.sample",
+              "profile.import.retry",
+              "profile.import.tool",
               "start.interview.system",
               "start.interview.plan",
               "start.interview.retry",
@@ -13287,6 +13317,7 @@
               "interview",
               "personal.suggest",
               "profile.sources",
+              "profile.import",
               "start.interview",
               "voice",
               "voice.chat",

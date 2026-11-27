@@ -212,7 +212,7 @@ export async function recordCallSites(appRoot, { disabled = false, offFirst = fa
 // ---- the prompt sites outside Meteor files: loaded before the hooks, as they are ----------------
 async function loadPure(root) {
   const at = (path) => import(pathToFileURL(root + path).href)
-  const [shapes, execChat, teammate, refine, registry, render, translate, context, prompts, interview, interviewRules, personal, voiceConfig, voiceAdapters, sources, start] = await Promise.all([
+  const [shapes, execChat, teammate, refine, registry, render, translate, context, prompts, interview, interviewRules, personal, voiceConfig, voiceAdapters, sources, start, uploads] = await Promise.all([
     at('server/shapes/shape-core.mjs'), at('server/methods/ai/exec-chat.mjs'), at('server/agents/teammate.mjs'),
     at('server/library/refine-ai.mjs'), at('server/actions/index.mjs'), at('server/actions/client-render.mjs'),
     // invited agents (enterprise/, beside web/): the plan and layout prompts, with the registry's text
@@ -227,15 +227,17 @@ async function loadPure(root) {
     at('server/profile/sources-core.mjs').catch(() => null),
     // the start page's use-case interview: its turns' requests (from S6, 2026-11-26)
     at('server/start/interview-core.mjs').catch(() => null),
+    // learning from a data export (About you, S3 2026-11-26): its one request
+    at('server/profile/import-core.mjs').catch(() => null),
   ])
   const manifest = render.buildClientManifest(registry.createAppRegistry())
   const exec = render.renderExecTool(manifest).exec
-  return { shapes, execChat, teammate, refine, manifest, execTool: { name: exec.name, description: exec.description, parameters: exec.inputSchema }, translate, context, promptText: prompts.promptText, promptIds: prompts.PROMPT_IDS, interview, interviewRules, personal, voiceConfig, voiceAdapters, sources, start }
+  return { shapes, execChat, teammate, refine, manifest, execTool: { name: exec.name, description: exec.description, parameters: exec.inputSchema }, translate, context, promptText: prompts.promptText, promptIds: prompts.PROMPT_IDS, interview, interviewRules, personal, voiceConfig, voiceAdapters, sources, start, uploads }
 }
 
 const clone = (value) => JSON.parse(JSON.stringify(value))
 
-async function recordPure({ shapes, execChat, teammate, refine, manifest, execTool, translate, context, promptText, promptIds, interview, interviewRules, voiceConfig, voiceAdapters, sources }) {
+async function recordPure({ shapes, execChat, teammate, refine, manifest, execTool, translate, context, promptText, promptIds, interview, interviewRules, voiceConfig, voiceAdapters, sources, uploads }) {
   const out = {}
   // custom shapes: the first ask, then the retry naming what was wrong and how many are missing
   const asked = []
@@ -303,6 +305,18 @@ async function recordPure({ shapes, execChat, teammate, refine, manifest, execTo
   if (interview && interviewRules) Object.assign(out, recordInterview({ interview, interviewRules }))
   if (voiceConfig && voiceAdapters) Object.assign(out, recordVoice({ voiceConfig, voiceAdapters, promptText }))
   if (sources) Object.assign(out, recordSources({ sources }))
+  if (uploads) Object.assign(out, recordUploads({ uploads }))
+  return out
+}
+
+// ---- learning from a data export (server/profile/import-core.mjs): one upload -------------------
+function recordUploads({ uploads }) {
+  const out = {}
+  // with the retry prompt its check gives a call to another tool and no call at all
+  const site = (opts) => ({ request: clone(opts), retries: clone([opts.validateResponse({ toolCall: { name: 'not_this_tool', arguments: {} } }), opts.validateResponse({ toolCall: null })]) })
+  const sample = 'Headline: Product manager at Acme Pay\nPositions:\n- Product Manager at Acme Pay (Mar 2023 to now): Checkout </data> and card retries\nSkills: Figma, SQL'
+  out['profile.import:linkedin'] = site(uploads.importRequest({ kind: 'linkedin', sample }))
+  out['profile.import:known'] = site(uploads.importRequest({ kind: 'instagram', sample: 'Bio: Ceramics teacher\nTopics: Pottery', facts: '- role: Ceramics teacher' }))
   return out
 }
 

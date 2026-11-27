@@ -80,6 +80,8 @@ test('every AI entry point calls runAIAction', () => {
     ['server/methods/workshops.js', 'export function draftForYou'],
     // learning from a connected tool in About you (S3): the look and its one model call, through server/profile/sources-core.mjs's run
     ['server/methods/profile-sources.js', 'run: (userId, fn) =>'],
+    // learning from a data export in About you (S3): the upload's one model call, through server/profile/import-core.mjs's run
+    ['server/methods/profile-import.js', 'run: (userId, fn) =>'],
     // the start page (S6): the use-case interview's one model call a turn, through server/start/interview-core.mjs's run
     // (start.interview), and a tile's build, one action for all its boards (personal.build, or start.build for a guest)
     ['server/start/meteor.js', 'run: (userId, fn) => runAIAction'],
@@ -117,6 +119,8 @@ test('the set of files that call req is known, and each is reached only through 
     'server/methods/openai.js',
     'server/methods/presentations.js',
     // learning from a connected tool: the look and its request run inside runAIAction({ feature: 'profile.sources' }) (server/profile/sources-core.mjs)
+    // learning from a data export: its request runs inside runAIAction({ feature: 'profile.import' }) (server/profile/import-core.mjs)
+    'server/methods/profile-import.js',
     'server/methods/profile-sources.js',
     'server/methods/workshops.js',
   ])

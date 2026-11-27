@@ -42,6 +42,7 @@ import './methods/interview'
 import './voice/meteor'
 // learning from a connected tool in About you (server/profile/sources-core.mjs)
 import './methods/profile-sources'
+import './methods/profile-import'
 import './methods/excalidraw-share'
 import './agents/meteor'
 import './agents/suggestions-meteor'

@@ -33,15 +33,18 @@ const turn = (costMicros = 3000) => runAIAction({ feature: 'interview' }, async 
 })
 test.afterEach(() => installMeter(null))
 
-test('the defaults live in one place: 20 interview turns, 5 For you runs, 3 builds, 20 start page turns and 5 tool look-arounds a day, all five paid for', () => {
-  assert.deepEqual({ ...DEFAULT_PERSONAL_ALLOWANCE }, { interview: 20, 'start.interview': 20, 'personal.suggest': 5, 'personal.build': 3, 'profile.sources': 5 })
+test('the defaults live in one place: 20 interview turns, 5 For you runs, 3 builds, 20 start page turns, 5 tool look-arounds and 3 export reads a day, all six paid for', () => {
+  assert.deepEqual({ ...DEFAULT_PERSONAL_ALLOWANCE }, { interview: 20, 'start.interview': 20, 'personal.suggest': 5, 'personal.build': 3, 'profile.sources': 5, 'profile.import': 3 })
   assert.equal(DEFAULT_METERING.personalAllowance, DEFAULT_PERSONAL_ALLOWANCE)
-  assert.deepEqual(resolveMetering().personalAllowance, { interview: 20, 'start.interview': 20, 'personal.suggest': 5, 'personal.build': 3, 'profile.sources': 5 })
+  assert.deepEqual(resolveMetering().personalAllowance, { interview: 20, 'start.interview': 20, 'personal.suggest': 5, 'personal.build': 3, 'profile.sources': 5, 'profile.import': 3 })
   // For you joined on 2026-11-26 (owner): its ideas and building one; then the start page's use-case interview (S6), whose
   // tile builds are personal.build too (one use for a whole build)
   // ... and the look-around in a connected tool for About you (profile.sources), the same day
-  assert.deepEqual([...PERSONAL_FEATURES], ['interview', 'personal.suggest', 'personal.build', 'start.interview', 'profile.sources'])
+  // ... and a data export read for About you (profile.import), the same day: 3 a day (an export is uploaded once or twice)
+  assert.deepEqual([...PERSONAL_FEATURES], ['interview', 'personal.suggest', 'personal.build', 'start.interview', 'profile.sources', 'profile.import'])
   assert.equal(allowancePerDay('profile.sources', resolveMetering()), 5)
+  assert.equal(allowancePerDay('profile.import', resolveMetering()), 3)
+  assert.equal(allowanceField('profile.import'), 'allowance_profile_import')
   assert.equal(allowancePerDay('start.interview', resolveMetering()), 20)
   const settings = resolveMetering()
   assert.equal(allowancePerDay('interview', settings), 20)
@@ -53,7 +56,7 @@ test('the defaults live in one place: 20 interview turns, 5 For you runs, 3 buil
   assert.equal(allowanceField('personal.suggest'), 'allowance_personal_suggest')
   assert.equal(allowanceField('personal.build'), 'allowance_personal_build')
   const example = JSON.parse(read('web/app/settings.example.json'))
-  assert.deepEqual(example.metering.personalAllowance, { interview: 20, 'personal.suggest': 5, 'personal.build': 3, 'start.interview': 20, 'profile.sources': 5 })
+  assert.deepEqual(example.metering.personalAllowance, { interview: 20, 'personal.suggest': 5, 'personal.build': 3, 'start.interview': 20, 'profile.sources': 5, 'profile.import': 3 })
   assert.match(example.metering['//personalAllowance'], /UTC day/)
 })
 
@@ -182,10 +185,10 @@ test('past the allowance the meter applies unchanged: Pro credits, a balance, or
 })
 
 test('settings: the operator overrides the defaults (checked at start), a stored value wins, 0 turns it off', () => {
-  assert.deepEqual(resolveMetering({ deploy: { personalAllowance: { interview: 3 } } }).personalAllowance, { interview: 3, 'start.interview': 20, 'personal.suggest': 5, 'personal.build': 3, 'profile.sources': 5 })
+  assert.deepEqual(resolveMetering({ deploy: { personalAllowance: { interview: 3 } } }).personalAllowance, { interview: 3, 'start.interview': 20, 'personal.suggest': 5, 'personal.build': 3, 'profile.sources': 5, 'profile.import': 3 })
   assert.deepEqual(resolveMetering({ deploy: { personalAllowance: { interview: 3 } }, stored: { personalAllowance: { interview: 7 } } }).personalAllowance.interview, 7)
   // a settings file's notes are not features
-  assert.deepEqual(resolvePersonalAllowance({ deploy: { '//': 'note', interview: 10 } }), { interview: 10, 'start.interview': 20, 'personal.suggest': 5, 'personal.build': 3, 'profile.sources': 5 })
+  assert.deepEqual(resolvePersonalAllowance({ deploy: { '//': 'note', interview: 10 } }), { interview: 10, 'start.interview': 20, 'personal.suggest': 5, 'personal.build': 3, 'profile.sources': 5, 'profile.import': 3 })
   for (const bad of [{ interview: -1 }, { interview: 2.5 }, { interview: '20' }, { workshop: 5 }, [], 'twenty']) {
     assert.throws(() => resolveMetering({ deploy: { personalAllowance: bad } }), /personalAllowance/, JSON.stringify(bad))
   }
@@ -320,12 +323,13 @@ test('operators find allowance spenders: the top free spenders include the allow
 // stay on the meter as before.
 const IDEAS_USED_UP = "You've used today's free ideas from Slatebox. They come back tomorrow, or keep going with Pro or your own key."
 const BUILDS_USED_UP = "You've used today's free builds of your ideas. They come back tomorrow, or keep going with Pro or your own key."
+const IMPORTS_USED_UP = "You've used today's free reads of your data exports. They come back tomorrow, or keep going with Pro or your own key."
 const forYouRun = (feature, costMicros = 3000) => runAIAction({ feature }, async action => {
   await chargeProviderCall({ ref: 'for-you-' + refs++, provider: 'p', model: 'm', usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 }, costMicros })
   return action.route
 })
 
-for (const [feature, perDay, usedUp] of [['personal.suggest', 5, IDEAS_USED_UP], ['personal.build', 3, BUILDS_USED_UP]]) {
+for (const [feature, perDay, usedUp] of [['personal.suggest', 5, IDEAS_USED_UP], ['personal.build', 3, BUILDS_USED_UP], ['profile.import', 3, IMPORTS_USED_UP]]) {
   test(`${feature}: ${perDay} a day are counted and cost the person nothing; used up, the meter decides with its own words`, async () => {
     const w = await meterWorld({ person: fresh, settings: cloud() })
     for (let i = 0; i < perDay; i++) assert.equal(await forYouRun(feature), 'allowance', `run ${i + 1}`)

@@ -13,6 +13,8 @@ const AI = ['openai.chat', 'openai.welcome', 'openai.routeSlateMessage', 'worksh
   'voice.open',
   // a look around a connected tool in About you: outside lookups and one agent call
   'profile.sources.read',
+  // an uploaded data export read in About you: one agent call
+  'profile.import.read',
   // the start page: its use-case interview's turns, and building a tile (first build or a fresh version)
   'start.interview.turn', 'start.tiles.build', 'start.tiles.rebuild']
 const CALLS = ['daily.join', 'daily.useVideo']
