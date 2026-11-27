@@ -63,7 +63,7 @@
     "@fontsource/titan-one": "^5.1.0",
     "@hpcc-js/wasm": "^2.22.3",
     "@modelcontextprotocol/client": "2.4.0",
-    "@modelcontextprotocol/sdk": "1.29.0",
+    "@modelcontextprotocol/sdk": "1.32.0",
     "@mui/icons-material": "^6.1.4",
     "@mui/lab": "^6.0.0-beta.12",
     "@mui/material": "^6.1.4",
