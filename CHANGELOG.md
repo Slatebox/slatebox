@@ -20,6 +20,10 @@ shipped early. The next release is 2.0.0, which is above both lines.
 
 ## [Unreleased]
 
+## [2.1.4] - 2026-11-27
+
+No user-facing changes are recorded in Conventional Commits for this release.
+
 ## [2.1.3] - 2026-11-27
 
 ### Added
@@ -1452,7 +1456,8 @@ Self-host image preview `ghcr.io/slatebox/slatebox:0.1.0` (index `sha256:94f761b
 
 - Removed unused imports and fixed import naming conflict in `Main.jsx`.
 
-[Unreleased]: https://github.com/Slatebox/slatebox/compare/v2.1.3...HEAD
+[Unreleased]: https://github.com/Slatebox/slatebox/compare/v2.1.4...HEAD
+[2.1.4]: https://github.com/Slatebox/slatebox/compare/v2.1.3...v2.1.4
 [2.1.3]: https://github.com/Slatebox/slatebox/compare/v2.1.2...v2.1.3
 [2.1.2]: https://github.com/Slatebox/slatebox/compare/v2.1.1...v2.1.2
 [2.1.1]: https://github.com/Slatebox/slatebox/compare/v2.1.0...v2.1.1
