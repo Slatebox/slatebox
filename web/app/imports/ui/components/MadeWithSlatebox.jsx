@@ -84,3 +84,4 @@ MadeWithSlatebox.propTypes = {
   tone: PropTypes.oneOf(['light', 'dark', null]),
   zIndex: PropTypes.number,
 }
+MadeWithSlatebox.defaultProps = { show: true, placement: 'bottom-left', tone: null, zIndex: 5 }
