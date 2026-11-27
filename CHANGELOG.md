@@ -20,6 +20,31 @@ shipped early. The next release is 2.0.0, which is above both lines.
 
 ## [Unreleased]
 
+## [2.1.3] - 2026-11-27
+
+### Added
+
+- **integrations:** free on Slatebox Cloud and on every self-hosted install ([7da53496](https://github.com/Slatebox/slatebox/commit/7da53496b7c7ae6675943a2938eae772aa3d4139))
+- **profile:** About you, the profile a person owns that personalization builds on ([6d26caa2](https://github.com/Slatebox/slatebox/commit/6d26caa21431801fe6305a8b2d74444f172c0ef9))
+- **interview:** talk with Slatebox about your work; kept facts go to About you ([c0da1786](https://github.com/Slatebox/slatebox/commit/c0da1786d61108fd489583582d1375b8a98a669f))
+- **ai:** bring your own AI keys on Slatebox Cloud too ([1dcf4a08](https://github.com/Slatebox/slatebox/commit/1dcf4a08b7158731bff12ccd2aa1d4d432fcf000))
+- **personal:** For you, smart components and grid sheets made for the person, built in one click ([cc4b1f69](https://github.com/Slatebox/slatebox/commit/cc4b1f699a567a83eb3c73d12ca15f6982792a4c))
+- **voice:** full-duplex voice through a server relay to Gemini Live or OpenAI Realtime, bound in AI control ([06cf89ad](https://github.com/Slatebox/slatebox/commit/06cf89ad63bbe1d5c947a3a993c1fe1a1f546250))
+- **integrations:** 73 verified official MCP integrations, grouped, with recipes and personalization reads ([cd690bfa](https://github.com/Slatebox/slatebox/commit/cd690bfa2414506c586b8ad464858598d51dc6b1))
+- **start:** talk it through with Slatebox on the start page; each talk becomes a repeatable personal tile ([25b12cc2](https://github.com/Slatebox/slatebox/commit/25b12cc21e9e54ec98f40f6e677cce7053f3cd18))
+- **accounts:** passkeys, a first-class way to sign in ([110a5f25](https://github.com/Slatebox/slatebox/commit/110a5f255249950b9d7ca51126f72bec8dd870ed))
+- **self-host:** Move to Cloud says what Cloud gives the team; Compare links to the side-by-side on slatebox.com ([954aad44](https://github.com/Slatebox/slatebox/commit/954aad4446cd127eb41a75ec8d902512650e01bb))
+
+### Fixed
+
+- **self-host:** SLATEBOX_AI_CONFIG can choose a model for the interview ([e06267e1](https://github.com/Slatebox/slatebox/commit/e06267e17da72924d463b4104b52a1aa2d491122))
+- **profile:** a click on About you while another change saves waits its turn instead of vanishing ([92af2976](https://github.com/Slatebox/slatebox/commit/92af297680d40ef871e5edc68f38487262153e4d))
+
+### Security
+
+- **security:** live collaboration gets room-bound, role-scoped, expiring relay tokens after an access check ([6a5d5094](https://github.com/Slatebox/slatebox/commit/6a5d5094c785a5bb54bb57552f473acbb222e157))
+- **security:** the relay room is the slate's options.id, the room the engine joins ([36803d6d](https://github.com/Slatebox/slatebox/commit/36803d6d320949874eb7820bb4b0ceefb3fae63c))
+
 ## [2.1.2] - 2026-11-26
 
 ### Fixed
@@ -1427,7 +1452,8 @@ Self-host image preview `ghcr.io/slatebox/slatebox:0.1.0` (index `sha256:94f761b
 
 - Removed unused imports and fixed import naming conflict in `Main.jsx`.
 
-[Unreleased]: https://github.com/Slatebox/slatebox/compare/v2.1.2...HEAD
+[Unreleased]: https://github.com/Slatebox/slatebox/compare/v2.1.3...HEAD
+[2.1.3]: https://github.com/Slatebox/slatebox/compare/v2.1.2...v2.1.3
 [2.1.2]: https://github.com/Slatebox/slatebox/compare/v2.1.1...v2.1.2
 [2.1.1]: https://github.com/Slatebox/slatebox/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/Slatebox/slatebox/compare/v2.0.0...v2.1.0
