@@ -366,6 +366,9 @@ test("the consent page names the viewer as Slatebox's own, verified, with its re
   // A server that names its viewer shows that name; an unnamed one the consent name.
   assert.equal(viewerClient({ mobile: { redirects: [APP_REDIRECT], name: "Acme boards" } }).consentName, "Acme boards");
   assert.equal(viewerClient({ mobile: { redirects: [APP_REDIRECT] } }).consentName, VIEWER_CONSENT_NAME);
+  // settings.example.json (and test and prod) spell out the default name: still the consent name.
+  assert.equal(viewerClient({ mobile: { redirects: [APP_REDIRECT], name: "Slatebox viewer" } }).consentName, VIEWER_CONSENT_NAME);
+  assert.equal(viewerClient({ mobile: { redirects: [APP_REDIRECT], name: " Slatebox viewer " } }).consentName, VIEWER_CONSENT_NAME);
   assert.equal(viewerClient({ mobile: { redirects: [APP_REDIRECT] } }).name, "Slatebox viewer", "the connection keeps its listed name");
 });
 

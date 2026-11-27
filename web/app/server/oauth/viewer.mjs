@@ -20,8 +20,8 @@ import { MOVE_ACTIONS, MOVE_RESOURCE_PATH } from './device.mjs'
 export const VIEWER_CLIENT_ID = 'slatebox-viewer'
 export const VIEWER_NAME = 'Slatebox viewer'
 // What the consent page calls the app. It is Slatebox's own, so the page says so (verified) instead
-// of warning about an app Slatebox has not checked. A server that names its viewer (settings.mobile.name)
-// shows that name instead.
+// of warning about an app Slatebox has not checked. A server that gives its viewer a name of its own
+// (settings.mobile.name other than VIEWER_NAME, which settings.example.json spells out) shows that name instead.
 export const VIEWER_CONSENT_NAME = 'Slatebox for iPhone and Android'
 // The redirect settings.example.json suggests. It is not a default: the client stays off until redirects are set.
 export const VIEWER_REDIRECTS = Object.freeze(['com.slatebox.viewer://oauth'])
@@ -64,7 +64,7 @@ export function viewerClient(settings = {}) {
   return {
     clientId,
     name,
-    consentName: named || VIEWER_CONSENT_NAME,
+    consentName: named && named !== VIEWER_NAME ? named : VIEWER_CONSENT_NAME,
     redirects: redirects.slice(0, 10),
     scopes: [...VIEWER_SCOPES],
     resourcePath: VIEWER_RESOURCE_PATH,
