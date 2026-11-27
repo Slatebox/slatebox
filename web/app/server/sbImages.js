@@ -3,10 +3,10 @@ import multer from 'multer'
 import { classifyUpload } from './common/upload-kinds.mjs'
 import { SvgRenderError } from './common/render-svg.mjs'
 import { Meteor } from 'meteor/meteor'
-import { Random } from 'meteor/random'
 import { Accounts } from 'meteor/accounts-base'
 import { CachedImages } from '../imports/api/common/models'
-import { readDatabaseFile, storeFile, storedFileKey } from './common/fileStore'
+import { newUploadKey, readDatabaseFile, storeFile, storedFileKey } from './common/fileStore'
+import { uploadKeyFor } from './common/upload-keys.mjs'
 import app from './expressApp'
 
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024
@@ -24,20 +24,8 @@ async function signedInUser(req) {
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_UPLOAD_BYTES, files: 1, fields: 10 } }).single('file')
 
-const uploadsRemembered = /^u_([A-Za-z0-9]{17})_[A-Za-z0-9]{17}\.(png|jpg|gif|webp|pdf|txt)$/
 // The stored key of an upload, when the url is one this app stored for that person.
-export function uploadKeyOf(url, userId) {
-  const key = storedFileKey(url)
-  if (!key) return null
-  const m = /^\d{4}\/\d{2}\/\d{2}\/([^/]+)$/.exec(key)
-  const name = m && uploadsRemembered.exec(m[1])
-  return name && name[1] === userId ? key : null
-}
-
-const dateFolder = () => {
-  const now = new Date()
-  return `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`
-}
+export const uploadKeyOf = (url, userId) => uploadKeyFor(storedFileKey(url), userId)
 
 app.post('/sbupload/image', async (req, res) => {
   try {
@@ -47,7 +35,7 @@ app.post('/sbupload/image', async (req, res) => {
     if (!req.file?.buffer?.length) return res.status(400).type('text/plain').send('No file was sent.')
     const kind = await classifyUpload(req.file.buffer, req.file.originalname)
     if (!kind) return res.status(415).type('text/plain').send('Upload a PNG, JPG, GIF, WEBP, SVG, PDF or text file.')
-    const key = `${dateFolder()}/u_${user._id}_${Random.id()}.${kind.ext}`
+    const key = newUploadKey(user._id, kind.ext)
     const url = await storeFile({ body: kind.body, key, contentType: kind.type })
     return res.status(200).type('text/plain').send(url)
   } catch (error) {

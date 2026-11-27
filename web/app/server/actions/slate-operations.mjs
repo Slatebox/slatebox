@@ -1,4 +1,7 @@
 import { postersIn } from '../media/media-lookup.mjs'
+
+/** Every photo a plan names (a photo note added). */
+export const photosIn = (plan) => (plan?.operations || []).filter((op) => op?.photo !== undefined).map((op) => op.photo?.url)
 import { defineAction } from './registry.mjs'
 import { problem } from './errors.mjs'
 import { loadSlate } from './slate-access.mjs'
@@ -118,6 +121,10 @@ function applyPlanTo(deps, target, plan, userMessage, requireMatches) {
   // viewer's browser would fetch it) nor another path on the app.
   if (deps.posterAllowed && postersIn(plan).some((poster) => !deps.posterAllowed(poster)))
     throw problem(400, 'invalid_operation_plan', 'A video note\'s poster must be a picture Slatebox stored. Leave poster out: media.lookup and slates.addMedia fetch and store it.')
+  // A photo note's picture must be one this app stored (slates.addPhoto stores it): never another
+  // host's address nor another path on the app.
+  if (deps.photoAllowed && photosIn(plan).some((url) => !deps.photoAllowed(url)))
+    throw problem(400, 'invalid_operation_plan', 'A photo note\'s picture must be a photo Slatebox stored. Add photos with slates.addPhoto, which stores them.')
   try {
     // A save refuses an operation that matched nothing (409 no_match); a preview reports it.
     return deps.applySlateOperationPlanToJSON(target, plan, { userMessage, requireMatches })
@@ -373,7 +380,8 @@ export default defineAction({
 export async function canvasEdit(principal, input, ctx) {
   const { deps, mode, resource: slate } = ctx
   const store = deps.suggestions
-  if (!store || principal.kind !== 'agent' || principal.builtin === 'slatebox' || mode !== 'save' || !deps.presence?.identify)
+  // Slatebox's own phone app (principal.firstParty 'viewer') adds the person's own photos: their edit, not an agent's.
+  if (!store || principal.kind !== 'agent' || principal.builtin === 'slatebox' || principal.firstParty === 'viewer' || mode !== 'save' || !deps.presence?.identify)
     return applyToCanvas(principal, input, ctx)
   const who = await deps.presence.identify(principal, slate)
   const direct = (await store.modeOf(slate._id, who.agentId, Boolean(deps.agentOptions?.editDirectly?.()))) === 'direct'

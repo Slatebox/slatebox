@@ -2628,7 +2628,7 @@ interface AddComponentPlan {
 interface CanvasPlan {
   /** A concise, natural response describing exactly what will change. Do not claim an operation that is absent from operations. */
   message: string;
-  /** The operations, applied in order. Each operation's kind decides which fields it may carry; any other field is refused. Fields by kind: add_nodes: count, shape, preset, text, ids, x, y, width, height, placement, style, media; update_nodes: target, changes; delete_nodes: target; duplicate_nodes: target, offset, ids; connect_nodes: from, to, ids, style; disconnect_nodes: from, to, connectionIds; update_connections: from, to, connectionIds, changes; arrange_nodes: target, layout, gap; update_slate: changes. add_nodes requires count (1 to 20): one add_nodes may add several notes (count 3, ids ["a","b","c"]) or one (count 1, ids ["a"]). connect_nodes names its new connectors with ids (one per pair); connectionIds is only for disconnect_nodes and update_connections. Examples: {"kind":"add_nodes","count":1,"ids":["title"],"shape":"rectangle","text":"Title","x":0,"y":0,"width":240,"height":80}; {"kind":"add_nodes","count":2,"ids":["a","b"],"shape":"rectangle","text":"Step","placement":{"relativeTo":"title","direction":"below","arrangement":"row"}}; {"kind":"connect_nodes","from":{"ids":["title"]},"to":{"ids":["a"]},"ids":["title-a"]}; {"kind":"update_nodes","target":{"ids":["a"]},"changes":{"text":"First step"}}. (1–50 items) */
+  /** The operations, applied in order. Each operation's kind decides which fields it may carry; any other field is refused. Fields by kind: add_nodes: count, shape, preset, text, ids, x, y, width, height, placement, style, media, photo; update_nodes: target, changes; delete_nodes: target; duplicate_nodes: target, offset, ids; connect_nodes: from, to, ids, style; disconnect_nodes: from, to, connectionIds; update_connections: from, to, connectionIds, changes; arrange_nodes: target, layout, gap; update_slate: changes. add_nodes requires count (1 to 20): one add_nodes may add several notes (count 3, ids ["a","b","c"]) or one (count 1, ids ["a"]). connect_nodes names its new connectors with ids (one per pair); connectionIds is only for disconnect_nodes and update_connections. Examples: {"kind":"add_nodes","count":1,"ids":["title"],"shape":"rectangle","text":"Title","x":0,"y":0,"width":240,"height":80}; {"kind":"add_nodes","count":2,"ids":["a","b"],"shape":"rectangle","text":"Step","placement":{"relativeTo":"title","direction":"below","arrangement":"row"}}; {"kind":"connect_nodes","from":{"ids":["title"]},"to":{"ids":["a"]},"ids":["title-a"]}; {"kind":"update_nodes","target":{"ids":["a"]},"changes":{"text":"First step"}}. (1–50 items) */
   operations: Array<{
     /** Which operation this is; it decides the fields the operation may carry. */
     kind: "add_nodes" | "update_nodes" | "delete_nodes" | "duplicate_nodes" | "connect_nodes" | "disconnect_nodes" | "update_connections" | "arrange_nodes" | "update_slate";
@@ -2696,6 +2696,17 @@ interface CanvasPlan {
       posterWidth?: number;
       /** (1 to 10000) */
       posterHeight?: number;
+    };
+    /** add_nodes, count 1, no shape, preset, text or media: a photo note, a picture the host stored, drawn as the whole note at 320 on its longer side. Hosts add photos through their own add-photo action, which turns the picture upright, shrinks it and removes its location data. */
+    photo?: {
+      /** The stored picture: an https address, or a path in this app's file store (/files/... or /sbimages/...). (at most 2000 characters) */
+      url: string;
+      /** The picture's width in pixels. (1 to 10000) */
+      width: number;
+      /** The picture's height in pixels. (1 to 10000) */
+      height: number;
+      /** What the photo shows, for a screen reader. (at most 300 characters) */
+      alt?: string;
     };
     /** add_nodes: note keys for the new notes. connect_nodes: connector keys for the new connectors. */
     style?: {

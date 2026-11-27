@@ -212,8 +212,15 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 // Whether a principal holds a scope. A read-only scope (name:read, such as ai:admin:read) is also
 // held by whoever holds the scope it narrows (ai:admin): who may change something may read it.
+// A narrower scope (NARROWER_SCOPES) is held by whoever holds the wider one it is part of: who may
+// edit a slate may add a photo to it. Never the other way round.
+export const NARROWER_SCOPES = Object.freeze({ 'slates:add-photo': 'slates:write' })
 export const holdsScope = (principal, scope) =>
-  Boolean(principal?.scopes?.includes(scope) || (/^[a-z]+:[a-z]+:read$/.test(scope) && principal?.scopes?.includes(scope.slice(0, -5))))
+  Boolean(
+    principal?.scopes?.includes(scope) ||
+    (/^[a-z]+:[a-z]+:read$/.test(scope) && principal?.scopes?.includes(scope.slice(0, -5))) ||
+    (Object.hasOwn(NARROWER_SCOPES, scope) && principal?.scopes?.includes(NARROWER_SCOPES[scope]))
+  )
 
 export function createRegistry({
   actions,

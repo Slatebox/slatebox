@@ -45,6 +45,7 @@ import commentActions from './comments.mjs'
 import agentTaskActions from './agent-tasks.mjs'
 import agentSuggestionActions from './agent-suggestions.mjs'
 import mediaActions from './media.mjs'
+import photoActions from './photos.mjs'
 import libraryRead from './library-read.mjs'
 import libraryAuthor from './library-author.mjs'
 import libraryReview from './library-review.mjs'
@@ -98,6 +99,8 @@ export const actions = [
   ...agentTaskActions,
   ...agentSuggestionActions,
   ...mediaActions,
+  // photos from the phone app (slates.addPhoto)
+  ...photoActions,
   // The review routes and the more specific reads first: Express matches /library/{itemId} last.
   ...libraryReview,
   ...libraryAuthor,

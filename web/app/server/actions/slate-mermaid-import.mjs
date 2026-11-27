@@ -142,8 +142,7 @@ export default defineAction({
   modes: ['save', 'preview'],
   idempotency: 'optional',
   replay: 'stored',
-  // The largest body any route takes (the instance descriptor's requestBodyBytes): 100,000
-  // characters of Mermaid fit; text past that is refused with 413 payload_too_large.
+  // 100,000 characters of Mermaid fit; text past that is refused with 413 payload_too_large.
   bodyLimit: '128kb',
   input: {
     type: 'object',

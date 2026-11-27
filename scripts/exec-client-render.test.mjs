@@ -37,7 +37,7 @@ const registryWith = (...extra) =>
 test("a method exists for each HTTP action an agent may call, except token management, exec itself and team moves", () => {
   const expected = appActions
     .filter((a) => a.mounts.http && a.principals.includes("agent"))
-    .filter((a) => !/^apiTokens\./.test(a.id) && !/^exec\./.test(a.id) && !/^teamMove\./.test(a.id))
+    .filter((a) => !/^apiTokens\./.test(a.id) && !/^exec\./.test(a.id) && !/^teamMove\./.test(a.id) && a.id !== "slates.addPhoto")
     .map((a) => a.id)
     .sort();
   assert.deepEqual(manifest.methods.map((m) => m.name), expected);
@@ -47,6 +47,8 @@ test("a method exists for each HTTP action an agent may call, except token manag
   assert.ok(NEVER_BOUND.some((rule) => rule.test("apiTokens.create")));
   // A move uploads an archive's bytes, which no script can send (exec-binding.mjs).
   assert.ok(NEVER_BOUND.some((rule) => rule.test("teamMove.start")));
+  // A photo (up to 8 MB) is more than a script or an MCP call carries: the phone app's and the API's door only.
+  assert.ok(NEVER_BOUND.some((rule) => rule.test("slates.addPhoto")));
   assert.equal(manifest.methods.some((m) => m.name.startsWith("teamMove.")), false, "no team moves in client.json");
   assert.deepEqual(boundActions(registry).map((a) => a.id).sort(), expected);
   // A DDP-only action is not reachable from a script until it has a route.

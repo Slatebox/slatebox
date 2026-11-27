@@ -81,17 +81,33 @@ test("each permission is explained in plain words on the consent page and the to
   assert.match(consent, /explain/);
 });
 
-test("Slatebox's own viewer app gets a verified consent with its read-only permissions listed; other apps keep the warning", () => {
+// Restated 2026-11-27 (photos from the phone app): the verified app may also ask to add photos. Reading
+// is what it is for and stays a plain line marked read only; adding photos is a box the person may untick.
+test("Slatebox's own app gets a verified consent: reading listed as read only, adding photos a box to untick; other apps keep the warning", () => {
   const verified = consent.slice(consent.indexOf("} else if (request.client.verified) {"), consent.indexOf("  } else {\n    const offered"));
   assert.ok(verified.length > 100, "a branch of its own for verified clients");
   assert.match(verified, /Verified: this is Slatebox’s own app/);
-  assert.match(verified, /It only reads: it cannot change, share or delete/);
-  assert.match(verified, /\(read only\)/);
+  assert.match(verified, /title=\{`Allow \$\{request\.client\.name\} to open your slates\?`\}/);
+  assert.match(verified, /It shows you the slates you can open, as you\. It reads, and if you allow it, adds the photos you take to slates you can edit\. It cannot change, share or delete anything else\./);
+  // A request that asks for reading only keeps the read-only words.
+  assert.match(verified, /It only reads: it cannot change, share or delete anything\./);
+  assert.match(verified, /You can disconnect it at any time in Profile → Developer\./);
+  // "(read only)" follows slates:read only; every other permission is a checkbox over chosen.
+  assert.match(verified, /scope === 'slates:read' \? \([\s\S]*?\{label\} \(read only\)[\s\S]*?\) : \([\s\S]*?<Checkbox[\s\S]*?checked=\{chosen\.includes\(scope\)\}/);
+  assert.equal(verified.match(/\(read only\)/g).length, 1);
   assert.match(verified, /offered\.map/);
   assert.doesNotMatch(verified, /has not checked/);
-  assert.doesNotMatch(verified, /Checkbox/, "nothing to untick: the list is what it may do");
   // The third-party branch still warns.
   const third = consent.slice(consent.indexOf("  } else {\n    const offered"));
   assert.match(third, /Slatebox has not checked this app/);
   assert.match(third, /Allow it only if you\s+started connecting it just now/);
+});
+
+test("adding photos has its own permission, in plain words, with the location promise", async () => {
+  const { tokenPermissions } = await import("../web/app/imports/api/common/token-permissions.mjs");
+  assert.deepEqual(tokenPermissions.find(({ scope }) => scope === "slates:add-photo"), {
+    scope: "slates:add-photo",
+    label: "Add photos to slates I can edit",
+    explain: "Take a photo or pick one from your phone and add it to a slate as a picture note. It cannot change, move or delete anything else. The photo's location data is removed before it's saved.",
+  });
 });

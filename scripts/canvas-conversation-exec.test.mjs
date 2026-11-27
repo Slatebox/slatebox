@@ -255,7 +255,7 @@ test("the declarations the model reads say which fields each operation takes, an
   const world = makeExecWorld();
   try {
     const system = chatSystemPrompt(world.exec.manifest, "demo");
-    assert.match(system, /Fields by kind: add_nodes: count, shape, preset, text, ids, x, y, width, height, placement, style, media; update_nodes: target, changes;/);
+    assert.match(system, /Fields by kind: add_nodes: count, shape, preset, text, ids, x, y, width, height, placement, style, media, photo; update_nodes: target, changes;/);
     assert.match(system, /connect_nodes: from, to, ids, style; disconnect_nodes: from, to, connectionIds;/);
     assert.match(system, /add_nodes requires count/);
     assert.match(system, /\/\*\* add_nodes only, and required there: how many notes it adds, 1 to 20\. With ids, count is normally ids\.length/);

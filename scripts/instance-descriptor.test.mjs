@@ -176,9 +176,10 @@ test("with a token, GET /instance adds build, capabilities, limits, kinds, actio
   assert.deepEqual(body.limits, {
     rate: { perToken: 120, perAccount: 240, windowSeconds: 60 },
     canvas: LIMITS,
-    // Restated (exec): the largest body a route takes is POST /exec's 128 KiB (a script and its
-    // input), and the instance publishes exec's limits beside the others.
-    requestBodyBytes: 131072,
+    // Restated (exec): the instance publishes exec's limits beside the others.
+    // Restated 2026-11-27 (photos from the phone app): the largest body a route takes is now
+    // POST /slates/{shareId}/photos's 12 MiB (an 8 MB photo as base64).
+    requestBodyBytes: 12 * 1024 * 1024,
     exec: publicLimits(EXEC_LIMITS),
   });
   assert.deepEqual(body.canvas, JSON.parse(JSON.stringify(describeOperations())));

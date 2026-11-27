@@ -1,8 +1,9 @@
 // The server side of the Slatebox viewer app (iOS and Android), whichever shell wraps it:
 //   - a first-party public OAuth client (web/app/server/oauth/viewer.mjs): authorization code with
-//     PKCE S256 back to the app's own scheme, no registration, read scopes only, its tokens taken on
-//     /api/v1 for the viewer's read actions and nowhere else (never a write, never /mcp), refresh
-//     rotation, and Disconnect in Profile › Developer;
+//     PKCE S256 back to the app's own scheme, no registration, slates:read and (when the app asks and
+//     the person allows) slates:add-photo, its tokens taken on /api/v1 for the viewer's read actions and
+//     its one write, slates.addPhoto, and nowhere else (no other write, never /mcp), refresh rotation,
+//     and Disconnect in Profile › Developer;
 //   - slates.live (GET /api/v1/slates/{shareId}/live): a read-only relay seat after the same access
 //     check collaborators.init runs (web/app/server/common/relay-live.mjs);
 //   - /.well-known/apple-app-site-association and /.well-known/assetlinks.json from settings.mobile
@@ -28,7 +29,7 @@ import { createOAuthCore } from "../web/app/server/oauth/core.mjs";
 import { mountOAuth } from "../web/app/server/oauth/routes.mjs";
 import { MOVE_ACTIONS, MOVE_RESOURCE_PATH } from "../web/app/server/oauth/device.mjs";
 import {
-  VIEWER_ACTIONS, VIEWER_CLIENT_ID, VIEWER_CONSENT_NAME, VIEWER_REDIRECTS, VIEWER_RESOURCE_PATH, VIEWER_SCOPES, apiAudiences, viewerClient,
+  VIEWER_ACTIONS, VIEWER_CLIENT_ID, VIEWER_CONSENT_NAME, VIEWER_READ_ACTIONS, VIEWER_REDIRECTS, VIEWER_RESOURCE_PATH, VIEWER_SCOPES, apiAudiences, viewerClient,
 } from "../web/app/server/oauth/viewer.mjs";
 import { createRelayLive } from "../web/app/server/common/relay-live.mjs";
 import { verifyRoomToken } from "../web/app/server/common/relay-token.mjs";
@@ -147,7 +148,10 @@ test("the viewer client: off until settings.mobile.redirects is set, 'slatebox-v
   const plain = viewerClient({ mobile: { redirects: [...VIEWER_REDIRECTS] } });
   assert.equal(plain.clientId, "slatebox-viewer");
   assert.deepEqual(plain.redirects, ["com.slatebox.viewer://oauth"]);
-  assert.deepEqual(plain.scopes, ["slates:read"]);
+  // Restated 2026-11-27 (photos from the phone, owner request): the viewer may also ask to add photos;
+  // a sign-in that names no scope still gets reading only.
+  assert.deepEqual(plain.scopes, ["slates:read", "slates:add-photo"]);
+  assert.deepEqual(plain.defaultScopes, ["slates:read"]);
   assert.equal(plain.resourcePath, VIEWER_RESOURCE_PATH);
   const named = viewerClient({ mobile: { clientId: "acme-viewer", name: "Acme boards", redirects: ["com.acme.boards", "com.acme.boards:/cb", "https://boards.acme.example/app/oauth", "http://evil.example/cb", "javascript:alert(1)", "x://cb#frag", "https", "http", "ftp", "acme"] } });
   assert.equal(named.clientId, "acme-viewer");
@@ -164,17 +168,25 @@ test("the viewer client: off until settings.mobile.redirects is set, 'slatebox-v
   assert.equal(viewerClient({ mobile: { enabled: false, redirects: [...VIEWER_REDIRECTS] } }), null);
 });
 
-test("every viewer action is a read the registry has, and none writes", () => {
+// Restated 2026-11-27 (owner request: take photos with the phone app and drop them into slates): the
+// viewer was read only; it now has exactly one write, slates.addPhoto, under its own narrow scope.
+test("every viewer action is a read the registry has, except its one write, slates.addPhoto", () => {
   const registry = createAppRegistry();
   for (const id of VIEWER_ACTIONS) {
     const action = registry.get(id);
     assert.ok(action, id);
-    assert.equal(action.kind, "read", id);
     assert.ok(action.principals.includes("agent"), id);
     assert.ok(action.mounts.http, id);
     assert.ok(action.scope === null || VIEWER_SCOPES.includes(action.scope), `${id}: ${action.scope}`);
   }
-  assert.deepEqual([...VIEWER_ACTIONS].sort(), ["account.get", "comments.list", "presentations.get", "slates.get", "slates.list", "slates.live"]);
+  for (const id of VIEWER_READ_ACTIONS) assert.equal(registry.get(id).kind, "read", id);
+  assert.deepEqual([...VIEWER_READ_ACTIONS].sort(), ["account.get", "comments.list", "presentations.get", "slates.get", "slates.list", "slates.live"]);
+  assert.deepEqual([...VIEWER_ACTIONS].sort(), [...VIEWER_READ_ACTIONS, "slates.addPhoto"].sort());
+  assert.deepEqual(VIEWER_ACTIONS.filter((id) => registry.get(id).kind !== "read"), ["slates.addPhoto"]);
+  const photo = registry.get("slates.addPhoto");
+  assert.equal(photo.scope, "slates:add-photo");
+  assert.deepEqual(photo.alsoScopes, []);
+  assert.equal(photo.destructive, false);
 });
 
 test("the viewer signs in with PKCE back to its scheme, with no registration, and its token is bound to the viewer resource", async (t) => {
@@ -248,7 +260,7 @@ test("a viewer token is refused on everything else: every write, and every read 
   const refused = (result, what) => {
     assert.equal(result.status, 403, `${what}: ${result.status} ${JSON.stringify(result.body)}`);
     assert.equal(result.body.error.code, "token_not_for_this", what);
-    assert.match(result.body.error.message, /viewer/, what);
+    assert.match(result.body.error.message, /mobile app, which reads slates and adds photos/, what);
   };
   refused(await api("/slates/demo/operations", bearer, { method: "POST", body: { plan: { operations: [] } } }), "slates.applyOperations");
   refused(await api("/slates", bearer, { method: "POST", body: { brief: "x" } }), "slates.create");
@@ -259,6 +271,56 @@ test("a viewer token is refused on everything else: every write, and every read 
   // Another server's viewer resource is not this token's.
   const elsewhere = await world.deps.apiTokens.authenticateApiRequest({ headers: { authorization: `Bearer ${bearer}` } }, { audience: Object.keys(apiAudiences({ origin: "http://x.test", viewer: viewerClient({ mobile: { redirects: [APP_REDIRECT] } }) })) });
   assert.equal(elsewhere, null);
+});
+
+// The viewer's one write (owner request 2026-11-27): with slates:add-photo, a photo saves as the
+// person's own edit; without it the same token reads only. Every other write and /mcp stay refused.
+test("a viewer token with slates:add-photo adds a photo and nothing else; one without it is refused for photos", async (t) => {
+  const { signIn, api, world, mcpPrincipal } = await setup(t);
+  const { cleanPhoto } = await import("../web/app/server/common/photo-clean.mjs");
+  const { createHourlyLimit } = await import("../web/app/server/media/media-lookup.mjs");
+  const stored = [];
+  world.deps.photos = {
+    clean: cleanPhoto,
+    store: async ({ ext, dryRun }) => { const key = `2026/11/27/u_owner_P${String(stored.length).padStart(16, "0")}.${ext}`; if (!dryRun) stored.push(key); return { key, url: `https://files.slatebox.test/${key}` }; },
+    remove: async () => {},
+    limit: createHourlyLimit(),
+  };
+  // A 2 by 2 PNG.
+  const photo = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEklEQVR4nGP4z8DwHwyBNAMDAE/MB/kL3B0EAAAAAElFTkSuQmCC";
+  const { tokens } = await signIn({ scope: "slates:read slates:add-photo" });
+  assert.equal(tokens.scope, "slates:read slates:add-photo");
+  const bearer = tokens.access_token;
+  const added = await api("/slates/demo/photos", bearer, { method: "POST", body: { photo, center: { x: 100, y: 100 } } });
+  assert.equal(added.status, 201, JSON.stringify(added.body));
+  assert.equal(added.body.outcome, "saved");
+  assert.ok(world.slate("demo").nodes.some((node) => node.options.id === added.body.nodeId && node.options.image === added.body.url));
+  assert.equal(stored.length, 1);
+  // Still no other write, and never /mcp.
+  const refused = await api("/slates/demo/operations", bearer, { method: "POST", body: { expectedRevision: 0, plan: { message: "x", operations: [] } } });
+  assert.equal(refused.status, 403);
+  assert.equal(refused.body.error.code, "token_not_for_this");
+  assert.equal(await mcpPrincipal(bearer), null);
+  // Signed in for reading only (an older app, or the person unticked photos): photos are refused.
+  const readOnly = (await signIn({ scope: "slates:read" })).tokens.access_token;
+  const denied = await api("/slates/demo/photos", readOnly, { method: "POST", body: { photo } });
+  assert.equal(denied.status, 403);
+  assert.equal(denied.body.error.code, "insufficient_scope");
+  assert.match(denied.body.error.message, /Reconnect the app and allow slates:add-photo/);
+  assert.equal(stored.length, 1);
+});
+
+test("the person may untick photos on the consent page: the viewer then reads only", async (t) => {
+  const { authorize, core, tokenRequest, user } = await setup(t);
+  const verifier = randomBytes(32).toString("base64url");
+  const challenge = createHash("sha256").update(verifier).digest("base64url");
+  const started = await authorize({ response_type: "code", client_id: VIEWER_CLIENT_ID, redirect_uri: APP_REDIRECT, code_challenge: challenge, code_challenge_method: "S256", scope: "slates:read slates:add-photo" });
+  const requestId = new URL(started.location, "https://x.test").searchParams.get("request");
+  assert.deepEqual((await core.describeRequest(requestId)).scopes, ["slates:read", "slates:add-photo"]);
+  const decided = await core.decide({ requestId, user: user("owner"), allow: true, scopes: ["slates:read"] });
+  const code = new URL(decided.redirectTo).searchParams.get("code");
+  const tokens = await tokenRequest({ grant_type: "authorization_code", client_id: VIEWER_CLIENT_ID, code, code_verifier: verifier, redirect_uri: APP_REDIRECT });
+  assert.equal(tokens.body.scope, "slates:read");
 });
 
 test("each action outside the viewer's list is refused before it runs", async (t) => {

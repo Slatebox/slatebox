@@ -15019,6 +15019,268 @@
         }
       }
     },
+    "/slates/{shareId}/photos": {
+      "post": {
+        "operationId": "addPhotoNote",
+        "summary": "Add photo",
+        "description": "Add a photo to a slate you can edit, as a picture note. Send the photo as base64 (a JPEG, PNG or WebP, at most 8 MB; others are refused with 415, larger with 413). The server turns it upright, shrinks it to fit 2560 pixels and removes its metadata, its location included, before it is stored. center places the middle of the note (the middle of the person's screen, in canvas units); without it the note goes beside the slate's notes. The note is 320 on its longer side. At most 60 photos per person per hour (429). One save, like slates.applyOperations; mode \"preview\" stores nothing. Added by an agent with a personal token, the note is a live suggestion (202, outcome \"suggested\") for people on the slate to keep or discard.",
+        "x-required-scope": "slates:add-photo",
+        "x-slatebox": {
+          "action": "slates.addPhoto",
+          "toolset": "slates",
+          "readOnly": false,
+          "destructive": false,
+          "idempotent": false,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ],
+          "modes": [
+            "save",
+            "preview"
+          ],
+          "idempotency": "optional"
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "shareId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "The slate ID from its address: /canvas/<shareId>."
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "description": "Reuse the same key with the same token only to retry one intended write. A different request under a used key answers 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[!-~]+$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Slatebox-Confirm",
+            "required": false,
+            "description": "An agent's save that removes something, changes someone else's notes, rewrites many notes' text or widens access answers 409 confirmation_required. Once the person agrees, send the same request again (same Idempotency-Key) with this header set to details.confirmationId. It works once and expires after 10 minutes.",
+            "schema": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "photo": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "The photo, base64: a JPEG, PNG or WebP of at most 8 MB."
+                  },
+                  "alt": {
+                    "type": "string",
+                    "maxLength": 300,
+                    "description": "What the photo shows, for a screen reader."
+                  },
+                  "center": {
+                    "type": "object",
+                    "description": "Where the middle of the note goes, in canvas units: the middle of what the person is looking at.",
+                    "properties": {
+                      "x": {
+                        "type": "number",
+                        "minimum": -1000000,
+                        "maximum": 1000000
+                      },
+                      "y": {
+                        "type": "number",
+                        "minimum": -1000000,
+                        "maximum": 1000000
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "save",
+                      "preview"
+                    ],
+                    "default": "save",
+                    "description": "save (the default) writes; preview returns what would change and saves nothing. The response says which happened."
+                  }
+                },
+                "required": [
+                  "photo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A preview, or the answer to a repeated request with the same key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "mode": {
+                      "type": "string"
+                    },
+                    "shareId": {
+                      "type": "string"
+                    },
+                    "revision": {
+                      "type": "integer"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "nodeId": {
+                      "type": "string",
+                      "description": "The photo note's id."
+                    },
+                    "url": {
+                      "type": "string",
+                      "description": "The stored photo's address."
+                    },
+                    "width": {
+                      "type": "integer",
+                      "description": "The stored photo's width in pixels."
+                    },
+                    "height": {
+                      "type": "integer",
+                      "description": "The stored photo's height in pixels."
+                    },
+                    "outcome": {
+                      "type": "string",
+                      "enum": [
+                        "saved",
+                        "suggested"
+                      ],
+                      "description": "suggested: added by an agent with a personal token, the note is shown live on the slate for a person to keep or discard; nothing is saved yet."
+                    },
+                    "suggestion": {
+                      "type": "object",
+                      "description": "outcome suggested: the suggestion (actionId, items) as list_suggestions gives it."
+                    },
+                    "report": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "shareId",
+                    "message",
+                    "url",
+                    "width",
+                    "height"
+                  ]
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "mode": {
+                      "type": "string"
+                    },
+                    "shareId": {
+                      "type": "string"
+                    },
+                    "revision": {
+                      "type": "integer"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "nodeId": {
+                      "type": "string",
+                      "description": "The photo note's id."
+                    },
+                    "url": {
+                      "type": "string",
+                      "description": "The stored photo's address."
+                    },
+                    "width": {
+                      "type": "integer",
+                      "description": "The stored photo's width in pixels."
+                    },
+                    "height": {
+                      "type": "integer",
+                      "description": "The stored photo's height in pixels."
+                    },
+                    "outcome": {
+                      "type": "string",
+                      "enum": [
+                        "saved",
+                        "suggested"
+                      ],
+                      "description": "suggested: added by an agent with a personal token, the note is shown live on the slate for a person to keep or discard; nothing is saved yet."
+                    },
+                    "suggestion": {
+                      "type": "object",
+                      "description": "outcome suggested: the suggestion (actionId, items) as list_suggestions gives it."
+                    },
+                    "report": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "shareId",
+                    "message",
+                    "url",
+                    "width",
+                    "height"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/slates/{shareId}/presence/plan": {
       "post": {
         "operationId": "setPresencePlan",
@@ -19650,14 +19912,14 @@
             "type": "array",
             "minItems": 1,
             "maxItems": 50,
-            "description": "The operations, applied in order. Each operation's kind decides which fields it may carry; any other field is refused. Fields by kind: add_nodes: count, shape, preset, text, ids, x, y, width, height, placement, style, media; update_nodes: target, changes; delete_nodes: target; duplicate_nodes: target, offset, ids; connect_nodes: from, to, ids, style; disconnect_nodes: from, to, connectionIds; update_connections: from, to, connectionIds, changes; arrange_nodes: target, layout, gap; update_slate: changes. add_nodes requires count (1 to 20): one add_nodes may add several notes (count 3, ids [\"a\",\"b\",\"c\"]) or one (count 1, ids [\"a\"]). connect_nodes names its new connectors with ids (one per pair); connectionIds is only for disconnect_nodes and update_connections. Examples: {\"kind\":\"add_nodes\",\"count\":1,\"ids\":[\"title\"],\"shape\":\"rectangle\",\"text\":\"Title\",\"x\":0,\"y\":0,\"width\":240,\"height\":80}; {\"kind\":\"add_nodes\",\"count\":2,\"ids\":[\"a\",\"b\"],\"shape\":\"rectangle\",\"text\":\"Step\",\"placement\":{\"relativeTo\":\"title\",\"direction\":\"below\",\"arrangement\":\"row\"}}; {\"kind\":\"connect_nodes\",\"from\":{\"ids\":[\"title\"]},\"to\":{\"ids\":[\"a\"]},\"ids\":[\"title-a\"]}; {\"kind\":\"update_nodes\",\"target\":{\"ids\":[\"a\"]},\"changes\":{\"text\":\"First step\"}}.",
+            "description": "The operations, applied in order. Each operation's kind decides which fields it may carry; any other field is refused. Fields by kind: add_nodes: count, shape, preset, text, ids, x, y, width, height, placement, style, media, photo; update_nodes: target, changes; delete_nodes: target; duplicate_nodes: target, offset, ids; connect_nodes: from, to, ids, style; disconnect_nodes: from, to, connectionIds; update_connections: from, to, connectionIds, changes; arrange_nodes: target, layout, gap; update_slate: changes. add_nodes requires count (1 to 20): one add_nodes may add several notes (count 3, ids [\"a\",\"b\",\"c\"]) or one (count 1, ids [\"a\"]). connect_nodes names its new connectors with ids (one per pair); connectionIds is only for disconnect_nodes and update_connections. Examples: {\"kind\":\"add_nodes\",\"count\":1,\"ids\":[\"title\"],\"shape\":\"rectangle\",\"text\":\"Title\",\"x\":0,\"y\":0,\"width\":240,\"height\":80}; {\"kind\":\"add_nodes\",\"count\":2,\"ids\":[\"a\",\"b\"],\"shape\":\"rectangle\",\"text\":\"Step\",\"placement\":{\"relativeTo\":\"title\",\"direction\":\"below\",\"arrangement\":\"row\"}}; {\"kind\":\"connect_nodes\",\"from\":{\"ids\":[\"title\"]},\"to\":{\"ids\":[\"a\"]},\"ids\":[\"title-a\"]}; {\"kind\":\"update_nodes\",\"target\":{\"ids\":[\"a\"]},\"changes\":{\"text\":\"First step\"}}.",
             "items": {
               "type": "object",
               "additionalProperties": false,
               "required": [
                 "kind"
               ],
-              "description": "Fields by kind (any other field is refused). add_nodes: count, shape, preset, text, ids, x, y, width, height, placement, style, media; update_nodes: target, changes; delete_nodes: target; duplicate_nodes: target, offset, ids; connect_nodes: from, to, ids, style; disconnect_nodes: from, to, connectionIds; update_connections: from, to, connectionIds, changes; arrange_nodes: target, layout, gap; update_slate: changes. add_nodes requires count.",
+              "description": "Fields by kind (any other field is refused). add_nodes: count, shape, preset, text, ids, x, y, width, height, placement, style, media, photo; update_nodes: target, changes; delete_nodes: target; duplicate_nodes: target, offset, ids; connect_nodes: from, to, ids, style; disconnect_nodes: from, to, connectionIds; update_connections: from, to, connectionIds, changes; arrange_nodes: target, layout, gap; update_slate: changes. add_nodes requires count.",
               "properties": {
                 "kind": {
                   "type": "string",
@@ -19898,6 +20160,41 @@
                       "type": "number",
                       "minimum": 1,
                       "maximum": 10000
+                    }
+                  }
+                },
+                "photo": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "url",
+                    "width",
+                    "height"
+                  ],
+                  "description": "add_nodes, count 1, no shape, preset, text or media: a photo note, a picture the host stored, drawn as the whole note at 320 on its longer side. Hosts add photos through their own add-photo action, which turns the picture upright, shrinks it and removes its location data.",
+                  "properties": {
+                    "url": {
+                      "type": "string",
+                      "maxLength": 2000,
+                      "pattern": "^(https://\\S+|/(files|sbimages)/\\S+)$",
+                      "description": "The stored picture: an https address, or a path in this app's file store (/files/... or /sbimages/...)."
+                    },
+                    "width": {
+                      "type": "number",
+                      "minimum": 1,
+                      "maximum": 10000,
+                      "description": "The picture's width in pixels."
+                    },
+                    "height": {
+                      "type": "number",
+                      "minimum": 1,
+                      "maximum": 10000,
+                      "description": "The picture's height in pixels."
+                    },
+                    "alt": {
+                      "type": "string",
+                      "maxLength": 300,
+                      "description": "What the photo shows, for a screen reader."
                     }
                   }
                 },

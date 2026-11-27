@@ -137,8 +137,11 @@ test("open-slate: every key a write accepts reads back equal through the route",
   // other note reads null). A video is added by add_nodes media or slates.addMedia, never changed.
   // Restated (slate style): styleRole is a read-only extra too (a note a worn style added says the part
   // it plays; any other note reads null). The style writes it with the note, never a change.
-  const { id, comments, image, media, styleRole, ...keys } = body.nodes[0];
+  // Restated (photo notes, 2026-11-27): photo is a read-only extra too (a photo note reads as its
+  // picture and size; any other note reads null). A photo is added by add_nodes photo or slates.addPhoto.
+  const { id, comments, image, media, photo, styleRole, ...keys } = body.nodes[0];
   assert.equal(media, null);
+  assert.equal(photo, null);
   assert.equal(styleRole, null);
   assert.deepEqual(keys, { ...changes, locked: true });
 });

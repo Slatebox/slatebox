@@ -5,6 +5,8 @@
 import { Buffer } from 'buffer'
 import { Meteor } from 'meteor/meteor'
 import { MongoInternals } from 'meteor/mongo'
+import { Random } from 'meteor/random'
+import { dateFolder, uploadKey } from './upload-keys.mjs'
 import { deleteS3Object, putS3Object, readS3Object } from './s3Utils'
 
 const inBucket = () => Boolean(Meteor.settings.aws?.imageBucket)
@@ -54,10 +56,9 @@ export async function storeFile({ body, key, contentType, contentDisposition }) 
   return `${storedFileBase()}/${key}`
 }
 
-const datePrefix = () => {
-  const now = new Date()
-  return `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`
-}
+// A person's upload (the editor's image upload, a photo from the phone app): one name for both
+// (upload-keys.mjs), so uploadKeyOf and images.removeImage know either as theirs.
+export const newUploadKey = (userId, ext) => uploadKey(userId, Random.id(), ext)
 
 // An image the server made for a slate: <date>/<name>_<time>.<ext>, or <date>/<name>.<ext>.
 export function storeImage(imgBuffer, name, isSvg, ctype, fileExt, skipTimestamp = false) {
@@ -65,7 +66,7 @@ export function storeImage(imgBuffer, name, isSvg, ctype, fileExt, skipTimestamp
   const file = isSvg ? `${name}${stamp}.svg` : `${name}${stamp}.${fileExt || 'png'}`
   return storeFile({
     body: imgBuffer,
-    key: `${datePrefix()}/${file}`,
+    key: `${dateFolder()}/${file}`,
     contentType: ctype || (isSvg ? 'image/svg+xml' : 'image/png'),
   })
 }

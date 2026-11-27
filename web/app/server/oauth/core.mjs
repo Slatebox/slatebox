@@ -111,7 +111,7 @@ const consentError = (code, message) => Object.assign(new Error(message), { code
 
 // refreshFamily: one record per rotated refresh token, { _id: its SHA-256, tokenId, clientId,
 // purgeAt }; never the token itself. Presenting any of them again ends the whole connection.
-// firstParty: the pre-registered public clients, [{ clientId, name, redirects, scopes, resourcePath }].
+// firstParty: the pre-registered public clients, [{ clientId, name, redirects, scopes, defaultScopes?, resourcePath }].
 export function createOAuthCore({ clients, requests, codes, refreshFamily, apiTokens, users, origin, errors, firstParty = [], now = Date.now, randomBytesImpl = randomBytes }) {
   const urls = oauthUrls(origin)
   const random = (bytes) => randomBytesImpl(bytes)
@@ -232,7 +232,7 @@ export function createOAuthCore({ clients, requests, codes, refreshFamily, apiTo
       const first = firstPartyOf(client.client_id)
       const resource = resourceOf(client.client_id)
       if (first) {
-        // A first-party app asks for its own scopes only (none means all of them).
+        // A first-party app asks for its own scopes only (none means its default ones, defaultScopes).
         const outside = asked.filter((scope) => !first.scopes.includes(scope))
         if (outside.length) throw new InvalidScopeError(`${first.name} may ask for ${first.scopes.join(', ')} only.`)
       }
@@ -246,7 +246,7 @@ export function createOAuthCore({ clients, requests, codes, refreshFamily, apiTo
         clientId: client.client_id,
         redirectUri: params.redirectUri,
         codeChallenge: params.codeChallenge,
-        scopes: asked.length ? [...new Set(asked)] : [...(first ? first.scopes : DEFAULT_SCOPES)],
+        scopes: asked.length ? [...new Set(asked)] : [...(first ? first.defaultScopes || first.scopes : DEFAULT_SCOPES)],
         state: params.state ?? null,
         resource,
         createdAt: now(),

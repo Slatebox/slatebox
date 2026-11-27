@@ -48,7 +48,11 @@ import { mountTeamExport, teamTransfer } from '../team-export/meteor'
 import { shapeService } from '../shapes/meteor'
 import { createPresentationFor } from '../methods/presentations'
 import { mediaLookup } from '../media/meteor'
-import { posterAllowedFor } from '../media/media-lookup.mjs'
+import { posterAllowedFor, createHourlyLimit } from '../media/media-lookup.mjs'
+import { cleanPhoto } from '../common/photo-clean.mjs'
+import { deleteStoredFile, newUploadKey, storeFile, storedFileBase, storedFileKey } from '../common/fileStore'
+import { uploadKeyFor } from '../common/upload-keys.mjs'
+import { PHOTO_LIMITS } from './photos.mjs'
 import { createAppLibrary } from '../library/meteor'
 import { countApiCall, noticingFirstAction } from '../agent-reach/usage-meteor'
 import { profileStore } from '../profile/meteor'
@@ -200,6 +204,24 @@ export const deps = {
     media: mediaLookup,
     // Video posters in a plan must be ones this app stored (slate-operations.mjs).
     posterAllowed: (url) => posterAllowedFor(Meteor.settings)(url),
+    // slates.addPhoto (actions/photos.mjs): cleaned (no location data), stored in the one file store
+    // under the editor's upload names, removed again when its note is not saved.
+    photos: {
+      clean: (bytes) => cleanPhoto(bytes),
+      async store({ userId, bytes, type, ext, dryRun = false }) {
+        const key = newUploadKey(userId, ext)
+        const url = dryRun ? `${storedFileBase()}/${key}` : await storeFile({ body: bytes, key, contentType: type })
+        return { key, url: photoAddress(url) }
+      },
+      remove: (key) => deleteStoredFile(key),
+      limit: createHourlyLimit({ perHour: PHOTO_LIMITS.perHour }),
+    },
+    // A photo note's picture must be one a person uploaded to this app's file store (slate-operations.mjs).
+    photoAllowed: (url) => {
+      const full = typeof url === 'string' && url.startsWith('/files/') ? Meteor.absoluteUrl(url.slice(1)) : url
+      const key = storedFileKey(full)
+      return Boolean(key && uploadKeyFor(key, /\/u_([A-Za-z0-9]{17})_/.exec(key)?.[1]))
+    },
     // profile.*: About you, the person's own facts and switches (server/profile)
     profile: profileStore,
     // slates.live: a read-only seat in a slate's live room, the check collaborators.init runs (server/common/relay-live.mjs)
@@ -229,6 +251,17 @@ deps.exec = exec.service
 ensureExecCollections()
 
 const viewer = viewerClient(Meteor.settings)
+
+// A stored photo's address as a note names it: https in full; a self-host served over plain http
+// names the path on the app (/files/...), which the engine takes and every browser on it opens.
+function photoAddress(url) {
+  if (/^https:\/\//.test(url)) return url
+  try {
+    return new URL(url).pathname
+  } catch {
+    return url
+  }
+}
 
 export function mountActions(app) {
   // Proxies in front of the app; Meteor reads the same setting for its own client addresses.

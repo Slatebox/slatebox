@@ -27,9 +27,12 @@ export function principalFromToken(authenticated, { audiences = null } = {}) {
   const purpose = token.kind === 'oauth' && audiences && Object.hasOwn(audiences, token.resource) ? audiences[token.resource] : null
   const only = Array.isArray(purpose) ? purpose : purpose?.actions || null
   const refusal = !Array.isArray(purpose) && typeof purpose?.refusal === 'string' ? purpose.refusal : null
+  // Slatebox's own app (the viewer, purpose.firstParty 'viewer'): what it adds is the person's own edit.
+  const firstParty = !Array.isArray(purpose) && typeof purpose?.firstParty === 'string' ? purpose.firstParty : null
   return {
     ...(only && { onlyActions: [...only] }),
     ...(only && refusal && { onlyRefusal: refusal }),
+    ...(only && firstParty && { firstParty }),
     kind: 'agent',
     userId: token.userId,
     tokenId: token._id,

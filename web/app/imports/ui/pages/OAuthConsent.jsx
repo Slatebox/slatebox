@@ -18,8 +18,9 @@ import { AccountActions, AccountNote, AccountPage, AccountPanel, AccountSection,
 // person on the hosted MCP endpoint. The server checked the app and where it returns; the person
 // sees its name (which the app chose itself), that address, and each permission, and allows or
 // denies. Allowing sends the browser back to the app with a one-time code (server/oauth).
-// Slatebox's own app (a first-party client, request.client.verified: the iPhone and Android viewer)
-// is named as verified, with its read-only permissions listed, and never the unchecked-app warning.
+// Slatebox's own app (a first-party client, request.client.verified: the iPhone and Android app)
+// is named as verified, never with the unchecked-app warning. Reading is what it is for; each other
+// permission it asked for (adding photos) is a box the person may untick.
 export default function OAuthConsent() {
   const [query] = useSearchParams()
   const requestId = query.get('request') || ''
@@ -85,29 +86,53 @@ export default function OAuthConsent() {
     )
   } else if (request.client.verified) {
     const offered = tokenPermissions.filter(({ scope }) => request.scopes.includes(scope))
+    const photos = request.scopes.includes('slates:add-photo')
     body = (
       <>
-        <AccountSection title={`Allow ${request.client.name} to read your slates?`}>
+        <AccountSection title={`Allow ${request.client.name} to open your slates?`}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: SPACE.hair, color: 'success.main', mb: SPACE.tight }}>
             <VerifiedIcon fontSize="small" aria-hidden />
             <Typography variant="subtitle2" component="p">Verified: this is Slatebox’s own app</Typography>
           </Box>
           <Typography>
-            It shows you the slates you can open, as you. It only reads: it cannot change, share or delete
-            anything. You can disconnect it at any time in Profile → Developer.
+            {photos
+              ? 'It shows you the slates you can open, as you. It reads, and if you allow it, adds the photos you take to slates you can edit. It cannot change, share or delete anything else.'
+              : 'It shows you the slates you can open, as you. It only reads: it cannot change, share or delete anything.'}
+            {' '}You can disconnect it at any time in Profile → Developer.
           </Typography>
           <AccountNote>
             <Typography variant="subtitle2">After you answer, you go back to the app</Typography>
           </AccountNote>
         </AccountSection>
         <AccountSection title="It can">
-          <Box component="ul" sx={{ m: 0, pl: 2.5, display: 'grid', gap: SPACE.tight }}>
-            {offered.map(({ scope, label, explain }) => (
-              <li key={scope}>
+          <Box component="fieldset" disabled={busy} sx={{ border: 0, m: 0, p: 0, display: 'grid', gap: SPACE.tight }}>
+            {offered.map(({ scope, label, explain }) => (scope === 'slates:read' ? (
+              <Box key={scope} sx={{ pl: 4 }}>
                 <Typography variant="body2">{label} (read only)</Typography>
                 <Typography variant="caption" color="text.secondary">{explain}</Typography>
-              </li>
-            ))}
+              </Box>
+            ) : (
+              <FormControlLabel
+                key={scope}
+                sx={{ alignItems: 'flex-start' }}
+                label={(
+                  <Box sx={{ pt: '9px' }}>
+                    <Typography variant="body2">{label}</Typography>
+                    <Typography variant="caption" color="text.secondary">{explain}</Typography>
+                  </Box>
+                )}
+                control={(
+                  <Checkbox
+                    size="small"
+                    checked={chosen.includes(scope)}
+                    onChange={(event) => {
+                      const { checked } = event.target
+                      setChosen((current) => (checked ? [...current, scope] : current.filter((item) => item !== scope)))
+                    }}
+                  />
+                )}
+              />
+            )))}
           </Box>
           {error && <Alert severity="error">{error}</Alert>}
           <AccountActions>

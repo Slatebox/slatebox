@@ -4,6 +4,7 @@
 export const tokenPermissions = [
   { scope: 'slates:read', label: 'Read slates', explain: 'See the slates you can open, their notes, comments and the agent tasks on them.' },
   { scope: 'slates:write', label: 'Create and edit slates', explain: 'Make slates, change notes, add and resolve comments, and ask or update agent tasks, as you.' },
+  { scope: 'slates:add-photo', label: 'Add photos to slates I can edit', explain: 'Take a photo or pick one from your phone and add it to a slate as a picture note. It cannot change, move or delete anything else. The photo\'s location data is removed before it\'s saved.' },
   { scope: 'slates:share', label: 'Manage invitation links on slates I own, and submit my work to the library', explain: 'Make and turn off invitation links, which let more people open slates you own, and send your work to the library for review.' },
   { scope: 'slates:delete', label: 'Delete slates I own and remove comments', explain: 'Delete whole slates you own, and remove your comments (or the Slatebox agent\'s replies on slates you edit). Nothing else can delete.' },
   { scope: 'ai:settings', label: 'Read, change and test my own AI connections', explain: 'See and change which AI services your account uses, and check that they answer.' },
