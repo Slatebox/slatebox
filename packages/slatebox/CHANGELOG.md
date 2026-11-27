@@ -13,6 +13,10 @@ release's highlights.
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-27
+
+### Highlights
+
 - New installs get Slatebox 2.1.4 (`ghcr.io/slatebox/slatebox@sha256:0094cd5d…`, built and signed by GitHub
   from the `v2.1.4` tag): integrations free with no key, About you and the interview, start-page tiles,
   passkeys, voice (once a voice model is set up) and room-bound live-collaboration tokens.
@@ -216,7 +220,8 @@ First release of `npx slatebox`. Installs the self-host image 0.1.0, pinned by d
 
 _Not tagged:_ `0.0.0-stage` (2026-11-24) only reserved the package name on npm.
 
-[Unreleased]: https://github.com/Slatebox/slatebox/compare/slatebox%400.3.1...HEAD
+[Unreleased]: https://github.com/Slatebox/slatebox/compare/slatebox%400.3.2...HEAD
+[0.3.2]: https://github.com/Slatebox/slatebox/compare/slatebox%400.3.1...slatebox%400.3.2
 [0.3.1]: https://github.com/Slatebox/slatebox/compare/slatebox%400.3.0...slatebox%400.3.1
 [0.2.3]: https://github.com/Slatebox/slatebox/compare/slatebox%400.2.2...slatebox%400.2.3
 [0.2.2]: https://github.com/Slatebox/slatebox/compare/slatebox%400.2.1...slatebox%400.2.2
