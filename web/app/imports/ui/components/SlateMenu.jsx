@@ -20,7 +20,6 @@ import CONSTANTS from '../../api/common/constants'
 import AuthManager from '../../api/common/AuthManager'
 
 import slateProps from '../propTypes/slateProps'
-import usePhoneView from '../common/usePhoneView'
 
 import {
   globalMessage,
@@ -32,8 +31,6 @@ export default function SlateMenu({ slate }) {
   const theme = useTheme()
   const [, setRerender] = useAtom(slateRererender)
   const [, setMessage] = useAtom(globalMessage)
-  // A copy is a new slate: not made on a phone (phoneView.mjs).
-  const phoneView = usePhoneView()
 
   async function copy() {
     await copySlate(slate.shareId)
@@ -114,19 +111,17 @@ export default function SlateMenu({ slate }) {
               hideSlateMenu(e)
             }}
           >
-            {!phoneView && (
-              <MenuItem
-                onClick={(e) => {
-                  hideSlateMenu(e)
-                  copy()
-                }}
-              >
-                <ListItemIcon>
-                  <FileCopyIcon />
-                </ListItemIcon>
-                <Typography>Make a copy</Typography>
-              </MenuItem>
-            )}
+            <MenuItem
+              onClick={(e) => {
+                hideSlateMenu(e)
+                copy()
+              }}
+            >
+              <ListItemIcon>
+                <FileCopyIcon />
+              </ListItemIcon>
+              <Typography>Make a copy</Typography>
+            </MenuItem>
             {(Meteor.userId() === slate.userId ||
                 AuthManager.userHasClaim(Meteor.userId(), [
                   CONSTANTS.claims.admin._id,

@@ -1014,6 +1014,12 @@ export default function Canvas() {
       })
       if (!active) return
       accessLevel.current = {}
+      // A slate is made on a computer or tablet: on a phone an unknown id is not saved as a new slate, it
+      // gets the same note as /new (PhoneViewGate).
+      if (getSlate?.exists === false && phoneViewRef.current) {
+        history('/new', { replace: true })
+        return
+      }
       if (getSlate?.exists === false) {
         isNew = true
         slateBase = {

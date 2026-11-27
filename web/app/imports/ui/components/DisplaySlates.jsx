@@ -437,8 +437,9 @@ export default function DisplaySlates({
                         {slate.options?.userNameOverride || <UserName slateUserId={slate.userId} />}
                       </Typography>
                     </Box>
-                    <SlateMenu slate={slate} />
-                    {type !== 'team' && (
+                    {/* A phone views slates: no Delete, privacy or selection on its cards (phoneView.mjs). */}
+                    {!phoneView && <SlateMenu slate={slate} />}
+                    {type !== 'team' && !phoneView && (
                       <Checkbox size="small" checked={isSlateChecked(slate.options?.id)} inputProps={{ 'aria-label': `Select ${name}` }}
                         onChange={e => addSlateToChecked(slate, e.target.checked)} />
                     )}

@@ -190,7 +190,13 @@ test('entry points to making a slate are gone on a phone', () => {
   assert.match(ui('pages/NotFound.jsx'), /\{!phoneView && <Button component=\{Link\} to="\/new"/)
   assert.match(ui('pages/Login.jsx'), /\{!phoneView && <Button[^\n]*to="\/start"/)
   assert.match(ui('components/personal/ForYou.jsx'), /!stale && canBuild && <Button/)
-  assert.match(ui('components/SlateMenu.jsx'), /\{!phoneView && \(\s*<MenuItem[\s\S]{0,300}Make a copy/)
+  // A slate card on a phone: no options (Make a copy, Delete, privacy) and no selection box.
+  const list = ui('components/DisplaySlates.jsx')
+  assert.match(list, /\{!phoneView && <SlateMenu slate=\{slate\} \/>\}/)
+  assert.match(list, /\{type !== 'team' && !phoneView && \(\s*<Checkbox/)
+  assert.equal(list.match(/<SlateMenu /g).length, 1)
+  // A slate id nobody has made yet: on a phone it goes to /new's note, never saved as a new slate.
+  assert.match(ui('pages/Canvas.jsx'), /if \(getSlate\?\.exists === false && phoneViewRef\.current\) \{\s*history\('\/new', \{ replace: true \}\)\s*return\s*\}\s*if \(getSlate\?\.exists === false\) \{\s*isNew = true/)
   // A workshop on a phone offers no Join to edit; it says View only.
   assert.match(ui('components/workshop/WorkshopChrome.jsx'), /const canJoin = mayJoin && !viewing/)
   assert.equal(ui('pages/Canvas.jsx').match(/viewing=\{phoneView\}/g).length, 2)
