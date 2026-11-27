@@ -154,3 +154,10 @@ const AIControlAudit = new Mongo.Collection('aiControlAudit')
 export {
   AIProviders, AIModels, AIBindings, AIAgents, AIPrompts, AIPromptVersions, AIControlState, AIControlAudit,
 }
+
+// SCIM 2.0 (server/scim): each team's SCIM tokens (SHA-256 hashes only) and the groups its identity
+// provider sends, with the role a team admin mapped each to. Server only, never published.
+const ScimTokens = new Mongo.Collection('scimTokens')
+const ScimGroups = new Mongo.Collection('scimGroups')
+
+export { ScimTokens, ScimGroups }

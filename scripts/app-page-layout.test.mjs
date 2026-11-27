@@ -25,6 +25,8 @@ const LAYOUT = {
   LibraryIntegrationReview: ['pages/LibraryIntegrationReview.jsx'],
   Updates: ['pages/admin/updates/Updates.jsx'],
   Growth: ['pages/admin/Growth.jsx'],
+  TeamAudit: ['pages/TeamAudit.jsx', 'components/audit/ActivityLog.jsx'],
+  AdminAudit: ['pages/admin/AdminAudit.jsx', 'components/audit/ActivityLog.jsx'],
   Library: ['pages/Library.jsx'],
   MyLibrary: ['pages/MyLibrary.jsx'],
   LibraryItem: ['pages/LibraryItem.jsx'],

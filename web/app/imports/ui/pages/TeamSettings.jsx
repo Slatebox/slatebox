@@ -3,10 +3,12 @@
 // left list (a scrolling row on a phone). Each section shows only what exists on this server:
 //   General          the team's name, and facts about it (kind, created, your role, people)
 //   Members & roles  the team page (/team) and team slates
+//   Sign-in & security  single sign-on (connections, domains, policy; teamSso.*) and SCIM (ScimCard)
 //   Plan & billing   Slatebox Business (BusinessPanel, prices from Stripe) and the team balance
 //   Agents & AI      the team's own AI connections and choices, outside agents, Integrations
 //   Branding         the brand kit (/team/branding)
 //   Data             export everything (team.export)
+//   Activity log     who did what on the team's slates (/team/audit, audit.list)
 //   Danger zone      delete the team (organizations.delete), with the team's name typed to confirm
 // Which sections a person sees, the name rule and the delete copy live in
 // components/teams/team-settings-model.mjs. ?section=<id> opens a section.
@@ -33,7 +35,10 @@ import CreditCardOutlined from '@mui/icons-material/CreditCardOutlined'
 import AutoAwesomeOutlined from '@mui/icons-material/AutoAwesomeOutlined'
 import PaletteOutlined from '@mui/icons-material/PaletteOutlined'
 import FileDownloadOutlined from '@mui/icons-material/FileDownloadOutlined'
+import ShieldOutlined from '@mui/icons-material/ShieldOutlined'
 import WarningAmberOutlined from '@mui/icons-material/WarningAmberOutlined'
+import HistoryOutlined from '@mui/icons-material/HistoryOutlined'
+import VpnKeyOutlined from '@mui/icons-material/VpnKeyOutlined'
 import ChevronRight from '@mui/icons-material/ChevronRight'
 import { useTranslator } from '../common/i18n'
 import CONSTANTS from '../../api/common/constants'
@@ -43,6 +48,8 @@ import AuthManager from '../../api/common/AuthManager'
 import TeamBalance from '../components/billing/TeamBalance'
 import BusinessPanel from '../components/teams/BusinessPanel'
 import ExportEverything from '../components/teams/ExportEverything'
+import SignInSecurity from '../components/teams/security/SignInSecurity'
+import ScimCard from '../components/teams/security/ScimCard'
 import { Level } from '../components/profile/AISettings'
 import { paymentsHere } from '../components/billing/pay/pay-env'
 import { PRICING_URL } from '../../api/common/contact.mjs'
@@ -54,10 +61,12 @@ import {
 const ICONS = {
   general: TuneOutlined,
   members: GroupOutlined,
+  security: VpnKeyOutlined,
   billing: CreditCardOutlined,
   ai: AutoAwesomeOutlined,
   branding: PaletteOutlined,
   data: FileDownloadOutlined,
+  activity: HistoryOutlined,
   danger: WarningAmberOutlined,
 }
 
@@ -440,6 +449,17 @@ export default function TeamSettings() {
         </Card>
       </>
     )
+  } else if (active === 'security') {
+    panel = (
+      <>
+        <SectionHeader id="security" title="Sign-in & security"
+          intro={`Single sign-on for the ${noun}: your identity provider, the email domains it signs in, and whether it is required.`} />
+        <SignInSecurity noun={noun} />
+        <Card title="SCIM provisioning" icon={ShieldOutlined}>
+          <ScimCard noun={noun} />
+        </Card>
+      </>
+    )
   } else if (active === 'billing') {
     panel = (
       <>
@@ -489,6 +509,16 @@ export default function TeamSettings() {
       <>
         <SectionHeader id="data" title="Data" intro={`Take everything the ${noun} owns with you.`} />
         <Box sx={card}><ExportEverything /></Box>
+      </>
+    )
+  } else if (active === 'activity') {
+    panel = (
+      <>
+        <SectionHeader id="activity" title="Activity log" intro={`Who did what on the ${noun}'s slates, and when.`} />
+        <Card>
+          <LinkRow to="/team/audit" testId="link-team-audit" title="Open the activity log"
+            detail={`Slates made, renamed, edited, shared, exported and deleted; ${people} joining and leaving; sign-ins; and every change an agent or a script made. Names and ids only, never what a note says. Export it as CSV or JSON, or pull it from the API with an audit:read token.`} />
+        </Card>
       </>
     )
   } else if (active === 'danger') {

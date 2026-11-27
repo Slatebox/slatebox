@@ -7,7 +7,7 @@
 #   docker exec slatebox slatebox password-link person@example.com
 #   docker exec slatebox slatebox health
 #   docker exec slatebox slatebox version
-#   docker exec slatebox slatebox sso [admin-password | scim-secret | events [N] | sessions [--json]]
+#   docker exec slatebox slatebox sso [admin-password | events [N] | sessions [--json]]
 #   docker exec slatebox slatebox ai [check]
 #   docker exec slatebox slatebox tunnel [--json] [--wait N]
 #   docker exec slatebox slatebox updates [status | check | policy --json | report ... | heartbeat ...]
@@ -208,7 +208,7 @@ Usage, from the Docker host:
   docker exec slatebox slatebox password-link person@example.com
   docker exec slatebox slatebox health
   docker exec slatebox slatebox version
-  docker exec slatebox slatebox sso [admin-password | scim-secret | events [N] | sessions [--json]]
+  docker exec slatebox slatebox sso [admin-password | events [N] | sessions [--json]]
   docker exec slatebox slatebox ai [check]
   docker exec slatebox slatebox tunnel [--json] [--wait N]
   docker exec slatebox slatebox updates [status | check]

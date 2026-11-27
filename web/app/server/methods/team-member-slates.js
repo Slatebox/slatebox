@@ -8,6 +8,8 @@ import { membersChanged } from './business'
 import { removalRefusal } from '../team-guard.mjs'
 import { teamPerson } from '../common/team-person'
 import { removePersonalData } from '../profile/meteor'
+import { audit } from '../audit/recorder.mjs'
+import { personLabel } from '../audit/meteor'
 
 // A team member with canRemoveUsers removes another member: the slates that member owns in the
 // team, then the account, in one call. Never the owner, never yourself, and an admin only by an
@@ -22,8 +24,14 @@ Meteor.methods({
     const refusal = removalRefusal(caller, member)
     if (refusal) throw new Meteor.Error('remove-denied', refusal)
     const { orgId } = caller
-    const owned = await Slates.find({ userId: memberId, orgId }, { fields: { _id: 1 } }).fetchAsync()
+    const owned = await Slates.find({ userId: memberId, orgId }, { fields: { _id: 1, shareId: 1, 'options.name': 1 } }).fetchAsync()
     const ids = owned.map(slate => slate._id)
+    // The activity log keeps who was removed and each slate that went with them (there is no restore).
+    const removed = await Meteor.users.findOneAsync({ _id: memberId, orgId }, { fields: { profile: 1, emails: 1 } })
+    await audit.record({ action: 'member.removed', orgId, target: { type: 'person', id: memberId, name: personLabel(removed) }, details: { count: ids.length } })
+    for (const slate of owned) {
+      await audit.record({ action: 'slate.deleted', orgId, target: { type: 'slate', id: slate.shareId || slate._id, name: slate.options?.name || 'Untitled slate' }, slateId: slate.shareId || slate._id, details: { reason: 'member removed' } })
+    }
     await SlateAccess.removeAsync({ slateId: { $in: ids } })
     await Comments.removeAsync({ slateId: { $in: ids } })
     await Messages.removeAsync({ slateId: { $in: ids } })

@@ -1,15 +1,14 @@
 // `slatebox sso …`: what an operator needs to run single sign-on. Output goes to the operator's
 // terminal through docker exec, never into the container log.
 //
-//   slatebox sso                   where the admin console, the issuer and SCIM are
+//   slatebox sso                   where the admin console, the issuer and the app's SCIM are
 //   slatebox sso admin-password    the generated password of Keycloak's first admin, "admin"
-//   slatebox sso scim-secret       the secret of the SCIM client, for your identity provider
 //   slatebox sso events [N]        the last N sign-in events of the slatebox realm (default 50)
 //   slatebox sso sessions [--json] the app's last session check: accounts due, checked and signed
 //                                  out, and a warning when more were due than one pass checks
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { KEYCLOAK_PORT, Plain, RUN, SCIM_CLIENT, SSO_CLIENT, SSO_INIT_CLIENT, SSO_PATH, SSO_REALM, fail, mongodb, readSecrets } from './common.mjs'
+import { KEYCLOAK_PORT, Plain, RUN, SSO_CLIENT, SSO_INIT_CLIENT, SSO_PATH, SSO_REALM, fail, mongodb, readSecrets } from './common.mjs'
 import { ADMIN_USER, SESSION_CHECK_ID, sessionCheckSummary } from './sso.mjs'
 
 let origin, secrets
@@ -62,14 +61,13 @@ async function main() {
   load()
   const [command, argument] = process.argv.slice(2)
   if (command === 'admin-password') return out(secrets.keycloakAdminPassword)
-  if (command === 'scim-secret') return out(secrets.scimClientSecret)
   if (command === 'events') {
     const limit = Number(argument || 50)
     if (!Number.isInteger(limit) || limit < 1 || limit > 10000) throw new Plain('Give the number of events, for example: slatebox sso events 100')
     return events(limit)
   }
   if (command === 'sessions') return sessions(argument === '--json')
-  if (command) throw new Plain('Usage: slatebox sso [admin-password | scim-secret | events [N] | sessions [--json]]')
+  if (command) throw new Plain('Usage: slatebox sso [admin-password | events [N] | sessions [--json]]')
   const issuer = `${origin}${SSO_PATH}/realms/${SSO_REALM}`
   const closed = /^SLATEBOX_SSO_ADMIN='closed'$/m.test(readFileSync(join(RUN, 'state.env'), 'utf8'))
   out(closed
@@ -79,7 +77,7 @@ async function main() {
   out(`Issuer:          ${issuer}`)
   out(`App client:      ${SSO_CLIENT}, redirect ${origin}/sso/callback`)
   out(`Broker redirect: ${issuer}/broker/<alias>/endpoint  (give this to Entra ID, Okta or Google when you add them)`)
-  out(`SCIM 2.0:        ${issuer}/scim/v2  (OAuth 2.0 client credentials: client "${SCIM_CLIENT}", token ${issuer}/protocol/openid-connect/token; slatebox sso scim-secret)`)
+  out(`SCIM 2.0:        ${origin}/scim/v2  (Slatebox's own; a team admin makes the token in Team settings › Sign-in & security)`)
   out('Sign-in events:  slatebox sso events [N], or Events in the admin console')
   out('Session check:   slatebox sso sessions')
 }

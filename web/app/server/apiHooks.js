@@ -16,6 +16,7 @@ import { mountLicenses } from './licenses/meteor'
 import { mountAppLinks } from './mobile/app-links.mjs'
 import { madeWith } from './made-with/meteor'
 import { MADE_WITH_STRIP_PX, MADE_WITH_STRIP_STYLE, madeWithStripHtml } from '../imports/api/common/made-with.mjs'
+import { mountScimRoutes } from './scim/meteor'
 
 // /.well-known/apple-app-site-association and assetlinks.json: links and sign-ins for the Slatebox
 // viewer app (settings.mobile), 404 JSON until it is set up; ahead of the app's page.
@@ -23,6 +24,8 @@ mountAppLinks(app, { settings: () => Meteor.settings })
 // Every /api/v1 route, its OpenAPI document and the matching Meteor methods come from the
 // action registry (server/actions).
 mountActions(app)
+// /scim/v2: each team's identity provider adds, changes and turns off its people (server/scim)
+mountScimRoutes(app)
 mountMcp(app) // POST /mcp: the hosted MCP endpoint (exec, describe and one typed tool per client method)
 mountOAuth(app) // /oauth/* and /.well-known/oauth-*: how an MCP app signs a person in to /mcp
 mountLicenses(app) // POST /licenses/key: Slatebox Cloud's enterprise keys for self-hosted servers (Cloud only)

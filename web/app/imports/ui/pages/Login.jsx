@@ -13,7 +13,7 @@ import CONSTANTS from '../../api/common/constants'
 import { globalMessage } from '../jotai/atoms'
 import { loginDestination, rememberLoginReturn } from '../../api/common/login-return.mjs'
 import BrandBar from '../common/BrandBar'
-import { SsoSignIn, useSso } from '../sso/sso'
+import { SsoForAddress, SsoSignIn, useSso } from '../sso/sso'
 import { loginReturn } from '../components/billing/pay/pay-url.mjs'
 import { loginWelcome, rememberSignedIn, signedInBefore } from '../common/accountCopy.mjs'
 import PasskeySignIn from '../passkeys/PasskeySignIn'
@@ -38,6 +38,9 @@ export default function Login() {
   // No field takes focus on load on a touch device: a focused webauthn field raised iOS's passkey
   // sheet uninvited in the app's sign-in sheet (passkeys/passkey-request.mjs).
   const [focusFirst] = React.useState(() => focusOnLoad())
+  // The address typed so far: when a team requires single sign-on for it, the password is not asked.
+  const [typed, setTyped] = React.useState(email || '')
+  const [ssoRequired, setSsoRequired] = React.useState(false)
   if (Meteor.user() && !Meteor.user().isAnonymous) return <Navigate replace to={destination} />
 
   async function generateLoginToken(eml) {
@@ -88,6 +91,7 @@ export default function Login() {
 
   const performLogin = (e) => {
     e.preventDefault()
+    if (ssoRequired) return
     const em = document.getElementById('email').value
     const pwd = document.getElementById('password').value
     Meteor.loginWithPassword(em, pwd, (err) => {
@@ -136,8 +140,11 @@ export default function Login() {
             // "webauthn" lets the browser offer this site's passkeys here (autofill, PasskeySignIn).
             autoComplete="username webauthn"
             defaultValue={email}
+            onChange={(e) => setTyped(e.target.value)}
             autoFocus={focusFirst && !email}
           />
+          <SsoForAddress email={typed} next={destination} onRequired={setSsoRequired} />
+          {ssoRequired ? null : <>
           <TextField
             variant="outlined"
             margin="normal"
@@ -160,6 +167,7 @@ export default function Login() {
             <Button sx={quiet} component={RouterLink} to="/recover" size="small">Forgot password?</Button>
             <Button sx={quiet} type="button" size="small" onClick={oneTimeSignIn}>Email me a sign-in link</Button>
           </Box>
+          </>}
         </form>
         <Divider sx={{ my: 3, color: 'text.secondary', fontSize: 14 }}>New to Slatebox?</Divider>
         <Box sx={{ display: 'grid', gap: 1.25 }}>

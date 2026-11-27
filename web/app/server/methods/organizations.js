@@ -24,6 +24,7 @@ import {
 } from '../../imports/api/common/models'
 import AuthManager from '../../imports/api/common/AuthManager'
 import { removePersonalData } from '../profile/meteor'
+import { audit } from '../audit/recorder.mjs'
 
 const method = {}
 
@@ -49,6 +50,7 @@ export async function createTeamFor(user, teamName) {
   )
   await Slates.updateAsync({ userId: user._id }, { $set: { orgId } }, { multi: true })
   await Permissions.insertAsync({ userId: user._id, orgId, claimId: CONSTANTS.claims.admin._id })
+  await audit.record({ action: 'team.created', orgId, actor: { kind: 'person', userId: user._id }, target: { type: 'team', id: orgId, name } })
   return orgId
 }
 
@@ -129,6 +131,13 @@ method[CONSTANTS.methods.organizations.delete] = async function deleteOrganizati
         },
         remove: async () => true,
       }).catch(error => { throw error instanceof Meteor.Error ? error : new Meteor.Error('refund-failed', error.message) })
+      // The team's log keeps its end, and each slate that went with it, until its entries expire.
+      const team = await Organizations.findOneAsync({ _id: user.orgId }, { fields: { name: 1 } })
+      const going = await Slates.find({ userId: user._id, orgId: user.orgId }, { fields: { _id: 1, shareId: 1, 'options.name': 1 } }).fetchAsync()
+      for (const slate of going) {
+        await audit.record({ action: 'slate.deleted', orgId: user.orgId, target: { type: 'slate', id: slate.shareId || slate._id, name: slate.options?.name || 'Untitled slate' }, slateId: slate.shareId || slate._id, details: { reason: 'team deleted' } })
+      }
+      await audit.record({ action: 'team.deleted', orgId: user.orgId, target: { type: 'team', id: user.orgId, name: team?.name } })
       await Slates.removeAsync({
         userId: Meteor.userId(),
         orgId: user.orgId,
@@ -188,6 +197,7 @@ async function admitSlateGuest(slateId, viewer, visitor) {
       fields: {
         userId: 1,
         orgId: 1,
+        shareId: 1,
         'options.name': 1,
         'options.isUnlisted': 1,
         'options.isPublic': 1,
@@ -203,6 +213,11 @@ async function admitSlateGuest(slateId, viewer, visitor) {
   // 24-hour access record other code checks.
   const slateOwner = await getUserName(slate.userId)
   await recordGuestAdmission({ views: GuestViews.rawCollection() }, slate, viewer, visitor)
+  // A guest on a team's slate, once an hour per guest: someone outside the team (or no account).
+  if (slate.orgId && slate.shareId && viewer?.orgId !== slate.orgId) {
+    const actor = viewer?._id && !viewer.isAnonymous ? { kind: 'person', userId: viewer._id } : { kind: 'guest', ...(viewer?._id && { userId: viewer._id }), ...(/^[A-Za-z0-9_-]{1,128}$/.test(visitor) && { visitor }) }
+    audit.record({ action: 'sharing.guestAdmitted', actor, orgId: slate.orgId, target: { type: 'slate', id: slate.shareId, name: slate.options?.name }, slateId: slate.shareId }, { coalesce: true })
+  }
   return { allow: true, slateOwnerUserName: slateOwner }
 }
 

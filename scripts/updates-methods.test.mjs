@@ -44,7 +44,7 @@ test('the default feed is fetched only from GitHub\'s hosts; SLATEBOX_UPDATES=of
 
 test('the Updates link and route only on a self-hosted server', () => {
   assert.deepEqual(SELF_HOST_SECTIONS.map(s => s.to), ['/admin/updates'])
-  assert.deepEqual(adminLinksFor(true, { selfHosted: true }).map(s => s.to), ['/admin', '/admin/ai', '/admin/library', '/admin/updates'])
+  assert.deepEqual(adminLinksFor(true, { selfHosted: true }).map(s => s.to), ['/admin', '/admin/ai', '/admin/library', '/admin/audit', '/admin/updates'])
   assert.deepEqual(adminLinksFor(true).map(s => s.to), ADMIN_SECTIONS.map(s => s.to), 'Cloud: no Updates')
   assert.deepEqual(adminLinksFor(false, { selfHosted: true }), [])
   assert.match(read('imports/ui/SBRoutes.jsx'), /\{selfHostedServer\(Meteor\.settings\) && <Route path="\/admin\/updates" element=\{<PrivateRoute><AdminRoute><Updates \/><\/AdminRoute><\/PrivateRoute>\} \/>\}/)

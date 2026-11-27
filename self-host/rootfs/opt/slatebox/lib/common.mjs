@@ -35,7 +35,8 @@ export const KEYCLOAK_MANAGEMENT_PORT = 7083
 export const SSO_PATH = '/auth'
 export const SSO_REALM = 'slatebox'
 export const SSO_CLIENT = 'slatebox'
-export const SCIM_CLIENT = 'scim'
+// The SCIM client images made before SCIM moved into the app (/scim/v2): keycloak-init removes it.
+export const RETIRED_SCIM_CLIENT = 'scim'
 export const SSO_INIT_CLIENT = 'slatebox-init'
 export const KEYCLOAK_HOME = '/opt/keycloak'
 export const KEYCLOAK_DATA = join(DATA, 'keycloak')
@@ -66,7 +67,7 @@ const SECRET_NAMES = [
 ]
 // Made the first time single sign-on is turned on, and kept after that.
 export const SSO_SECRET_NAMES = [
-  'keycloakAdminPassword', 'keycloakInitSecret', 'keycloakDbPassword', 'ssoClientSecret', 'ssoStateKey', 'scimClientSecret',
+  'keycloakAdminPassword', 'keycloakInitSecret', 'keycloakDbPassword', 'ssoClientSecret', 'ssoStateKey',
 ]
 
 export function readSecrets() {

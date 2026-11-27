@@ -1,18 +1,25 @@
-// OpenID Connect for "Sign in with SSO": the authorization code flow with PKCE (S256), a state
-// and a nonce, for a confidential client. Nothing here imports Meteor, so the flow is unit-tested
-// with node alone (scripts/sso.test.mjs).
+// OpenID Connect for "Sign in with SSO", on openid-client (panva; an OpenID-certified relying
+// party): the authorization code flow with PKCE (S256), a state and a nonce, for a confidential
+// client. The ID token's signature is checked against the provider's published keys (JWKS), as are
+// its issuer, audience, expiry and nonce: a team's identity provider is anywhere on the internet,
+// so the back channel alone is not proof enough. Nothing here imports Meteor, so the flow is
+// unit-tested with node alone (scripts/sso.test.mjs, scripts/sso-oidc.test.mjs).
 //
-// The code is exchanged on the back channel: the app calls the token endpoint itself, server to
-// server (in the self-host image, Keycloak on the container's loopback). OpenID Connect Core
-// 3.1.3.7 lets a client that receives the ID token directly from the token endpoint rely on that
-// channel instead of checking the token's signature; the issuer, audience, expiry and nonce are
-// still checked here.
+// A connection's endpoints are a plain `config`:
+//   { issuer, authorizationEndpoint, tokenEndpoint, jwksUri, endSessionEndpoint?, clientId,
+//     clientSecret, redirectUri, allowHttp? }
+// read from the provider's discovery document (discover) or, for the self-hosted server's bundled
+// Keycloak, from settings.sso (its token endpoint and keys are on the container's loopback).
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
+import native from './native.cjs'
+
+const { openidClient: client, jose: { createLocalJWKSet, jwtVerify } } = native
 
 export const STATE_COOKIE = 'slatebox_sso'
 const STATE_MAX_AGE_MS = 10 * 60_000
 const CLOCK_SKEW_S = 60
 const SCOPE = 'openid email profile offline_access'
+const LOGOUT_EVENT = 'http://schemas.openid.net/event/backchannel-logout'
 
 export class SsoError extends Error {
   constructor(code, message) {
@@ -56,20 +63,82 @@ export function openState(key, sealed, now = Date.now()) {
 /** The hash of the random value the browser tab keeps while it signs in (see tickets.mjs). */
 export const bindingFor = verifier => createHash('sha256').update(String(verifier)).digest('base64url')
 const VERIFIER = /^[A-Za-z0-9_-]{43,128}$/
+export const validVerifier = (value) => typeof value === 'string' && VERIFIER.test(value)
+
+/** The endpoints from a provider's discovery document (openid-client's serverMetadata()). */
+export function endpointsFrom(metadata) {
+  return {
+    issuer: metadata.issuer,
+    authorizationEndpoint: metadata.authorization_endpoint,
+    tokenEndpoint: metadata.token_endpoint,
+    jwksUri: metadata.jwks_uri,
+    ...(metadata.end_session_endpoint && { endSessionEndpoint: metadata.end_session_endpoint }),
+    ...(metadata.authorization_response_iss_parameter_supported && { issParameter: true }),
+    backchannelLogout: metadata.backchannel_logout_supported === true,
+  }
+}
+
+/**
+ * Read a provider's discovery document (/.well-known/openid-configuration) through `fetch` (in
+ * Slatebox Cloud, one that reaches public addresses only). The issuer it names must be the one
+ * asked for. Throws SsoError('discovery').
+ */
+export async function discover(issuer, { fetch, allowHttp = false } = {}) {
+  try {
+    const found = await client.discovery(new URL(issuer), 'slatebox-discovery', undefined, undefined, {
+      ...(fetch && { [client.customFetch]: fetch }),
+      ...(allowHttp && { execute: [client.allowInsecureRequests] }),
+      timeout: 15,
+    })
+    const endpoints = endpointsFrom(found.serverMetadata())
+    if (!endpoints.authorizationEndpoint || !endpoints.tokenEndpoint || !endpoints.jwksUri) {
+      throw new SsoError('discovery', 'the provider does not publish an authorization endpoint, a token endpoint and its keys')
+    }
+    return endpoints
+  } catch (error) {
+    if (error instanceof SsoError) throw error
+    throw new SsoError('discovery', `the provider's discovery document could not be read (${error?.message || 'failed'})`)
+  }
+}
+
+/** openid-client's Configuration for one sign-in, with `now` as the clock it checks tokens against. */
+export function configurationFor(config, { fetch, now = Date.now() } = {}) {
+  const server = {
+    issuer: config.issuer,
+    authorization_endpoint: config.authorizationEndpoint,
+    token_endpoint: config.tokenEndpoint,
+    ...(config.jwksUri && { jwks_uri: config.jwksUri }),
+    ...(config.endSessionEndpoint && { end_session_endpoint: config.endSessionEndpoint }),
+    ...(config.issParameter && { authorization_response_iss_parameter_supported: true }),
+  }
+  const metadata = {
+    client_secret: config.clientSecret,
+    [client.clockSkew]: Math.round((now - Date.now()) / 1000),
+    [client.clockTolerance]: CLOCK_SKEW_S,
+  }
+  const configuration = new client.Configuration(server, config.clientId, metadata, client.ClientSecretPost(config.clientSecret))
+  if (fetch) configuration[client.customFetch] = fetch
+  if (config.allowHttp) client.allowInsecureRequests(configuration)
+  // The ID token's signature is checked against the provider's keys, never skipped.
+  if (!config.jwksUri) throw new SsoError('config', 'the connection has no signing keys address (jwks_uri)')
+  client.enableNonRepudiationChecks(configuration)
+  return configuration
+}
 
 /**
  * Start a sign-in: the address to send the browser to, and the cookie that remembers it.
  * `verifier` is a random value the browser tab made and keeps in its sessionStorage; only its
  * hash travels in the sealed state, and the one-time ticket can only be redeemed with it. So a
  * ticket from someone else's sign-in cannot sign this browser in to their account.
+ * extra: more fields for the sealed state (the connection id, a "try it" request).
  */
-export function beginSignIn({ config, key, now = Date.now(), next, verifier: tab }) {
-  if (typeof tab !== 'string' || !VERIFIER.test(tab)) throw new SsoError('no-binding', 'the sign-in was not started from the sign-in page')
+export function beginSignIn({ config, key, now = Date.now(), next, verifier: tab, extra = {}, loginHint }) {
+  if (!validVerifier(tab)) throw new SsoError('no-binding', 'the sign-in was not started from the sign-in page')
   const { verifier, challenge } = createPkce()
   const state = random()
   const nonce = random()
   const url = new URL(config.authorizationEndpoint)
-  url.search = new URLSearchParams({
+  const params = {
     response_type: 'code',
     client_id: config.clientId,
     redirect_uri: config.redirectUri,
@@ -78,47 +147,18 @@ export function beginSignIn({ config, key, now = Date.now(), next, verifier: tab
     nonce,
     code_challenge: challenge,
     code_challenge_method: 'S256',
-  }).toString()
-  return { url: url.toString(), cookie: sealState(key, { state, nonce, verifier, binding: bindingFor(tab), next: safeNext(next), at: now }) }
-}
-
-function decodeJwtPayload(token) {
-  if (typeof token !== 'string') throw new SsoError('id-token', 'no ID token')
-  const parts = token.split('.')
-  if (parts.length !== 3) throw new SsoError('id-token', 'malformed ID token')
-  try { return JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8')) } catch {
-    throw new SsoError('id-token', 'malformed ID token')
+    ...(typeof loginHint === 'string' && loginHint && loginHint.length <= 254 && { login_hint: loginHint }),
   }
+  for (const [name, value] of Object.entries(params)) url.searchParams.set(name, value)
+  return { url: url.toString(), cookie: sealState(key, { ...extra, state, nonce, verifier, binding: bindingFor(tab), next: safeNext(next), at: now }) }
 }
 
-export function verifyIdToken(token, { issuer, clientId, nonce, now = Date.now() }) {
-  const claims = decodeJwtPayload(token)
-  const seconds = now / 1000
-  const audience = Array.isArray(claims.aud) ? claims.aud : [claims.aud]
-  if (claims.iss !== issuer) throw new SsoError('id-token', 'issuer')
-  if (!audience.includes(clientId)) throw new SsoError('id-token', 'audience')
-  if (audience.length > 1 && claims.azp && claims.azp !== clientId) throw new SsoError('id-token', 'authorized party')
-  if (typeof claims.exp !== 'number' || claims.exp + CLOCK_SKEW_S < seconds) throw new SsoError('id-token', 'expired')
-  if (typeof claims.iat === 'number' && claims.iat - CLOCK_SKEW_S > seconds) throw new SsoError('id-token', 'issued in the future')
-  if (!nonce || claims.nonce !== nonce) throw new SsoError('id-token', 'nonce')
-  if (typeof claims.sub !== 'string' || !claims.sub) throw new SsoError('id-token', 'subject')
-  return claims
-}
-
-async function tokenRequest(config, fetch, params) {
-  const response = await fetch(config.tokenEndpoint, {
-    method: 'POST',
-    signal: AbortSignal.timeout(15_000),
-    headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
-    body: new URLSearchParams({ ...params, client_id: config.clientId, client_secret: config.clientSecret }).toString(),
-  })
-  let body = {}
-  try { body = await response.json() } catch { /* not JSON */ }
-  return { status: response.status, ok: response.ok, body: body || {} }
-}
+const isResponseError = (error) => error instanceof client.ResponseBodyError || error?.code === 'OAUTH_RESPONSE_BODY_ERROR'
+const isTransport = (error) => error?.name === 'AbortError' || error?.name === 'TimeoutError' || error?.code === 'OAUTH_RESPONSE_IS_NOT_CONFORM' ||
+  error?.code === 'OAUTH_RESPONSE_IS_NOT_JSON' || error?.cause?.code === 'ECONNREFUSED' || /fetch failed|ECONN|ENOTFOUND|EAI_AGAIN/.test(String(error?.message))
 
 /** Finish a sign-in from the callback's query and the sealed cookie. Throws an SsoError. */
-export async function completeSignIn({ config, key, now = Date.now(), cookie, query, fetch = globalThis.fetch }) {
+export async function completeSignIn({ config, key, now = Date.now(), cookie, query, fetch }) {
   const started = openState(key, cookie, now)
   if (!started) throw new SsoError('no-sign-in', 'the sign-in expired or was not started here')
   if (typeof query?.state !== 'string' || query.state.length !== started.state.length ||
@@ -127,13 +167,30 @@ export async function completeSignIn({ config, key, now = Date.now(), cookie, qu
   }
   if (query.error) throw new SsoError('denied', 'the identity provider did not sign the person in')
   if (typeof query.code !== 'string' || !query.code) throw new SsoError('no-code', 'no authorization code')
-  const reply = await tokenRequest(config, fetch, {
-    grant_type: 'authorization_code', code: query.code, redirect_uri: config.redirectUri, code_verifier: started.verifier,
-  })
-  if (!reply.ok) throw new SsoError('token', `the token endpoint answered ${reply.status}`)
-  const claims = verifyIdToken(reply.body.id_token, { issuer: config.issuer, clientId: config.clientId, nonce: started.nonce, now })
   if (typeof started.binding !== 'string' || !started.binding) throw new SsoError('no-sign-in', 'the sign-in was not bound to a browser')
-  return { claims, refreshToken: typeof reply.body.refresh_token === 'string' ? reply.body.refresh_token : undefined, next: started.next, binding: started.binding }
+  const configuration = configurationFor(config, { fetch, now })
+  const currentUrl = new URL(config.redirectUri)
+  for (const [name, value] of Object.entries(query)) if (typeof value === 'string') currentUrl.searchParams.set(name, value)
+  let tokens
+  try {
+    tokens = await client.authorizationCodeGrant(configuration, currentUrl, {
+      pkceCodeVerifier: started.verifier, expectedNonce: started.nonce, expectedState: started.state, idTokenExpected: true,
+    })
+  } catch (error) {
+    if (isResponseError(error)) throw new SsoError('token', `the token endpoint answered ${error.status}`)
+    if (isTransport(error)) throw new SsoError('token', 'the token endpoint could not be reached')
+    throw new SsoError('id-token', error?.message || 'the ID token was refused')
+  }
+  const claims = tokens.claims()
+  if (!claims || typeof claims.sub !== 'string' || !claims.sub) throw new SsoError('id-token', 'subject')
+  return {
+    claims,
+    refreshToken: typeof tokens.refresh_token === 'string' ? tokens.refresh_token : undefined,
+    idToken: typeof tokens.id_token === 'string' ? tokens.id_token : undefined,
+    next: started.next,
+    binding: started.binding,
+    started,
+  }
 }
 
 /**
@@ -141,14 +198,49 @@ export async function completeSignIn({ config, key, now = Date.now(), cookie, qu
  * was disabled or removed, or the session was ended in the identity provider: revoked. Anything
  * else that fails, such as an outage, is unknown, and nobody is signed out for it.
  */
-export async function refreshSession({ config, refreshToken, fetch = globalThis.fetch }) {
-  let reply
+export async function refreshSession({ config, refreshToken, fetch, now = Date.now() }) {
+  let tokens
   try {
-    reply = await tokenRequest(config, fetch, { grant_type: 'refresh_token', refresh_token: refreshToken })
-  } catch {
+    tokens = await client.refreshTokenGrant(configurationFor(config, { fetch, now }), refreshToken)
+  } catch (error) {
+    if (isResponseError(error) && error.status === 400 && error.error === 'invalid_grant') return { status: 'revoked' }
     return { status: 'unknown' }
   }
-  if (reply.ok) return { status: 'active', refreshToken: reply.body.refresh_token || refreshToken }
-  if (reply.status === 400 && reply.body.error === 'invalid_grant') return { status: 'revoked' }
-  return { status: 'unknown' }
+  return { status: 'active', refreshToken: tokens.refresh_token || refreshToken }
+}
+
+/** Where the browser goes to sign out at the identity provider too, or null when it has no such page. */
+export function endSessionUrl({ config, idToken, postLogoutRedirectUri }) {
+  if (!config.endSessionEndpoint) return null
+  const url = new URL(config.endSessionEndpoint)
+  url.searchParams.set('client_id', config.clientId)
+  if (idToken) url.searchParams.set('id_token_hint', idToken)
+  if (postLogoutRedirectUri) url.searchParams.set('post_logout_redirect_uri', postLogoutRedirectUri)
+  return url.toString()
+}
+
+/**
+ * OpenID Connect Back-Channel Logout 1.0: the provider POSTs a signed logout token when a person's
+ * session ends there. jwks: the provider's key set ({ keys }). Returns { subject, sessionId, jti }
+ * or throws SsoError('logout-token').
+ */
+export async function verifyLogoutToken(token, { config, jwks, now = Date.now() }) {
+  let payload
+  try {
+    ({ payload } = await jwtVerify(String(token || ''), createLocalJWKSet(jwks), {
+      issuer: config.issuer,
+      audience: config.clientId,
+      clockTolerance: CLOCK_SKEW_S,
+      currentDate: new Date(now),
+      requiredClaims: ['iat', 'jti', 'events'],
+      algorithms: ['RS256', 'RS384', 'RS512', 'PS256', 'PS384', 'PS512', 'ES256', 'ES384', 'ES512', 'EdDSA'],
+    }))
+  } catch (error) {
+    throw new SsoError('logout-token', error?.code || 'the logout token was refused')
+  }
+  if (!payload.events || typeof payload.events !== 'object' || !Object.hasOwn(payload.events, LOGOUT_EVENT)) throw new SsoError('logout-token', 'events')
+  if (payload.nonce !== undefined) throw new SsoError('logout-token', 'a logout token carries no nonce')
+  if (typeof payload.sub !== 'string' && typeof payload.sid !== 'string') throw new SsoError('logout-token', 'neither sub nor sid')
+  if (typeof payload.iat !== 'number' || now / 1000 - payload.iat > 10 * 60) throw new SsoError('logout-token', 'too old')
+  return { subject: typeof payload.sub === 'string' ? payload.sub : null, sessionId: typeof payload.sid === 'string' ? payload.sid : null, jti: payload.jti }
 }

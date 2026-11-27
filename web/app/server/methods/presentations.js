@@ -34,6 +34,7 @@ import { carryImages, composeDeck, normalizeDirection, pendingImages } from '../
 import { cleanStyleRef } from '../../imports/ui/components/presentations/presentationStyles.mjs'
 import { storedSlateLayout } from './presentationLayout.mjs'
 import { promptsKey } from '../ai-control/prompts/index.mjs'
+import { audit } from '../audit/recorder.mjs'
 
 // The largest slate copy a published deck keeps for its live player (characters of JSON).
 const MAX_SLATE_JSON = 5_000_000
@@ -331,7 +332,9 @@ method[CONSTANTS.methods.presentations.unpublish] = async ({ presentationId }) =
   const user = await Meteor.userAsync()
   if (!user) return null
   if (typeof presentationId !== 'string') throw publicationChanged()
+  const deckOf = await SlatePresentations.findOneAsync({ _id: presentationId, userId: user._id, isPublished: true }, { fields: { slateShareId: 1 } })
   await withdrawVersion({ _id: presentationId, userId: user._id, isPublished: true })
+  if (deckOf?.slateShareId) await audit.record({ action: 'presentation.unpublished', target: { type: 'slate', id: deckOf.slateShareId }, slateId: deckOf.slateShareId })
   return true
 }
 
@@ -413,6 +416,7 @@ method[CONSTANTS.methods.presentations.publish] = async ({
   // async produce the image so it doesn't hold up the publish
   setTimeout(() => renderShareCard(presentation._id, snapshotGeneration, { look, rawSVG }), 100)
 
+  await audit.record({ action: 'presentation.published', target: { type: 'slate', id: slateShareId }, slateId: slateShareId })
   return presentationUrl
 }
 

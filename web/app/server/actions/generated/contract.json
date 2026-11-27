@@ -15,7 +15,8 @@
     "team:move",
     "library:review",
     "profile:read",
-    "profile:write"
+    "profile:write",
+    "audit:read"
   ],
   "errors": {
     "shape": "{\"error\":{\"code\",\"message\",\"details\"?,\"retryAfter\"?}} with the HTTP status",
@@ -22928,6 +22929,599 @@
           "openWorldHint": false
         }
       }
+    },
+    {
+      "id": "audit.list",
+      "title": "Activity log",
+      "description": "A team's activity log: who did what to which slate, through which door (app, api, mcp, exec, scim, sso), when, and a keyed hash of the address. Names and ids only: never note text, comments or prompts. Newest first; pass the answer's next as before for the page after. For a SIEM, pass after (a seq, 0 at first) to read oldest first from there, and keep the last next to ask again later. For the team's owner and admins (and administrators of this server).",
+      "action": "audit.list",
+      "toolset": "team",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "scope": "audit:read",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/audit",
+        "pathParams": [],
+        "queryParams": [
+          "team",
+          "action",
+          "actor",
+          "slate",
+          "via",
+          "from",
+          "to",
+          "address",
+          "after",
+          "before",
+          "limit"
+        ],
+        "bodyParams": [],
+        "idempotencyKey": "none"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "team": {
+            "type": "string",
+            "pattern": "^(server|[A-Za-z0-9_-]{1,64})$",
+            "description": "The team whose log to read (its id), or \"server\" for entries outside any team. Leave it out for your own team."
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "slates",
+              "sharing",
+              "members",
+              "exports",
+              "publishing",
+              "comments",
+              "agents",
+              "signin",
+              "sso",
+              "scim",
+              "log",
+              "slate.created",
+              "slate.copied",
+              "slate.renamed",
+              "slate.edited",
+              "slate.settingsChanged",
+              "slate.deleted",
+              "sharing.linkChanged",
+              "sharing.memberChanged",
+              "sharing.inviteIssued",
+              "sharing.inviteRevoked",
+              "sharing.embedOpened",
+              "sharing.cloudLink",
+              "sharing.guestAdmitted",
+              "member.invited",
+              "member.joined",
+              "member.roleChanged",
+              "member.removed",
+              "account.deleted",
+              "team.created",
+              "team.deleted",
+              "export.team",
+              "export.mermaid",
+              "export.download",
+              "export.google",
+              "import.team",
+              "move.team",
+              "presentation.published",
+              "presentation.unpublished",
+              "library.submitted",
+              "library.published",
+              "library.unpublished",
+              "comment.added",
+              "comment.resolved",
+              "comment.removed",
+              "agent.write",
+              "token.created",
+              "token.revoked",
+              "integration.invited",
+              "integration.removed",
+              "integration.approved",
+              "integration.changed",
+              "signin.succeeded",
+              "signin.failed",
+              "signin.breakGlass",
+              "signout",
+              "sso.connectionSaved",
+              "sso.connectionRemoved",
+              "sso.domainAdded",
+              "sso.domainVerified",
+              "sso.domainLost",
+              "sso.domainRemoved",
+              "sso.policyChanged",
+              "scim.tokenCreated",
+              "scim.tokenRevoked",
+              "scim.userCreated",
+              "scim.userAttached",
+              "scim.userUpdated",
+              "scim.userDeactivated",
+              "scim.userReactivated",
+              "scim.userRemoved",
+              "scim.groupCreated",
+              "scim.groupUpdated",
+              "scim.groupRemoved",
+              "scim.groupMapped",
+              "scim.roleChanged",
+              "scim.recipientSet",
+              "audit.exported",
+              "audit.viewedByStaff",
+              "audit.gap"
+            ],
+            "description": "One action (slate.renamed) or a group of them (slates, sharing, members, exports, publishing, comments, agents, signin, sso, scim, log)."
+          },
+          "actor": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "description": "Only what this account did (its id)."
+          },
+          "slate": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,80}$",
+            "description": "Only entries about this slate (its share id)."
+          },
+          "via": {
+            "type": "string",
+            "enum": [
+              "app",
+              "api",
+              "mcp",
+              "exec",
+              "scim",
+              "sso",
+              "system"
+            ],
+            "description": "Only what came through this door: app, api, mcp, exec, scim, sso or system."
+          },
+          "from": {
+            "type": "string",
+            "pattern": "^[0-9][0-9TZ:.+-]{9,34}$",
+            "description": "From this time (included)."
+          },
+          "to": {
+            "type": "string",
+            "pattern": "^[0-9][0-9TZ:.+-]{9,34}$",
+            "description": "Until this time (not included)."
+          },
+          "address": {
+            "type": "string",
+            "pattern": "^[0-9A-Fa-f.:]{2,45}$",
+            "description": "Only requests from this address. The log keeps a keyed hash of each address, never the address."
+          },
+          "after": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Entries after this seq, oldest first."
+          },
+          "before": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Entries before this seq, newest first."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 100
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "team": {
+            "type": "string"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "seq": {
+                  "type": "integer"
+                },
+                "at": {
+                  "type": "string"
+                },
+                "action": {
+                  "type": "string"
+                },
+                "summary": {
+                  "type": "string"
+                },
+                "actor": {
+                  "type": "object"
+                },
+                "target": {
+                  "type": "object"
+                },
+                "slateId": {
+                  "type": "string"
+                },
+                "via": {
+                  "type": "string"
+                },
+                "addressHash": {
+                  "type": "string"
+                },
+                "details": {
+                  "type": "object"
+                },
+                "expiresAt": {
+                  "type": "string"
+                },
+                "entryHash": {
+                  "type": "string"
+                },
+                "chain": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "next": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "order": {
+            "type": "string",
+            "enum": [
+              "newest",
+              "oldest"
+            ]
+          }
+        },
+        "required": [
+          "team",
+          "events",
+          "next",
+          "order"
+        ]
+      },
+      "tool": null
+    },
+    {
+      "id": "audit.verify",
+      "title": "Check the activity log",
+      "description": "Checks that a team's activity log is unbroken: every entry still matches its hash, none is missing, and each links to the one before. head is the newest sealed link: keep it outside Slatebox and compare it next time. Entries are sealed within a minute of being written (pending counts those not sealed yet).",
+      "action": "audit.verify",
+      "toolset": "team",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "scope": "audit:read",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/audit/verify",
+        "pathParams": [],
+        "queryParams": [
+          "team"
+        ],
+        "bodyParams": [],
+        "idempotencyKey": "none"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "team": {
+            "type": "string",
+            "pattern": "^(server|[A-Za-z0-9_-]{1,64})$",
+            "description": "The team whose log to read (its id), or \"server\" for entries outside any team. Leave it out for your own team."
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "team": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "checked": {
+            "type": "integer"
+          },
+          "firstSeq": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "headSeq": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "head": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "since": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sealedSeq": {
+            "type": "integer"
+          },
+          "pending": {
+            "type": "integer"
+          },
+          "problem": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "seq": {
+                "type": "integer"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "edited",
+                  "missing",
+                  "chain",
+                  "checkpoint"
+                ]
+              }
+            }
+          },
+          "keptDays": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "How many days entries are kept; null: until removed."
+          }
+        },
+        "required": [
+          "team",
+          "ok",
+          "checked",
+          "head",
+          "sealedSeq",
+          "pending"
+        ]
+      },
+      "tool": null
+    },
+    {
+      "id": "audit.export",
+      "title": "Export the activity log",
+      "description": "A one-time address (10 minutes) to download the log, with the same filters as audit.list, as CSV or JSON: at most 100,000 entries, oldest first. A GET to downloadUrl downloads it. The export is itself an entry in the log.",
+      "action": "audit.export",
+      "toolset": "team",
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "scope": "audit:read",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/audit/export",
+        "pathParams": [],
+        "queryParams": [],
+        "bodyParams": [
+          "format",
+          "team",
+          "action",
+          "actor",
+          "slate",
+          "via",
+          "from",
+          "to",
+          "address"
+        ],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "format": {
+            "type": "string",
+            "enum": [
+              "csv",
+              "json"
+            ],
+            "default": "csv"
+          },
+          "team": {
+            "type": "string",
+            "pattern": "^(server|[A-Za-z0-9_-]{1,64})$",
+            "description": "The team whose log to read (its id), or \"server\" for entries outside any team. Leave it out for your own team."
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "slates",
+              "sharing",
+              "members",
+              "exports",
+              "publishing",
+              "comments",
+              "agents",
+              "signin",
+              "sso",
+              "scim",
+              "log",
+              "slate.created",
+              "slate.copied",
+              "slate.renamed",
+              "slate.edited",
+              "slate.settingsChanged",
+              "slate.deleted",
+              "sharing.linkChanged",
+              "sharing.memberChanged",
+              "sharing.inviteIssued",
+              "sharing.inviteRevoked",
+              "sharing.embedOpened",
+              "sharing.cloudLink",
+              "sharing.guestAdmitted",
+              "member.invited",
+              "member.joined",
+              "member.roleChanged",
+              "member.removed",
+              "account.deleted",
+              "team.created",
+              "team.deleted",
+              "export.team",
+              "export.mermaid",
+              "export.download",
+              "export.google",
+              "import.team",
+              "move.team",
+              "presentation.published",
+              "presentation.unpublished",
+              "library.submitted",
+              "library.published",
+              "library.unpublished",
+              "comment.added",
+              "comment.resolved",
+              "comment.removed",
+              "agent.write",
+              "token.created",
+              "token.revoked",
+              "integration.invited",
+              "integration.removed",
+              "integration.approved",
+              "integration.changed",
+              "signin.succeeded",
+              "signin.failed",
+              "signin.breakGlass",
+              "signout",
+              "sso.connectionSaved",
+              "sso.connectionRemoved",
+              "sso.domainAdded",
+              "sso.domainVerified",
+              "sso.domainLost",
+              "sso.domainRemoved",
+              "sso.policyChanged",
+              "scim.tokenCreated",
+              "scim.tokenRevoked",
+              "scim.userCreated",
+              "scim.userAttached",
+              "scim.userUpdated",
+              "scim.userDeactivated",
+              "scim.userReactivated",
+              "scim.userRemoved",
+              "scim.groupCreated",
+              "scim.groupUpdated",
+              "scim.groupRemoved",
+              "scim.groupMapped",
+              "scim.roleChanged",
+              "scim.recipientSet",
+              "audit.exported",
+              "audit.viewedByStaff",
+              "audit.gap"
+            ],
+            "description": "One action (slate.renamed) or a group of them (slates, sharing, members, exports, publishing, comments, agents, signin, sso, scim, log)."
+          },
+          "actor": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "description": "Only what this account did (its id)."
+          },
+          "slate": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,80}$",
+            "description": "Only entries about this slate (its share id)."
+          },
+          "via": {
+            "type": "string",
+            "enum": [
+              "app",
+              "api",
+              "mcp",
+              "exec",
+              "scim",
+              "sso",
+              "system"
+            ],
+            "description": "Only what came through this door: app, api, mcp, exec, scim, sso or system."
+          },
+          "from": {
+            "type": "string",
+            "pattern": "^[0-9][0-9TZ:.+-]{9,34}$",
+            "description": "From this time (included)."
+          },
+          "to": {
+            "type": "string",
+            "pattern": "^[0-9][0-9TZ:.+-]{9,34}$",
+            "description": "Until this time (not included)."
+          },
+          "address": {
+            "type": "string",
+            "pattern": "^[0-9A-Fa-f.:]{2,45}$",
+            "description": "Only requests from this address. The log keeps a keyed hash of each address, never the address."
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "downloadUrl": {
+            "type": "string"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "GET"
+            ]
+          },
+          "format": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string"
+          },
+          "team": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "downloadUrl",
+          "method",
+          "format",
+          "expiresAt"
+        ]
+      },
+      "tool": null
     }
   ]
 }

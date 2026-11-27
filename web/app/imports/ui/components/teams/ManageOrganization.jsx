@@ -59,6 +59,7 @@ const STATUS_SX = {
   active: (theme) => ({ bgcolor: '#dce9ce', color: '#183d28', ...theme.applyStyles('dark', { bgcolor: '#3c5344', color: '#e5f1dc' }) }),
   invited: (theme) => ({ bgcolor: '#fbecc8', color: '#5c3d00', ...theme.applyStyles('dark', { bgcolor: '#5a4519', color: '#ffe7b3' }) }),
   'not-invited': (theme) => ({ bgcolor: '#e9ebe4', color: '#3b4a40', ...theme.applyStyles('dark', { bgcolor: '#3a4a40', color: '#e3e8df' }) }),
+  off: (theme) => ({ bgcolor: '#f3dcd8', color: '#6b2017', ...theme.applyStyles('dark', { bgcolor: '#5a2e29', color: '#ffd9d3' }) }),
 }
 
 const visuallyHidden = { position: 'absolute', width: '1px', height: '1px', p: 0, m: -1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0 }

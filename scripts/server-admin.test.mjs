@@ -103,11 +103,11 @@ test('/admin, /admin/ai and /admin/library open for a team-less administrator an
 
 // ---------- the account menu and the profile ----------
 test('the Admin item and the profile\'s Server admin section are for administrators only', () => {
-  assert.deepEqual(adminLinksFor(true).map((s) => s.to), ['/admin', '/admin/ai', '/admin/library'])
+  assert.deepEqual(adminLinksFor(true).map((s) => s.to), ['/admin', '/admin/ai', '/admin/library', '/admin/audit'])
   assert.deepEqual(adminLinksFor(false), [])
   assert.deepEqual(adminLinksFor(null), [], 'nothing while the server has not answered')
   assert.deepEqual(adminLinksFor('yes'), [])
-  assert.deepEqual(ADMIN_SECTIONS.map((s) => s.title), ['Admin overview', 'AI control', 'Library review'])
+  assert.deepEqual(ADMIN_SECTIONS.map((s) => s.title), ['Admin overview', 'AI control', 'Library review', 'Activity log'])
   assert.match(ADMIN_SECTIONS[1].detail, /models, providers, bindings and prompts/i)
 
   const menu = read('imports/ui/components/AccountMenu.jsx')

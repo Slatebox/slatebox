@@ -1,6 +1,7 @@
 import { defineAction } from './registry.mjs'
 import { problem } from './errors.mjs'
 import { loadSlate } from './slate-access.mjs'
+import { audit } from '../audit/recorder.mjs'
 import { shareIdInput } from './slate-schemas.mjs'
 import { slateVisibility } from '../methods/slate-role.mjs'
 import { MermaidError, MERMAID_FORMATS, slateToMermaid } from '../../imports/api/common/mermaid/index.mjs'
@@ -58,12 +59,17 @@ export default defineAction({
   },
   load: loadSlate(false),
   tool: { name: 'export_mermaid', title: 'Read a slate as Mermaid', description: 'Read a slate as Mermaid text, to put a diagram in docs or code: a mind map as mindmap, a project plan as a Gantt chart, anything else as a flowchart.' },
-  handler(_principal, input, { deps, resource: slate }) {
+  handler(principal, input, { deps, resource: slate }) {
     let out
     try {
       out = slateToMermaid(slate, { format: input.format, styles: input.styles, start: input.start })
     } catch (error) {
       throw mermaidProblem(error)
+    }
+    // A slate taken out as Mermaid by a person or a token, once an hour each (a public slate's
+    // visitors are not anyone's team activity). The log never holds the text.
+    if (principal?.userId && (principal.kind === 'person' || principal.kind === 'agent')) {
+      audit.record({ action: 'export.mermaid', target: { type: 'slate', id: slate.shareId, name: slate.options?.name }, slateId: slate.shareId, ...(slate.orgId && { orgId: slate.orgId }), details: { format: out.format } }, { coalesce: true })
     }
     return {
       shareId: slate.shareId,

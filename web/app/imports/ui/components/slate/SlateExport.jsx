@@ -13,6 +13,7 @@ import FileCopyIcon from '@mui/icons-material/FileCopy'
 import CONSTANTS from '../../../api/common/constants'
 import { currentSlate, globalMessage, mermaidDialog, slateOutputOpen } from '../../jotai/atoms'
 import EnterpriseSlot from '../../common/EnterpriseSlot'
+import noteDownload from '../../../api/client/noteDownload'
 
 // A cloud link stores the image in the hosted service's S3 bucket. A
 // self-hosted instance offers it only when its operator configured one.
@@ -66,6 +67,7 @@ export default function SlateExport({ onExport }) {
             .replace(/[^a-z0-9]/gi, '_')
             .toLowerCase()}_${slate?.shareId}.png`
           dl.click()
+          noteDownload(slate?.shareId, 'png')
         })
         break
       }
@@ -104,6 +106,7 @@ export default function SlateExport({ onExport }) {
             .replace(/[^a-z0-9]/gi, '_')
             .toLowerCase()}_${slate?.shareId}.svg`
           dl.click()
+          noteDownload(slate?.shareId, 'svg')
         })
         break
       }

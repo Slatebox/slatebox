@@ -13,12 +13,16 @@
 //   api.addMethods({ name: fn })       plain Meteor methods (prefer actions)
 //   api.addRoute({ method, path, handler })  an Express route on the app (OAuth callbacks)
 //   api.onStartup(fn)                  run inside Meteor.startup
+//   api.audit(entry, options)          an entry in the activity log (server/audit/recorder.mjs),
+//                                      for what happens outside an action (its actions are
+//                                      recorded by the registry)
 // On Slatebox Cloud every action, method and route is checked again when it is called, so a Cloud
 // key that ends while the server runs locks them then, not at the next restart (a self-hosted
 // install has no key to end). context.isUnlocked() lets enterprise code check the same for what the
 // api does not carry (its publication and its background sweep).
 import { agentInviteKilled, editionOf } from '../imports/api/common/edition.mjs'
 import { enterpriseAccess, LICENSE_WORDS } from './enterprise-license.mjs'
+import { audit } from './audit/recorder.mjs'
 
 const ROUTE_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
 
@@ -49,6 +53,7 @@ export function createEnterpriseHost() {
       if (typeof fn !== 'function') throw new Error('enterprise: onStartup takes a function')
       startups.push(fn)
     },
+    audit: (entry, options) => audit.record(entry, options),
   })
   const isEmpty = () => !actions.length && !Object.keys(methods).length && !routes.length && !startups.length
   return { actions, methods, routes, startups, api, isEmpty }
@@ -108,6 +113,7 @@ function guardedApi(api, current) {
       })
     },
     onStartup: (fn) => api.onStartup(fn),
+    audit: guard((entry, options) => api.audit(entry, options)),
   })
 }
 

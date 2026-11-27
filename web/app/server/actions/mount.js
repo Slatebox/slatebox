@@ -45,6 +45,7 @@ import { aiSettings } from '../methods/ai/ai-settings'
 import { aiBindings, aiCatalog, aiControl, aiControlOps, aiControlStore, aiControlWriteLimit, aiKeys, aiPrompts, isAIControlAdmin } from '../ai-control/index.mjs'
 import { presence } from '../presence/meteor'
 import { mountTeamExport, teamTransfer } from '../team-export/meteor'
+import { teamScim } from '../scim/meteor'
 import { shapeService } from '../shapes/meteor'
 import { createPresentationFor } from '../methods/presentations'
 import { mediaLookup } from '../media/meteor'
@@ -58,6 +59,10 @@ import { countApiCall, noticingFirstAction } from '../agent-reach/usage-meteor'
 import { profileStore } from '../profile/meteor'
 import { createAppPersonal } from '../personal/meteor'
 import { createAppStartTiles } from '../start/meteor'
+import { audit } from '../audit/recorder.mjs'
+import { auditService, mountAuditExport } from '../audit/meteor'
+import { signOutUrl as ssoSignOutUrl, startTry as startSsoTry, teamSso } from '../sso'
+import { teamPerson } from '../common/team-person'
 
 const IdempotencyRecords = new Mongo.Collection('apiIdempotencyRecords')
 const RateWindows = new Mongo.Collection('apiRateWindows')
@@ -157,6 +162,8 @@ export const deps = {
     presence,
     // team.export and teamImports.* (server/team-export)
     teamTransfer,
+    // teamScim.* (server/scim/admin.mjs): a team admin's SCIM tokens, group roles and departing members' recipient
+    teamScim,
     // shapes.generate, shapes.list, shapes.searchIcons, shapes.apply (server/shapes)
     shapes: shapeService,
     // slates.list: the Slates page's lists (imports/api/common/slateFilter.js), for a token's account.
@@ -235,12 +242,25 @@ export const deps = {
     }),
 }
 
+// audit.* (server/audit): the activity log, and the downloads a browser makes itself.
+deps.audit = auditService
+deps.auditDownloads = {
+  async note(principal, { shareId, format }) {
+    const access = await deps.resolveSlateForUser(shareId, principal.userId)
+    if (!access?.canRead) return false
+    await audit.record({ action: 'export.download', target: { type: 'slate', id: shareId }, slateId: shareId, details: { format: format.toUpperCase(), reported: 'client' } }, { coalesce: true })
+    return true
+  },
+}
+
 // library.* (server/library): the shared library, over the same save core, slate access and decks.
 deps.library = createAppLibrary(deps)
 // personal.ideas.* (server/personal): For you, which saves to the library and opens slates through the same doors.
 deps.personal = createAppPersonal(deps)
 // start.tiles.* (server/start): the start page's tiles, built through the same drafting, library and slate doors.
 deps.startTiles = createAppStartTiles(deps)
+// a team's single sign-on (server/sso, actions/team-sso.mjs)
+Object.assign(deps, { teamSso, teamPerson, startSsoTry, ssoSignOutUrl })
 
 export const limiter = createRateLimiter({ collection: RateWindows.rawCollection() })
 export const registry = createAppRegistry({ deps, idempotency, limiter, extraActions: enterpriseHost.actions })
@@ -282,6 +302,8 @@ export function mountActions(app) {
   mountMermaidFiles(app, registry, { forwardedCount })
   // The one-time addresses a team export downloads from and an import uploads to.
   mountTeamExport(app, express)
+  // The one-time address an activity log export downloads from (audit.export).
+  mountAuditExport(app)
   // each account's first action through the app, beside the first by an agent (agent-reach)
   const ddp = {
     defineMethods: (methods) => Meteor.methods(methods),

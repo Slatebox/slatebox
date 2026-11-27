@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useAtomValue } from 'jotai'
 import { Button, ButtonGroup, Menu, MenuItem, Paper, Typography } from '@mui/material'
 import { downloadGridPdf, printGrid } from './gridPrint'
-import { isPresentOpen } from '../../jotai/atoms'
+import { currentSlate, isPresentOpen } from '../../jotai/atoms'
+import noteDownload from '../../../api/client/noteDownload'
 
 /**
  * "Print / Export PDF" for a grid sheet on the slate (snap-grid spec §5): this page (the one selected, or page 1) or
@@ -13,12 +14,15 @@ import { isPresentOpen } from '../../jotai/atoms'
  */
 export default function GridPrintButton({ board, engine, docked = false }) {
   const presenting = useAtomValue(isPresentOpen)
+  const shareId = useAtomValue(currentSlate)?.shareId
   const workshop = board?.model
   const [anchor, setAnchor] = useState(null)
   const [busy, setBusy] = useState(false)
   const [said, setSaid] = useState('')
   const latest = useRef({ board, engine })
   latest.current = { board, engine }
+  const latestShareId = useRef(shareId)
+  latestShareId.current = shareId
   const run = async ({ pdf, pages }) => {
     const { board: now, engine: slate } = latest.current
     if (!now?.model || !slate) return
@@ -28,6 +32,7 @@ export default function GridPrintButton({ board, engine, docked = false }) {
     try {
       const made = await (pdf ? downloadGridPdf : printGrid)({ engine: slate, workshop: now.visible ?? now.model, pageIds: pages })
       if (made) setSaid(pdf ? 'Saved the PDF.' : 'Opened the print dialog.')
+      if (made && pdf) noteDownload(latestShareId.current, 'pdf')
     } catch (error) { setSaid(error?.message || 'The page could not be printed.') }
     finally { setBusy(false) }
   }

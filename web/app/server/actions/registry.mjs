@@ -8,6 +8,8 @@ import { createHash } from 'node:crypto'
 import { ActionError, problem, toActionError } from './errors.mjs'
 import { validate } from './schema.mjs'
 import { principalFromVisitor } from './principal.mjs'
+import { audit as auditRecorder, withAuditContext } from '../audit/recorder.mjs'
+import { slateTarget, specProblem } from '../audit/action-specs.mjs'
 
 export const CONTRACT_VERSION = '1.0'
 export const PRINCIPAL_KINDS = ['person', 'guest', 'agent', 'visitor']
@@ -131,6 +133,13 @@ export function defineAction(definition) {
     fail(id, 'a Meteor method is called by a signed-in session')
   if (!http && definition.tool)
     fail(id, 'tools and commands call the HTTP route, so the action needs one')
+  // audit: what the activity log keeps of a write (server/audit/action-specs.mjs explains the
+  // forms). A write may declare it here or in that file's ACTION_AUDIT; a read keeps nothing.
+  if (definition.audit !== undefined && definition.audit !== null) {
+    if (kind !== 'write') fail(id, 'a read keeps no activity log entry')
+    const wrong = specProblem(definition.audit)
+    if (wrong) fail(id, `audit ${wrong}`)
+  }
   if (definition.tool) {
     const { name, title: toolTitle, description: toolDescription, ...rest } = definition.tool
     if (typeof name !== 'string' || !/^[a-z][a-z0-9_]{0,63}$/.test(name))
@@ -172,6 +181,7 @@ export function defineAction(definition) {
     bodyLimit: definition.bodyLimit || '100kb',
     tool: definition.tool || null,
     publicCache: definition.publicCache ? { maxAge: definition.publicCache.maxAge } : null,
+    audit: definition.audit || null,
   })
 }
 
@@ -234,6 +244,10 @@ export function createRegistry({
   // A failure of this server is answered without its detail; the detail goes to the server's log
   // (a bare "could not be completed" with nothing logged once hid a broken disconnect for hours).
   logFailure = (id, error) => console.error(`[actions] ${id} failed:`, error?.stack || error),
+  // The activity log (server/audit): what each write keeps (ACTION_AUDIT, or the action's own
+  // audit), and the recorder its entries go to.
+  auditSpecs = {},
+  audit = auditRecorder,
 }) {
   const byId = new Map()
   const routes = new Set()
@@ -333,12 +347,49 @@ export function createRegistry({
     return current
   }
 
-  async function run(caller, id, rawInput = {}, { idempotencyKey } = {}) {
+  const specOf = (action) => action.audit || auditSpecs[action.id] || null
+  const quietly = (fn, ...args) => {
+    try {
+      return typeof fn === 'function' ? fn(...args) : undefined
+    } catch {
+      return undefined
+    }
+  }
+  // After a save: the spec's entry, and agent.write for a token's save that left no entry of its own.
+  async function recordWrite(action, principal, input, body, context) {
+    const spec = specOf(action)
+    if (spec?.action) {
+      const target = quietly(spec.target, input, body) || null
+      const details = quietly(spec.details, input, body)
+      const orgId = quietly(spec.orgId, input, body)
+      const scope = quietly(spec.scope, input, body)
+      await audit.record({
+        ...(typeof scope === 'string' && scope && { scope }),
+        action: spec.action,
+        ...(target && { target }),
+        ...(target?.type === 'slate' && target.id && { slateId: target.id }),
+        ...(details && { details }),
+        ...(typeof orgId === 'string' && orgId && { orgId }),
+      }, { coalesce: Boolean(spec.coalesce) })
+    }
+    if (principal.kind === 'agent' && spec?.agentWrite !== false && !context.recorded.length) {
+      const target = slateTarget(input, body)
+      await audit.record({ action: 'agent.write', ...(target && { target, slateId: target.id }), details: { actionId: action.id } })
+    }
+  }
+
+  // Every call runs in an activity log context: who calls, and what its writes recorded (audit.record).
+  function run(caller, id, rawInput = {}, options = {}) {
+    return withAuditContext({ principal: caller || null, actionId: id, recorded: [], pending: [] }, (context) => runAction(context, caller, id, rawInput, options))
+  }
+
+  async function runAction(context, caller, id, rawInput = {}, { idempotencyKey } = {}) {
     const action = byId.get(id)
     if (!action) throw problem(404, 'unknown_action', 'There is no such action.')
     const meta = {}
     try {
       const principal = admit(action, caller)
+      context.principal = principal
       // Tokens and visitors are always counted; anything that reaches an outside address
       // (openWorld) is counted per account for every caller, people included.
       if (limiter && (principal.kind === 'agent' || (principal.kind === 'visitor' && principal.address) || (action.openWorld && principal.userId))) {
@@ -415,8 +466,13 @@ export function createRegistry({
       if (action.kind === 'write' && shaped.body && typeof shaped.body === 'object' && !Array.isArray(shaped.body))
         shaped.body = { ...shaped.body, mode }
       if (reserved) await idempotency.complete(subject, key, shaped.body)
+      if (action.kind === 'write' && !action.readOnly && mode === 'save') {
+        await audit.flush(context)
+        await recordWrite(action, principal, input, shaped.body, context)
+      }
       return { ...shaped, meta }
     } catch (error) {
+      audit.discard(context)
       const actionError = toActionError(error, action.failure)
       if (actionError.status >= 500 && actionError !== error) {
         try {

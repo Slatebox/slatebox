@@ -37,6 +37,7 @@ import componentsList, { componentsGet } from './components-list.mjs'
 import slatesCheckMove from './slate-check-move.mjs'
 import { slatesUndo, slatesRedo } from './slate-undo.mjs'
 import teamTransfer from './team-transfer.mjs'
+import teamScimActions from './team-scim.mjs'
 import shapeActions from './shapes.mjs'
 import presentationActions from './presentations.mjs'
 import slatesList from './slate-list.mjs'
@@ -52,6 +53,9 @@ import libraryReview from './library-review.mjs'
 import profileActions from './profile.mjs'
 import personalActions from './personal.mjs'
 import startTileActions from './start-tiles.mjs'
+import auditActions from './audit.mjs'
+import { ACTION_AUDIT } from '../audit/action-specs.mjs'
+import teamSsoActions from './team-sso.mjs'
 
 export const actions = [
   slatesGet,
@@ -91,6 +95,8 @@ export const actions = [
   slatesUndo,
   slatesRedo,
   ...teamTransfer,
+  // SCIM for a team admin: tokens, groups mapped to roles, the departing members' recipient (server/scim)
+  ...teamScimActions,
   ...shapeActions,
   ...presentationActions,
   slatesList,
@@ -110,10 +116,14 @@ export const actions = [
   ...personalActions,
   // the start page's tiles, made by its use-case interview (server/start)
   ...startTileActions,
+  // the activity log: the team page, the server admin's page and a SIEM's pull (server/audit)
+  ...auditActions,
+  // a team's single sign-on (Team settings > Sign-in & security; server/sso)
+  ...teamSsoActions,
 ]
 
 export const components = { ...slateComponents }
 
 // extraActions: the enterprise actions (server/enterprise-loader.mjs), empty where enterprise code is locked.
 export const createAppRegistry = ({ extraActions = [], ...options } = {}) =>
-  createRegistry({ actions: [...actions, ...extraActions], components, scopes: API_TOKEN_SCOPES, ...options })
+  createRegistry({ actions: [...actions, ...extraActions], components, scopes: API_TOKEN_SCOPES, auditSpecs: ACTION_AUDIT, ...options })

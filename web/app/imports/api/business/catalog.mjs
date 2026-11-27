@@ -6,8 +6,8 @@
 // page (PRICING_URL in common/contact.mjs). Nothing here is created in Stripe: the owner makes the
 // product and prices (scripts/stripe-catalog.mjs is Pro only).
 //
-// Single sign-on and the audit log are not on Slatebox Cloud yet. When they come to Cloud they will
-// be free for every team; Business adds the team's shared AI and call pool and hands-on help.
+// On Slatebox Cloud, single sign-on, SCIM and the activity log come with Business too
+// (common/team-security.mjs); a self-hosted server has them for every team, free.
 
 // The one place the app links "Talk to us about Business": the site's contact form with the
 // business topic, the same link the marketing site ("contact-form" in site/features.json) and the

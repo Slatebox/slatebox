@@ -78,6 +78,7 @@ Every setting is optional and is given with `-e NAME=value`.
 | `SLATEBOX_SETTINGS` | A JSON object of further app settings, for example `{"daily":{"apiKey":"…"}}` to turn on calls, or `{"connectors":{"off":true}}` to turn integrations off (below). |
 | `SLATEBOX_UPDATES` | `auto` (default): Admin › Updates decides whether releases are applied by themselves. `notify`: admins are told about releases, nothing is applied by itself. `off`: no update request ever leaves this server. See [Updates](#updates). |
 | `SLATEBOX_UPDATE_FEED` | Another update feed (a mirror): the address of its `update-feed/channels.json`. What it serves must still be signed by Slatebox. |
+| `SLATEBOX_AUDIT_RETENTION_DAYS` | How many days the activity log (Team settings, Activity log) keeps its entries: a whole number of 30 or more, or `0` to keep them until you remove them. Default `365`. Older entries are removed by the database on their own; export the log to keep a copy. |
 | `MONGO_URL`, `MONGO_OPLOG_URL` | Use a MongoDB you run elsewhere. The bundled database is then not started. |
 | `SLATEBOX_SSO` | `keycloak` turns on single sign-on with the Keycloak bundled in the image (off by default). People sign in with Entra ID, Okta, Google Workspace, SAML, OpenID Connect or LDAP through it. Keycloak's admin console is at `/auth/admin/` on the same address. |
 | `SLATEBOX_SSO_ONLY` | `true`, with `SLATEBOX_SSO=keycloak`: single sign-on is the only way in, no passwords and no guests. |

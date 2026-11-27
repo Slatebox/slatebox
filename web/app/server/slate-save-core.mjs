@@ -257,8 +257,20 @@ function actorRow(actor = {}) {
  * @param stores.events  the event log collection (insertOne)
  * @param stores.now     the clock
  * @param stores.onEventError  told when an event row could not be written (the content is saved)
+ * @param stores.onWrite  told of every create and every save that changed something (the activity
+ *   log, server/audit/slate-entries.mjs): { kind: 'created' | 'saved', slate, set, actor, source,
+ *   notes, fields, session }, slate being the stored slate before the save. Its failure never fails the save.
  */
-export function createSlateSaveCore({ slates, events, now = Date.now, onEventError = () => {} }) {
+export function createSlateSaveCore({ slates, events, now = Date.now, onEventError = () => {}, onWrite = null }) {
+  async function told(change) {
+    if (!onWrite) return
+    try {
+      await onWrite(change)
+    } catch {
+      // The activity log reports its own failures; the save stands.
+    }
+  }
+
   async function append(row, session) {
     try {
       await events.insertOne(row, session ? { session } : undefined)
@@ -328,6 +340,7 @@ export function createSlateSaveCore({ slates, events, now = Date.now, onEventErr
           { _id: `${slateId}:${next}`, slateId, revision: next, at, source, actor: actorRow(actor), notes, properties: diff.properties, fields: diff.fields, ...moved },
           session
         )
+        await told({ kind: 'saved', slate: current, set, actor, source, notes, fields: diff.fields, session })
         return { revision: next, saved: true, notes, fields: diff.fields, slate: current }
       }
       // Either another save landed (the revision moved: build again on it), or the caller's
@@ -364,6 +377,7 @@ export function createSlateSaveCore({ slates, events, now = Date.now, onEventErr
       },
       session
     )
+    await told({ kind: 'created', slate: doc, set: {}, actor, source, notes: [], fields: [], session })
     return { created: true, revision: 1, slate: doc }
   }
 

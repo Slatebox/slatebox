@@ -71,12 +71,12 @@ FROM docker-cli-${TARGETARCH} AS docker-cli-download
 # --- Keycloak, built once for how Slatebox runs it -----------------------------
 # Build options are fixed here so the container starts it with --optimized:
 # the embedded H2 file database (see DESIGN.md for why), served under /auth,
-# health checks on, no cluster, and the SCIM 2.0 API. Its data directory is the
-# volume's /data/keycloak.
+# health checks on, no cluster. SCIM is the app's own (/scim/v2), not Keycloak's.
+# Its data directory is the volume's /data/keycloak.
 FROM eclipse-temurin:${TEMURIN_JRE} AS keycloak
 COPY --from=keycloak-dist /opt/keycloak /opt/keycloak
 RUN /opt/keycloak/bin/kc.sh build --db=dev-file --http-relative-path=/auth --health-enabled=true \
-      --cache=local --features=scim-api \
+      --cache=local \
  && rm -rf /opt/keycloak/data \
  && chmod -R a+rX,go-w /opt/keycloak \
  && ln -s /data/keycloak /opt/keycloak/data \

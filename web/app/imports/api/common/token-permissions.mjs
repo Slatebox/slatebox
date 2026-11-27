@@ -16,6 +16,7 @@ export const tokenPermissions = [
   { scope: 'library:review', label: 'Review library submissions (administrators)', explain: 'Open, refine, publish and take down what people submit to the shared library. Only for administrators.' },
   { scope: 'profile:read', label: 'Read what Slatebox knows about me (About you)', explain: 'See the facts in your About you, such as your role, your tools and your goals, so the app can make things for your work.' },
   { scope: 'profile:write', label: 'Add to and change what Slatebox knows about me (About you)', explain: 'Add, change, hide and remove facts in your About you. It cannot turn personalization or its sources on or off.' },
+  { scope: 'audit:read', label: "Read my team's activity log (team owners and admins only)", explain: 'See who did what to which slate, when and through which door, and export it. Names and ids only, never note text or comments. Only if you own your team or are an admin of it.' },
 ]
 
 export const permissionLabel = (scope) => tokenPermissions.find((item) => item.scope === scope)?.label || scope

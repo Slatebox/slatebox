@@ -37,6 +37,9 @@ const AIControl = lazy(() => import('./pages/admin/ai/AIControl'))
 const Updates = lazy(() => import('./pages/admin/updates/Updates'))
 const Growth = lazy(() => import('./pages/admin/Growth'))
 const TeamSettings = lazy(() => import('./pages/TeamSettings'))
+// The activity log: a team's (its owner and admins) and the server administrator's view of all of them
+const TeamAudit = lazy(() => import('./pages/TeamAudit'))
+const AdminAudit = lazy(() => import('./pages/admin/AdminAudit'))
 const BrandingSettings = lazy(() => import('./pages/BrandingSettings'))
 const SimulateUrlAction = lazy(() => import('./components/SimulateUrlAction'))
 // The shared library: the public gallery and an item's page (signed out too), your own items, and the review queue.
@@ -189,6 +192,7 @@ export default function SBRoutes() {
           </PrivateRoute>
         }
       />
+      <Route path="/team/audit" element={<PrivateRoute><TeamAudit /></PrivateRoute>} />
       <Route
         path="/team/branding"
         element={
@@ -209,6 +213,7 @@ export default function SBRoutes() {
       <Route path="/admin/library" element={<PrivateRoute><AdminRoute><LibraryReview /></AdminRoute></PrivateRoute>} />
       <Route path="/admin/library/review/:itemId" element={<PrivateRoute><AdminRoute><LibraryIntegrationReview /></AdminRoute></PrivateRoute>} />
       <Route path="/admin/ai" element={<PrivateRoute><AdminRoute><AIControl /></AdminRoute></PrivateRoute>} />
+      <Route path="/admin/audit" element={<PrivateRoute><AdminRoute><AdminAudit /></AdminRoute></PrivateRoute>} />
       {selfHostedServer(Meteor.settings) && <Route path="/admin/updates" element={<PrivateRoute><AdminRoute><Updates /></AdminRoute></PrivateRoute>} />}
       {growthOn(Meteor.settings) && <Route path="/admin/growth" element={<PrivateRoute><AdminRoute><Growth /></AdminRoute></PrivateRoute>} />}
       <Route path="/library" element={<Library />} />

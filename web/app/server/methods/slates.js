@@ -30,6 +30,7 @@ import { slateSaveCore } from '../slate-save'
 import AuthManager from '../../imports/api/common/AuthManager'
 import CONSTANTS from '../../imports/api/common/constants'
 import { boardEmbed } from '../../imports/api/common/slate-embed.mjs'
+import { audit } from '../audit/recorder.mjs'
 
 // Where published board pictures are served from: the instance itself when self-hosted.
 export const embedViewerOrigin = () =>
@@ -84,6 +85,13 @@ method[CONSTANTS.methods.slates.translate] = async (opts) => {
 // Deletes one slate the caller owns, with its sharing, messages, comments and a workshop's own
 // presentation. The Slates page's Delete (below) and the API's slates.delete both delete through here.
 export async function deleteOwnedSlate(slate) {
+  // The activity log keeps its name: there is no restore, so the entry is what remains of it.
+  const logged = audit.record({
+    action: 'slate.deleted',
+    target: { type: 'slate', id: slate.shareId || slate._id, name: slate.options?.name || 'Untitled slate' },
+    slateId: slate.shareId || slate._id,
+    ...(slate.orgId && { orgId: slate.orgId }),
+  })
   await SlateAccess.removeAsync({ slateId: slate._id })
   await Messages.removeAsync({ slateId: slate._id })
   await Comments.removeAsync({ slateId: slate._id })
@@ -92,6 +100,7 @@ export async function deleteOwnedSlate(slate) {
   if (slate.creative?.model?.kind === 'workshop') {
     await SlatePresentations.removeAsync({ slateShareId: slate.shareId, userId: slate.userId, workshop: { $exists: true } })
   }
+  await logged
   return { deleted: true }
 }
 
@@ -102,7 +111,7 @@ method[CONSTANTS.methods.slates.remove] = async (opts) => {
     queryable.push({ _id: { $in: opts.slateIds } })
     const slates = await Slates.find(
       { $and: queryable },
-      { fields: { _id: 1, options: 1, shareId: 1, userId: 1, 'creative.model.kind': 1 } }
+      { fields: { _id: 1, options: 1, shareId: 1, userId: 1, orgId: 1, 'creative.model.kind': 1 } }
     ).fetchAsync()
     if (slates) {
       // eslint-disable-next-line no-restricted-syntax
@@ -200,6 +209,10 @@ method[CONSTANTS.methods.slates.getEmbedCode] = async (opts) => {
       !/^[A-Za-z0-9_-]{1,80}$/.test(opts.slateId)) return null
 
   const { code: iframe } = boardEmbed(embedViewerOrigin(), opts.slateId)
+  // In the activity log of the slate's team, for its owner and its team's people only.
+  const user = await Meteor.userAsync()
+  const own = user && await Slates.findOneAsync({ shareId: opts.slateId, $or: [{ userId: user._id }, ...(user.orgId ? [{ orgId: user.orgId }] : [])] }, { fields: { _id: 1 } })
+  if (own) audit.record({ action: 'sharing.embedOpened', target: { type: 'slate', id: opts.slateId }, slateId: opts.slateId }, { coalesce: true })
   return { iframe_share: iframe, iframe_noshare: iframe, non_share: iframe, non_noshare: iframe }
 }
 

@@ -9,6 +9,7 @@ import { isRasterImage } from '../common/upload-kinds.mjs'
 import CONSTANTS from '../../imports/api/common/constants'
 import { APILinks, Slates } from '../../imports/api/common/models'
 import { storeFile, storeImage } from '../common/fileStore'
+import { audit } from '../audit/recorder.mjs'
 
 const method = {}
 
@@ -142,6 +143,14 @@ method[CONSTANTS.methods.utils.getCloudLink] = async (
             { $set: { imageUrl: slateImageUrl } },
             { multi: true }
           )
+        }
+      }
+
+      // A picture a person chose to put at a public address (Export › cloud link); never a share card.
+      if (forShare !== true && !updateAPILink) {
+        const linked = await Slates.findOneAsync({ 'options.id': slateId }, { fields: { shareId: 1, orgId: 1, 'options.name': 1 } })
+        if (linked?.shareId) {
+          await audit.record({ action: 'sharing.cloudLink', target: { type: 'slate', id: linked.shareId, name: linked.options?.name }, slateId: linked.shareId, ...(linked.orgId && { orgId: linked.orgId }), details: { format: isSvg ? 'SVG' : 'PNG' } })
         }
       }
 

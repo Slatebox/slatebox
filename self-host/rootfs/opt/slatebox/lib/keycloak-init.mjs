@@ -1,7 +1,9 @@
 // Runs at every start with single sign-on on, once Keycloak answers. It creates the "slatebox"
 // realm the first time, and at every start:
-// - makes the app's client and the SCIM client match this installation: address, secret and the
-//   SCIM audience, which follows the address (a new SLATEBOX_URL, or a restore at another one);
+// - makes the app's client match this installation: address and secret, which follow the address
+//   (a new SLATEBOX_URL, or a restore at another one);
+// - removes the SCIM client earlier images made: SCIM is the app's own now (/scim/v2), and writes
+//   to Slatebox directly;
 // - keeps the "link by trusted email" first-login flow in place for operators to choose;
 // - keeps brute-force protection and events on in the master realm, whose sign-in the admin
 //   console uses.
@@ -10,10 +12,10 @@
 import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
-  KEYCLOAK_MANAGEMENT_PORT, KEYCLOAK_PORT, Plain, RUN, SCIM_CLIENT, SSO_INIT_CLIENT, SSO_PATH, SSO_REALM, fail, readSecrets, sleep,
+  KEYCLOAK_MANAGEMENT_PORT, KEYCLOAK_PORT, Plain, RETIRED_SCIM_CLIENT, RUN, SSO_INIT_CLIENT, SSO_PATH, SSO_REALM, fail, readSecrets, sleep,
 } from './common.mjs'
 import {
-  ADMIN_USER, MASTER_EVENTS, MASTER_REALM, TRUSTED_EMAIL_FLOW, TRUSTED_EMAIL_STEPS, appClient, realm, scimClient,
+  ADMIN_USER, MASTER_EVENTS, MASTER_REALM, TRUSTED_EMAIL_FLOW, TRUSTED_EMAIL_STEPS, appClient, realm,
 } from './sso.mjs'
 
 const base = `http://127.0.0.1:${KEYCLOAK_PORT}${SSO_PATH}`
@@ -66,7 +68,7 @@ async function ensureClient(call, wanted) {
   }
   const { protocolMappers, defaultClientScopes, optionalClientScopes, ...settings } = wanted
   await call('PUT', `/${SSO_REALM}/clients/${existing.id}`, { ...existing, ...settings, attributes: { ...existing.attributes, ...settings.attributes } })
-  // Mappers that carry the address (the SCIM audience) are rewritten too.
+  // Mappers are rewritten too, so they follow the address.
   if (protocolMappers?.length) {
     const models = `/${SSO_REALM}/clients/${existing.id}/protocol-mappers/models`
     const present = await call('GET', models) || []
@@ -118,16 +120,17 @@ async function hardenMaster(call) {
   }
 }
 
-// The SCIM client's service account may manage users, and nothing else.
-async function grantScim(call, clientId) {
-  const user = await call('GET', `/${SSO_REALM}/clients/${clientId}/service-account-user`)
-  const [management] = await call('GET', `/${SSO_REALM}/clients?clientId=realm-management`)
-  const role = await call('GET', `/${SSO_REALM}/clients/${management.id}/roles/manage-users`)
-  await call('POST', `/${SSO_REALM}/users/${user.id}/role-mappings/clients/${management.id}`, [role])
+// The SCIM client an earlier image made could manage every user of the realm: it goes, with its
+// service account. Provisioning is the app's /scim/v2, with a token from Team settings.
+async function removeRetiredScimClient(call) {
+  const [existing] = await call('GET', `/${SSO_REALM}/clients?clientId=${encodeURIComponent(RETIRED_SCIM_CLIENT)}`) || []
+  if (!existing) return false
+  await call('DELETE', `/${SSO_REALM}/clients/${existing.id}`)
+  return true
 }
 
 // Health reports single sign-on ready only once this step has finished: until then the clients
-// may still carry an earlier address (the SCIM audience, the redirect).
+// may still carry an earlier address (the redirect).
 const READY = join(RUN, 'sso-ready')
 const done = () => writeFileSync(READY, `${new Date().toISOString()}\n`)
 
@@ -151,8 +154,7 @@ async function main() {
   const first = !(await call('GET', `/${SSO_REALM}`))
   if (first) await call('POST', '', realm())
   await ensureClient(call, appClient({ url, secrets }))
-  const scim = await ensureClient(call, scimClient({ url, secrets }))
-  if (scim.created) await grantScim(call, scim.id)
+  if (await removeRetiredScimClient(call)) say(`Single sign-on: removed Keycloak's SCIM client "${RETIRED_SCIM_CLIENT}"; SCIM is at ${url.origin}/scim/v2 now, with a token from Team settings.`)
   await ensureTrustedEmailFlow(call)
   await hardenMaster(call)
   if (first) {
@@ -161,7 +163,7 @@ async function main() {
     say('Single sign-on: show the admin password with: docker exec <container> slatebox sso admin-password')
   }
   done()
-  say(`Single sign-on: realm "${SSO_REALM}" ready${first ? ' (created)' : ''}, client "slatebox" set to ${url.origin}/sso/callback, SCIM client "${SCIM_CLIENT}".`)
+  say(`Single sign-on: realm "${SSO_REALM}" ready${first ? ' (created)' : ''}, client "slatebox" set to ${url.origin}/sso/callback.`)
 }
 
 main().then(() => process.exit(0), fail)

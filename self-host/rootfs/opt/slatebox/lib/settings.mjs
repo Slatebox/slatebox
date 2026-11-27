@@ -19,11 +19,25 @@ export const SETTINGS = Object.freeze([
   // off (no update request ever leaves this server). SLATEBOX_UPDATE_FEED is another signed feed
   // (a test feed, or a mirror); what it serves must still be signed with a release key.
   'SLATEBOX_UPDATES', 'SLATEBOX_UPDATE_FEED',
+  // How long the activity log keeps entries, in days: 30 or more, or 0 to keep them until removed.
+  'SLATEBOX_AUDIT_RETENTION_DAYS',
 ])
 export const DATABASE_SETTINGS = Object.freeze(['MONGO_URL', 'MONGO_OPLOG_URL'])
 // One key variable per provider in SLATEBOX_AI_PROVIDERS (its keyEnv), never listed by name.
 export const PROVIDER_KEY = /^SLATEBOX_AI_KEY_[A-Z0-9_]{1,40}$/
 export const COMMANDS = Object.freeze(['backup', 'restore', 'password-link', 'setup-link', 'health', 'version', 'sso', 'ai', 'settings', 'tunnel', 'updates', 'restore-on-start'])
+
+// SLATEBOX_AUDIT_RETENTION_DAYS → the days the activity log keeps entries (settings.audit.retentionDays):
+// unset 365, a whole number of 30 or more, or 0 to keep them until removed.
+// → { days } or { problem } (the sentence configure.mjs stops with).
+export function auditRetention(value) {
+  if (value === undefined || value === null || value === '') return { days: 365 }
+  const text = String(value).trim()
+  if (!/^\d{1,6}$/.test(text)) return { problem: `SLATEBOX_AUDIT_RETENTION_DAYS is a whole number of days: 30 or more, or 0 to keep entries until removed (received ${text.slice(0, 20)})` }
+  const days = Number(text)
+  if (days !== 0 && days < 30) return { problem: `SLATEBOX_AUDIT_RETENTION_DAYS is at least 30 days, or 0 to keep entries until removed (received ${days})` }
+  return { days }
+}
 
 // Where this container runs, for Admin › Updates: on Kubernetes (every pod has KUBERNETES_SERVICE_HOST)
 // the installer's StatefulSet names its one pod <install>-0, so the upgrade command can name the install.

@@ -81,6 +81,7 @@ export function ssoService(identity, refreshToken, now = Date.now()) {
   return {
     issuer: identity.issuer,
     subject: identity.subject,
+    ...(identity.connectionId && { connectionId: identity.connectionId }),
     ...(refreshToken ? { refreshToken } : {}),
     lastSignIn: new Date(now),
     checkedAt: new Date(now),
@@ -92,11 +93,13 @@ export function ssoService(identity, refreshToken, now = Date.now()) {
  * SSO only: its password and every saved session end here (API tokens, sign-in links and passkeys
  * end in revokeCredentials).
  */
-export function linkModifier(user, identity, refreshToken, now = Date.now()) {
+export function linkModifier(user, identity, refreshToken, now = Date.now(), { keepPassword = false } = {}) {
   const $set = { 'services.sso': ssoService(identity, refreshToken, now), 'services.resume.loginTokens': [] }
   const index = (user.emails || []).findIndex(entry => String(entry.address || '').toLowerCase() === identity.email)
   if (index >= 0) $set[`emails.${index}.verified`] = true
-  return { $set, $unset: { 'services.password': '' } }
+  // A break-glass account (the team owner, or an admin the team named) keeps its password, so the
+  // team is never locked out when its identity provider is down.
+  return keepPassword ? { $set } : { $set, $unset: { 'services.password': '' } }
 }
 
 /** The update for an account whose identity provider refused its session: signed out everywhere. */
@@ -107,12 +110,15 @@ export function revokedModifier(now = Date.now()) {
   }
 }
 
-/** Revoke the account's API tokens and remove its one-time sign-in links and its passkeys. */
-export async function revokeCredentials({ apiTokens, loginLinks, apiLinks, passkeys }, userId, now = Date.now()) {
+/**
+ * Revoke the account's API tokens and remove its one-time sign-in links and its passkeys.
+ * keepPasskeys: a break-glass account keeps its passkeys (its way in while the provider is down).
+ */
+export async function revokeCredentials({ apiTokens, loginLinks, apiLinks, passkeys }, userId, now = Date.now(), { keepPasskeys = false } = {}) {
   await apiTokens.updateAsync({ userId, revokedAt: null }, { $set: { revokedAt: now } }, { multi: true })
   await loginLinks.removeAsync({ userId })
   await apiLinks.removeAsync({ userId })
-  if (passkeys) await passkeys.removeAsync({ userId })
+  if (passkeys && !keepPasskeys) await passkeys.removeAsync({ userId })
 }
 
 /**
@@ -170,3 +176,63 @@ export function sessionCheckRecord({ due, checked, revoked, checkSeconds, now = 
   if (due > SESSION_CHECK_CAP) $set.overCapAt = new Date(now)
   return { $set }
 }
+
+// ---- A team's own connection (Team settings > Sign-in & security) ----
+//
+// The identity is scoped to the connection: services.sso.issuer is "sso:<connection id>", so a
+// team that saves another team's provider details (or a SAML entity ID it does not own) still
+// never reaches an account linked through the other team's connection.
+//
+// 1. The account linked to this connection and subject. It must be in the connection's team, or
+//    in no team (it joins, unless the team admits people by invitation only).
+// 2. Otherwise the account with the address (the provider vouched for it, and assertedEmail
+//    checked it is in one of the team's verified domains), with the same guards as above (no
+//    guest, not disabled, not linked elsewhere, an address Slatebox verified unless nobody can
+//    use the account yet). In the team: linked. In no team: linked and joins (its personal
+//    slates stay as they are), unless invitation only. In another team: refused.
+// 3. Otherwise a new account, a Member of the team, unless invitation only.
+
+export const OTHER_TEAM = 'This address already belongs to another Slatebox team. Ask that team\'s admin to remove you first, or sign in with another address.'
+export const INVITE_ONLY = 'Your team adds people by invitation. Ask a team admin to invite you.'
+
+export const connectionIssuer = (connection) => `sso:${connection._id}`
+
+/** The identity a team connection's sign-in stands for. email: from connections.assertedEmail. */
+export function teamIdentity(claims, connection, email) {
+  const base = ssoIdentity({ ...claims, email, email_verified: true }, connectionIssuer(connection))
+  return { ...base, connectionId: connection._id }
+}
+
+const inOtherTeam = (user, orgId) => typeof user?.orgId === 'string' && user.orgId !== '' && user.orgId !== orgId
+const inNoTeam = (user) => !(typeof user?.orgId === 'string' && user.orgId)
+
+export function decideTeamAccount(identity, { connection, bySubject, byEmail, byEmailApiTokens = 0, byEmailPasskeys = 0 } = {}) {
+  const orgId = connection.orgId
+  const inviteOnly = connection.policy?.joinRule === 'invited-only'
+  if (bySubject && linkedTo(bySubject, identity)) {
+    if (bySubject.isDisabled) return { action: 'refuse', reason: 'this Slatebox account is disabled' }
+    if (inOtherTeam(bySubject, orgId)) return { action: 'refuse', reason: OTHER_TEAM }
+    if (inNoTeam(bySubject) && inviteOnly) return { action: 'refuse', reason: INVITE_ONLY }
+    return { action: 'login', userId: bySubject._id, join: inNoTeam(bySubject) }
+  }
+  if (!identity.email) return { action: 'refuse', reason: 'the identity provider sent no email address' }
+  if (byEmail) {
+    if (byEmail.isAnonymous) return { action: 'refuse', reason: 'the address belongs to a guest' }
+    if (byEmail.isDisabled) return { action: 'refuse', reason: 'this Slatebox account is disabled' }
+    if (byEmail.services?.sso && !linkedTo(byEmail, identity)) {
+      return { action: 'refuse', reason: 'the account is linked to another single sign-on identity' }
+    }
+    if (!ownsAddress(byEmail, identity.email) && hasCredentials(byEmail, { apiTokens: byEmailApiTokens, passkeys: byEmailPasskeys })) {
+      return { action: 'refuse', reason: 'an account with this address exists, but Slatebox never verified the address' }
+    }
+    if (inOtherTeam(byEmail, orgId)) return { action: 'refuse', reason: OTHER_TEAM }
+    if (inNoTeam(byEmail) && inviteOnly) return { action: 'refuse', reason: INVITE_ONLY }
+    return { action: 'link', userId: byEmail._id, join: inNoTeam(byEmail) }
+  }
+  if (inviteOnly) return { action: 'refuse', reason: INVITE_ONLY }
+  return { action: 'create' }
+}
+
+/** Whether an account keeps its password and passkeys when linked: the team owner, or a named break-glass admin. */
+export const isBreakGlass = (user, connection) =>
+  Boolean(user) && ((user.isOrgOwner === true && user.orgId === connection.orgId) || (connection.policy?.breakGlass || []).includes(user._id))

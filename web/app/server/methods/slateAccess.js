@@ -6,6 +6,7 @@ import { SlateAccess, Slates } from '../../imports/api/common/models'
 import { Random } from 'meteor/random'
 import { MongoInternals } from 'meteor/mongo'
 import { Meteor } from 'meteor/meteor'
+import { audit } from '../audit/recorder.mjs'
 
 const method = {}
 
@@ -28,6 +29,20 @@ method[CONSTANTS.methods.slateAccess.recipients] = async function (slateId) {
     fields: { 'profile.firstName': 1, 'profile.lastName': 1 },
     sort: { 'profile.firstName': 1, 'profile.lastName': 1 },
   }).fetchAsync()
+}
+
+// The activity log's entry for a sharing change, after it is saved: the slate by its share id.
+const CAN = { READ: 'view', COMMENT: 'comment', EDIT: 'edit' }
+const ACCESS = { READ: 'can view', COMMENT: 'can comment', EDIT: 'can edit', NONE: 'no access' }
+async function logSharing(slateId, entry) {
+  const board = await Slates.findOneAsync({ _id: slateId }, { fields: { shareId: 1, orgId: 1, 'options.name': 1 } })
+  if (!board?.shareId) return
+  await audit.record({
+    ...entry,
+    target: { type: 'slate', id: board.shareId, name: board.options?.name || 'Untitled slate' },
+    slateId: board.shareId,
+    ...(board.orgId && { orgId: board.orgId }),
+  })
 }
 
 async function changeSharing(slateId, userId, change) {
@@ -53,6 +68,8 @@ method[CONSTANTS.methods.slateAccess.configureLink] = async function ({ slateId,
   }))
   // a link opened to others is a first share in the growth funnel (Slatebox Cloud only)
   if (!initialize && type !== 'private') growthStep(this.userId, 'share')
+  // A link set up the first time the panel opens is not a person's choice.
+  if (!initialize) await logSharing(slateId, { action: 'sharing.linkChanged', details: { mode: type, role: CAN[permission] || permission } })
 }
 
 method[CONSTANTS.methods.slateAccess.configureMember] = async function ({ slateId, memberId, permission }) {
@@ -76,6 +93,7 @@ method[CONSTANTS.methods.slateAccess.configureMember] = async function ({ slateI
     }, { upsert: true, session })
   })
   growthStep(ownerId, 'share')
+  await logSharing(slateId, { action: 'sharing.memberChanged', details: { role: ACCESS[permission] || String(permission).toLowerCase() } })
 }
 
 Meteor.methods(method)

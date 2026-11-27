@@ -6,14 +6,18 @@ import { readFileSync } from 'node:fs'
 import {
   SECTIONS, confirmsName, deleteTeamState, pickSection, settingsIntro, teamNameProblem, teamSettingsSections,
 } from '../web/app/imports/ui/components/teams/team-settings-model.mjs'
+import {
+  BUSINESS_SECTION, BUSINESS_SECTION_PATH, GATED_FEATURES, businessGate,
+} from '../web/app/imports/ui/components/teams/security/business-gate-model.mjs'
+import { BUSINESS } from '../web/app/imports/api/business/catalog.mjs'
 
 const app = (path) => readFileSync(new URL(`../web/app/${path}`, import.meta.url), 'utf8')
 const ids = (list) => list.map((s) => s.id)
 
 test('sections: admins see every real section; members read the basics; no team, no sections', () => {
-  assert.deepEqual(ids(SECTIONS), ['general', 'members', 'billing', 'ai', 'branding', 'data', 'danger'])
+  assert.deepEqual(ids(SECTIONS), ['general', 'members', 'security', 'billing', 'ai', 'branding', 'data', 'activity', 'danger'])
   assert.deepEqual(ids(teamSettingsSections({ inTeam: true, admin: true, owner: true, billing: true })), ids(SECTIONS))
-  assert.deepEqual(ids(teamSettingsSections({ inTeam: true, admin: true, owner: false, billing: false })), ['general', 'members', 'ai', 'branding', 'data', 'danger'])
+  assert.deepEqual(ids(teamSettingsSections({ inTeam: true, admin: true, owner: false, billing: false })), ['general', 'members', 'security', 'ai', 'branding', 'data', 'activity', 'danger'])
   assert.deepEqual(ids(teamSettingsSections({ inTeam: true, admin: false, owner: false, billing: true })), ['general', 'members', 'billing'])
   assert.deepEqual(teamSettingsSections({ inTeam: false, admin: true, owner: true, billing: true }), [])
 })
@@ -124,7 +128,7 @@ test('the page keeps the same server paths and checks, and links the pages it do
 
 test('the intro names only the sections this person sees', () => {
   const admin = teamSettingsSections({ inTeam: true, admin: true, owner: true, billing: true })
-  assert.equal(settingsIntro(admin, 'SBTEST'), 'Everything about SBTEST in one place: its name, people, plan, AI, brand kit and data.')
+  assert.equal(settingsIntro(admin, 'SBTEST'), 'Everything about SBTEST in one place: its name, people, sign-in, plan, AI, brand kit, data and activity log.')
   const member = teamSettingsSections({ inTeam: true, admin: false, owner: false, billing: false })
   assert.equal(settingsIntro(member, 'SBTEST'), 'Everything about SBTEST in one place: its name and people.')
   assert.equal(settingsIntro(member, ''), null)
@@ -141,4 +145,88 @@ test('the delete check names only what applies, from the same rules the delete r
   // and they match what endBusinessForRemoval and endProForRemoval skip
   assert.match(app('server/methods/business.js'), /\['canceled', 'incomplete_expired'\]\.includes\(business\.stripeStatus\)/)
   assert.match(app('server/methods/pro.js'), /\['canceled', 'incomplete_expired'\]\.includes\(user\.pro\.status\)/)
+})
+
+// ---- single sign-on, SCIM and the activity log without Business ------------------------------
+
+test('without Business on Cloud, each surface says it comes with Slatebox Business and offers one action that works', () => {
+  const cloud = { cloud: true, lapsed: false, billingHere: true }
+  for (const feature of GATED_FEATURES) {
+    assert.equal(businessGate({ feature, available: true, ...cloud, manager: true }), null, `${feature}: on, no notice`)
+    const owner = businessGate({ feature, available: false, ...cloud, manager: true })
+    assert.match(owner.text, /comes with Slatebox Business/, feature)
+    assert.deepEqual(owner.action, { kind: 'link', to: '/team/settings?section=billing', label: 'Get Slatebox Business' }, feature)
+    const member = businessGate({ feature, available: false, ...cloud, manager: false })
+    assert.equal(member.action.kind, 'ask', feature)
+    assert.match(member.action.label, /^Ask a team admin/)
+    assert.match(businessGate({ feature, available: false, ...cloud, manager: false, noun: 'classroom' }).action.label, /^Ask a classroom admin/)
+    // a Cloud server that takes no payments: the owner is sent to the same "Talk to us" BusinessPanel shows
+    assert.deepEqual(businessGate({ feature, available: false, ...cloud, billingHere: false, manager: true }).action,
+      { kind: 'href', href: BUSINESS.contactUrl, label: BUSINESS.contactLabel })
+  }
+  assert.throws(() => businessGate({ feature: 'nope', available: false, cloud: true }))
+})
+
+test('the Business link opens Plan & billing, a section every owner or admin who can buy sees', () => {
+  assert.equal(BUSINESS_SECTION_PATH, `/team/settings?section=${BUSINESS_SECTION}`)
+  assert.ok(SECTIONS.some((s) => s.id === BUSINESS_SECTION))
+  for (const who of [{ admin: true, owner: false }, { admin: false, owner: true }, { admin: true, owner: true }]) {
+    // billing: Business is sold here (paymentsHere), the same condition the notice's link needs
+    assert.equal(pickSection(teamSettingsSections({ inTeam: true, billing: true, ...who }), BUSINESS_SECTION), 'billing', JSON.stringify(who))
+  }
+  const page = app('imports/ui/pages/TeamSettings.jsx')
+  assert.match(page, /const payments = paymentsHere\(\)/)
+  assert.match(page, /billing: metered \|\| payments/)
+  assert.match(page, /\{payments && \([\s\S]*?<BusinessPanel \/>/)
+  assert.match(page, /searchParams\.get\('section'\)/)
+  const gate = app('imports/ui/components/teams/security/BusinessGate.jsx')
+  assert.match(gate, /billingHere: paymentsHere\(\)/)
+  assert.match(gate, /lapsed: Boolean\(business\) && !businessActive\(\{ business \}\)/)
+  assert.match(gate, /manager: Boolean\(orgId && \(user\?\.isOrgOwner === true \|\| admin\)\)/) // mayManageBusiness
+  assert.match(app('server/business-billing.mjs'), /mayManageBusiness = \(\{ user, admin \}\) => Boolean\(user\?\.orgId && \(user\.isOrgOwner === true \|\| admin === true\)\)/)
+})
+
+test('a team whose Business ended keeps what works, and is told what comes back with Business', () => {
+  const lapsed = { available: false, cloud: true, lapsed: true, manager: true, billingHere: true }
+  assert.match(businessGate({ feature: 'sso', ...lapsed }).text, /has ended for this team\. People keep signing in with single sign-on as it is set up\. Changing the setup comes back with Business\./)
+  assert.match(businessGate({ feature: 'log', ...lapsed }).text, /The log keeps recording, and reading and exporting it come back with Business\./)
+  const scim = businessGate({ feature: 'scim', ...lapsed, kept: true }).text
+  assert.match(scim, /People SCIM added keep signing in, and you can still revoke a token below\./)
+  assert.match(scim, /come back with Business\./)
+  assert.doesNotMatch(businessGate({ feature: 'scim', ...lapsed, kept: false }).text, /revoke/)
+  assert.match(businessGate({ feature: 'sso', ...lapsed, lapsed: false, kept: true }).text, /keep signing in with what is already set up/)
+  assert.match(businessGate({ feature: 'log', ...lapsed, lapsed: false }).text, /Entries are kept in the meantime/)
+})
+
+test('self-host never names a plan or a payment; every notice is US spelling, says agent not AI, and is sentence case', () => {
+  for (const feature of GATED_FEATURES) {
+    for (const lapsed of [false, true]) {
+      const self = businessGate({ feature, available: false, cloud: false, lapsed, manager: true, billingHere: true })
+      assert.equal(self.action, null, feature)
+      assert.doesNotMatch(self.text, /Business|plan|pay|\$|price|subscri|upgrade|buy/i, feature)
+    }
+    for (const manager of [false, true]) {
+      for (const lapsed of [false, true]) {
+        const notice = businessGate({ feature, available: false, cloud: true, lapsed, manager, kept: true, billingHere: true })
+        for (const words of [notice.text, notice.action.label]) {
+          assert.doesNotMatch(words, /\bAI\b|colour|organisation|behaviour|licence|cancelled/i, words)
+          assert.match(words, /^[A-Z]/, words)
+          assert.doesNotMatch(words, /\$\d/, `${words}: no amounts in the app`)
+        }
+        assert.doesNotMatch(notice.action.label, /\b(?!Slatebox|Business|Ask|Get|Talk)[A-Z][a-z]+/, `${notice.action.label}: sentence case`)
+      }
+    }
+  }
+})
+
+test('the three surfaces show the notice: Sign-in & security, the SCIM card and the team\'s activity log', () => {
+  const sso = app('imports/ui/components/teams/security/SignInSecurity.jsx')
+  assert.match(sso, /businessGate\(\{ feature: 'sso', available: view\.available, kept: view\.connections\?\.length > 0, noun, \.\.\.access \}\)/)
+  assert.doesNotMatch(sso, /Single sign-on settings are not available/, 'the self-host words live in the model only')
+  const scim = app('imports/ui/components/teams/security/ScimCard.jsx')
+  assert.match(scim, /view\.state === 'off' && \([\s\S]*?businessGate\(\{ feature: 'scim'/)
+  const log = app('imports/ui/components/audit/ActivityLog.jsx')
+  assert.match(log, /error\?\.error === 'plan_required'/)
+  assert.match(log, /gated && !team && cloud \? businessGate\(\{ feature: 'log'/, 'the team page only: a server admin reading a team\'s log keeps the server\'s words')
+  assert.match(app('server/audit/service.mjs'), /throw problem\(403, 'plan_required', AUDIT_WORDS\.gated\)/)
 })

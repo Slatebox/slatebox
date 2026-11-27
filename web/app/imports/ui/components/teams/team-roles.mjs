@@ -102,8 +102,12 @@ export function roleChanges(claimIds, to) {
   throw new Error(`No such role: ${to}`)
 }
 
-/** A member's state on the team, from their published email: joined, invited, or brought by a team import. */
+/**
+ * A member's state on the team, from their published email: joined, invited, or brought by a team
+ * import; or turned off (isDisabled: their company's identity provider turned them off over SCIM).
+ */
 export function memberStatus(member) {
+  if (member?.isDisabled === true) return { id: 'off', label: 'Turned off' }
   const email = member?.emails?.[0]
   if (!email?.address) return { id: 'not-invited', label: 'Not invited yet' }
   if (!email.verified) return { id: 'invited', label: 'Invited · not accepted yet' }

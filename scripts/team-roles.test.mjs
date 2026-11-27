@@ -69,6 +69,8 @@ test('status, names and initials', () => {
   assert.equal(memberStatus({ emails: [{ address: 'a@x.test', verified: false }] }).label, 'Invited · not accepted yet')
   assert.equal(memberStatus({ emails: [] }).id, 'not-invited')
   assert.equal(memberStatus({}).id, 'not-invited')
+  // turned off by the company's identity provider (SCIM), whatever the address says
+  assert.deepEqual(memberStatus({ isDisabled: true, emails: [{ address: 'a@x.test', verified: true }] }), { id: 'off', label: 'Turned off' })
   assert.equal(displayName({ profile: { firstName: 'Ada', lastName: 'Lovelace' } }), 'Ada Lovelace')
   assert.equal(displayName({ profile: {}, emails: [{ address: 'a@x.test' }] }), 'a@x.test')
   assert.equal(initials({ profile: { firstName: 'ada', lastName: 'lovelace' } }), 'AL')

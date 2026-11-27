@@ -91,10 +91,11 @@ export const offerOfPrice = (price, interval) => ({ interval, unitAmount: price.
 /**
  * Whether a team member has joined: an invitation creates the account at once (team-invitations.mjs),
  * with no password, an unconfirmed address and no sign-in. A member who confirmed the address (the
- * enrollment link does), set a password or has signed in has accepted.
+ * enrollment link does), set a password or has signed in has accepted. A disabled account (turned off
+ * over SCIM, server/scim) is no member to pay for.
  */
 export function acceptedMember(user) {
-  if (!user || user.isAnonymous === true || !user.emails?.[0]?.address) return false
+  if (!user || user.isAnonymous === true || user.isDisabled === true || !user.emails?.[0]?.address) return false
   if (user.emails[0].verified === true) return true
   if (user.services?.password?.bcrypt || user.services?.password?.argon2) return true
   return Array.isArray(user.services?.resume?.loginTokens) && user.services.resume.loginTokens.length > 0
@@ -110,7 +111,7 @@ export function billableMembers(users) {
 
 // The Mongo fields acceptedMember reads (methods/business.js countMembers).
 export const MEMBER_FIELDS = Object.freeze({
-  isAnonymous: 1, emails: 1, 'services.password.bcrypt': 1, 'services.password.argon2': 1, 'services.resume.loginTokens.when': 1,
+  isAnonymous: 1, isDisabled: 1, emails: 1, 'services.password.bcrypt': 1, 'services.password.argon2': 1, 'services.resume.loginTokens.when': 1,
 })
 
 /** Whether this person may buy or change Business for their team: its owner, or an admin of it. */

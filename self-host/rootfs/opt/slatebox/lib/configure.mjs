@@ -10,7 +10,7 @@ import {
 } from './common.mjs'
 import { appSettings as ssoAppSettings, issuerFor, keycloakEnv, ssoMode } from './sso.mjs'
 import { operatorAI } from './ai-config.mjs'
-import { DATABASE_SETTINGS, PROVIDER_KEY, SETTINGS as KNOWN, runtimeFacts } from './settings.mjs'
+import { DATABASE_SETTINGS, PROVIDER_KEY, SETTINGS as KNOWN, auditRetention, runtimeFacts } from './settings.mjs'
 
 // Payments and metering run only on Slatebox Cloud, under its signed license: a self-hosted
 // Slatebox is never a paid service, so its settings cannot switch them on.
@@ -281,6 +281,9 @@ function main() {
   const sso = ssoMode(setting)
   const ownKeysKey = keyEncryptionKey()
   const updates = updateSettings()
+  // The activity log's retention (settings.audit.retentionDays).
+  const retention = auditRetention(setting('SLATEBOX_AUDIT_RETENTION_DAYS'))
+  if (retention.problem) throw new Plain(retention.problem)
 
   // Every setting is valid. Only now is anything written.
   for (const dir of [RUN, TMP_DIR, ...(externalMongo ? [] : [DB_DIR]), ...(sso.enabled ? [KEYCLOAK_DATA, join(RUN, 'keycloak-tmp')] : [])]) {
@@ -317,6 +320,7 @@ function main() {
   if (ai.settings) settings.ai = { ...settings.ai, ...ai.settings, connections: { ...settings.ai?.connections, ...ai.settings.connections }, use: { ...settings.ai?.use, ...ai.settings.use } }
   // An app from before settings.ai reads this one endpoint for workshops.
   if (ai.legacy) settings.selfHosted.workshopProvider = ai.legacy
+  settings.audit = { ...settings.audit, retentionDays: retention.days }
   settings.selfHosted.updates = { mode: updates.mode, ...(updates.feed ? { feedUrl: updates.feed } : {}), ...runtimeFacts() }
   if (ai.on) {
     settings.selfHosted.workshopAI = true

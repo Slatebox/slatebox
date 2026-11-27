@@ -513,8 +513,10 @@ test('single sign-on keeps its rules: SSO only refuses passkeys everywhere; a li
   assert.deepEqual(calls.at(-1), ['p', { userId: 'pia' }])
   const index = read('server/sso/index.js')
   assert.match(index, /const credentials = \{ apiTokens: SlateApiTokens, loginLinks: LoginLinks, apiLinks: APILinks, passkeys: Passkeys \}/)
-  assert.match(index, /const byEmailPasskeys = byEmail \? await Passkeys\.find\(\{ userId: byEmail\._id \}\)\.countAsync\(\) : 0/)
-  assert.match(index, /decideAccount\(identity, \{ bySubject, byEmail, byEmailApiTokens, byEmailPasskeys, domains: sso\.domains \}\)/)
+  // Restated (team connections): one count of an account's credentials serves the server's own connection and the teams'.
+  assert.match(index, /passkeys: await Passkeys\.find\(\{ userId: user\._id \}\)\.countAsync\(\)/)
+  assert.match(index, /decideAccount\(identity, \{ bySubject, byEmail, byEmailApiTokens: counts\.apiTokens, byEmailPasskeys: counts\.passkeys, domains: sso\.domains \}\)/)
+  assert.match(index, /decideTeamAccount\(identity, \{ connection, bySubject, byEmail, byEmailApiTokens: counts\.apiTokens, byEmailPasskeys: counts\.passkeys \}\)/)
 })
 
 test('a removed account takes its passkeys; a team export and a Cloud move never carry them; MIT core imports no enterprise code', () => {

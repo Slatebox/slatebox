@@ -26,6 +26,8 @@ import AuthManager from '../../imports/api/common/AuthManager'
 // The server administrator check (the uberMensch claim alone; no team needed)
 import { isInstanceAdmin } from '../permissions'
 import { teamPerson } from '../common/team-person'
+import { audit } from '../audit/recorder.mjs'
+import { personLabel } from '../audit/meteor'
 import { roleChangeRefusal, clearedByAdmin } from '../team-guard.mjs'
 import { readCreditName } from '../../imports/api/common/library-model.mjs'
 import { removePersonalData } from '../profile/meteor'
@@ -587,6 +589,7 @@ async function inviteTeam(opts = {}, resend) {
     if (!resend) membersChanged(orgId, { recordedFirst: true })
     // the first team invitation counts in the growth funnel (Slatebox Cloud only)
     if (!resend) growthStep(actor._id, 'invite')
+    if (delivered?.sent) await audit.record({ action: 'member.invited', orgId, target: { type: 'team', id: orgId }, details: { count: delivered.sent, ...(resend && { reason: 'resent' }) } })
     return delivered
   } finally {
     await Organizations.updateAsync({ _id: orgId, 'invitationLease.id': lock }, { $unset: { invitationLease: 1 } })
@@ -645,8 +648,13 @@ method[CONSTANTS.methods.users.delete] = async function removeOwnAccount() {
     throw error
   }
   if (connection) await this.setUserId(null)
+  // A person outside any team: this server's own log (a self-hosted server's administrator reads it).
+  await audit.record({ action: 'account.deleted', actor: { kind: 'person', userId: user._id, label: personLabel(user) }, target: { type: 'person', id: user._id, name: personLabel(user) } })
   return true
 }
+
+// The activity log's words for a team claim.
+const CLAIM_WORDS = { admin: 'an admin', canViewUsers: 'sees the team', canEditUsers: 'changes roles', canAddUsers: 'invites people', canRemoveUsers: 'removes people' }
 
 // A team member with canEditUsers changes the team roles of members of the same team. The
 // target is read from the database, never from the request, and uberMensch is never granted.
@@ -680,6 +688,8 @@ method[CONSTANTS.methods.users.changeRoles] = async function changeRoles(opts) {
       await Permissions.removeAsync({ ...team, claimId: { $in: claims.map((c) => c._id) } })
     }
     await Meteor.users.updateAsync({ _id: member._id }, { $set: { roles: u.claimIds } })
+    const changed = await Meteor.users.findOneAsync(member._id, { fields: { profile: 1, emails: 1 } })
+    await audit.record({ action: 'member.roleChanged', orgId: user.orgId, target: { type: 'person', id: member._id, name: personLabel(changed) }, details: { role: `${u.action === 'add' ? 'now' : 'no longer'} ${claims.map((c) => CLAIM_WORDS[c._id] || c._id).join(', ')}` } })
   }
   return true
 }

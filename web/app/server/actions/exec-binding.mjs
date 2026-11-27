@@ -11,6 +11,10 @@
 //   teamMove.*         Moving a whole team onto this server is the person's own step, run from
 //                      `npx slatebox migrate` / `slatebox import` or the API: it needs the archive's
 //                      bytes uploaded, which no script can send, so a script gets nothing from it.
+//   audit.*            The activity log is the team admin's record of what everyone did, read on
+//                      the team page or pulled by a SIEM with an audit:read token. An agent at work
+//                      has no use for it, and a script must not carry the whole team's activity
+//                      into a model's context.
 //   slates.addPhoto    A photo from the phone app, up to 8 MB: more than a script and its input
 //                      (128 KiB) or an MCP call (128 KiB) can carry, so it is the app's and the
 //                      API's door only. A script or a model adds a picture it has as a URL instead.
@@ -21,7 +25,7 @@
 // wrote goes under a labelled field (details.content, with who wrote it); anything else is a
 // channel for injected instructions into the agent reading the error.
 
-export const NEVER_BOUND = Object.freeze([/^apiTokens\./, /^exec\.(run|get)$/, /^teamMove\./, /^slates\.addPhoto$/])
+export const NEVER_BOUND = Object.freeze([/^apiTokens\./, /^exec\.(run|get)$/, /^teamMove\./, /^slates\.addPhoto$/, /^audit\./])
 
 export const isNeverBound = (id) => NEVER_BOUND.some((rule) => rule.test(id))
 

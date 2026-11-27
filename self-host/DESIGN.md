@@ -347,11 +347,13 @@ names; events are stored in the realm instead.
 state key; server only) and `public.sso` (`enabled`, `only`). The app signs in
 with OpenID Connect (authorization code, PKCE S256, state and nonce in an
 HMAC-sealed, HttpOnly, SameSite=Lax cookie on `/sso`), exchanges the code on
-loopback, checks the ID token's issuer, audience, expiry and nonce, and hands
+loopback, checks the ID token's signature (Keycloak's keys, read on loopback),
+issuer, audience, expiry and nonce (openid-client), and hands
 the browser a one-time ticket in a URL fragment, which the `sso` login handler
 trades for a Meteor session. The ticket is bound to the tab that started the
 sign-in: the tab keeps a random verifier in sessionStorage and sends it to
-`/sso/login`, its hash is sealed into the state, and the ticket is redeemed only
+`/sso/start`, its hash is sealed into the state, and the ticket (kept in Mongo,
+`ssoTickets`, by its hash) is redeemed only
 with the verifier (no login CSRF with someone else's ticket). Accounts: the one
 linked to the Keycloak subject; else the account with the same email, when the
 provider verified it and Slatebox verified it too (or the account has no

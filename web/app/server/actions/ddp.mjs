@@ -3,6 +3,7 @@
 // Meteor is passed in (methods, Error, user lookup) so this module loads without it.
 import { toActionError } from './errors.mjs'
 import { principalFromUser } from './principal.mjs'
+import { withAuditContext } from '../audit/recorder.mjs'
 
 export function mountDdp(registry, options) {
   const methods = ddpMethodsFor(registry, registry.list(), options)
@@ -21,7 +22,9 @@ export function ddpMethodsFor(registry, actions, { makeError, loadUser, scopes }
       const user = this.userId ? await loadUser(this.userId) : null
       const idempotencyKey = action.idempotency !== 'none' && typeof options?.idempotencyKey === 'string' ? options.idempotencyKey : undefined
       try {
-        const result = await registry.run(principalFromUser(user, scopes), action.id, input ?? {}, { idempotencyKey })
+        // The activity log's door and address for what this call records (server/audit/recorder.mjs).
+        const result = await withAuditContext({ via: 'app', address: this.connection?.clientAddress || null }, () =>
+          registry.run(principalFromUser(user, scopes), action.id, input ?? {}, { idempotencyKey }))
         return result.body
       } catch (error) {
         const failure = toActionError(error, action.failure)

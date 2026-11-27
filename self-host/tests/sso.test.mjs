@@ -1,7 +1,7 @@
 // Single sign-on with the bundled Keycloak, end to end through the one published port:
 // SLATEBOX_SSO=keycloak, a person made in Keycloak signs in to Slatebox in a real browser,
-// gets an account and a slate, is disabled in Keycloak and loses access. Also SCIM provisioning,
-// sign-in events, "SSO only", a restart, and SSO staying off by default.
+// gets an account and a slate, is disabled in Keycloak and loses access. Also SCIM provisioning into
+// Slatebox itself (/scim/v2, not Keycloak), sign-in events, "SSO only", a restart, and SSO staying off by default.
 import assert from 'node:assert/strict'
 import { after, before, test } from 'node:test'
 import { FIRST_ADMIN, cleanup, docker, freePort, healthy, ready, logs, ok, remove, setupLink, start, waitFor } from './lib.mjs'
@@ -83,17 +83,33 @@ async function standing(id, email) {
       serverAdmin: (await db.collection('permissions').countDocuments({ userId: user._id, claimId: 'uberMensch' })) > 0 }`))
 }
 
-/** A SCIM client as the company's identity provider runs one: client credentials, then /scim/v2. */
+/**
+ * A SCIM client as the company's identity provider runs one against Slatebox's own /scim/v2: the
+ * team's first admin makes the token in the app (teamScim.createToken), shown once. Before that,
+ * example.test is a verified domain of the team's Keycloak connection, as the server administrator
+ * marks it on Team settings (a self-hosted server needs no DNS record).
+ */
 async function scimClient(target, id) {
-  const secret = await exec(id, 'sso', 'scim-secret')
-  const issuer = `${target.url}/auth/realms/${REALM}`
-  const token = (await (await fetch(`${issuer}/protocol/openid-connect/token`, {
-    method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ grant_type: 'client_credentials', client_id: 'scim', client_secret: secret }),
-  })).json()).access_token
-  assert.ok(token, 'the SCIM client gets a token')
+  const team = JSON.parse(await database(id, `return (await db.collection('organizations').findOne({ name: ${JSON.stringify(FIRST_ADMIN.team)} }))._id`))
+  await database(id, `return (await db.collection('ssoConnections').updateOne(
+    { orgId: ${JSON.stringify(team)}, managed: 'keycloak' },
+    { $set: { enabled: true }, $setOnInsert: { protocol: 'oidc', preset: 'oidc', label: 'Keycloak', createdAt: new Date() },
+      $addToSet: { domains: { domain: 'example.test', token: 'self-host', verifiedAt: new Date() } } },
+    { upsert: true })).acknowledged`)
+  const admin = await person()
+  let token
+  try {
+    await admin.page.goto(`${target.url}/login`)
+    await admin.page.waitForFunction(() => window.Meteor?.loginWithPassword, null, { timeout: 60_000 })
+    await admin.page.evaluate(([email, password]) => new Promise((resolve, reject) =>
+      window.Meteor.loginWithPassword(email, password, error => (error ? reject(error) : resolve()))), [FIRST_ADMIN.email, FIRST_ADMIN.password])
+    token = (await admin.page.evaluate(() => window.Meteor.callAsync('teamScim.createToken', { name: 'company provider' }))).token
+  } finally {
+    await admin.close()
+  }
+  assert.match(token, /^sbscim_[0-9a-f]{8}_[A-Za-z0-9_-]{43}$/, 'the team admin gets a SCIM token')
   return async (method, path, body) => {
-    const response = await fetch(`${issuer}/scim/v2${path}`, {
+    const response = await fetch(`${target.url}/scim/v2${path}`, {
       method, headers: { authorization: `Bearer ${token}`, 'content-type': 'application/scim+json' }, body: body && JSON.stringify(body),
     })
     assert.ok(response.ok, `SCIM ${method} ${path}: HTTP ${response.status} ${await response.clone().text()}`)
@@ -136,7 +152,7 @@ test('Keycloak answers under /auth on the one port, its data is in the volume, a
   }
   assert.match(await ok(['exec', box.id, 'ls', '/data/keycloak/h2']), /keycloakdb\.mv\.db/)
   const secrets = JSON.parse(await ok(['exec', box.id, 'cat', '/data/secrets/secrets.json']))
-  for (const name of ['keycloakAdminPassword', 'keycloakInitSecret', 'ssoClientSecret', 'ssoStateKey', 'scimClientSecret']) {
+  for (const name of ['keycloakAdminPassword', 'keycloakInitSecret', 'ssoClientSecret', 'ssoStateKey']) {
     assert.match(secrets[name], /^[0-9a-f]{64}$/, name)
   }
   const log = await logs(box.id)
@@ -145,7 +161,14 @@ test('Keycloak answers under /auth on the one port, its data is in the volume, a
   assert.match(log, /slatebox sso admin-password/)
   assert.match(log, /SSO: +on, Keycloak 26\.\d+\.\d+/)
   const status = await exec(box.id, 'sso')
-  assert.match(status, new RegExp(`SCIM 2\\.0: +${box.url}/auth/realms/${REALM}/scim/v2`))
+  // SCIM is Slatebox's own: Keycloak has no SCIM API and no SCIM client.
+  assert.match(status, new RegExp(`SCIM 2\\.0: +${box.url}/scim/v2 `))
+  assert.doesNotMatch(status, /scim-secret/)
+  const scimDiscovery = await fetch(`${box.url}/scim/v2/ServiceProviderConfig`)
+  assert.equal(scimDiscovery.status, 200)
+  assert.equal((await scimDiscovery.json()).patch.supported, true)
+  assert.equal((await fetch(`${box.url}/scim/v2/Users`)).status, 401, 'no token, no people')
+  assert.equal((await fetch(`${box.url}/auth/realms/${REALM}/scim/v2/Users`)).status, 404, 'Keycloak serves no SCIM')
   // The admin console signs in through the master realm: password guessing there is slowed and recorded.
   const call = await admin(box, adminPassword)
   const master = await call('GET', '', undefined, { realm: 'master' })
@@ -153,8 +176,9 @@ test('Keycloak answers under /auth on the one port, its data is in the volume, a
   const events = await call('GET', '/events/config', undefined, { realm: 'master' })
   assert.equal(events.eventsEnabled, true, 'sign-in events in the master realm')
   assert.equal(events.adminEventsEnabled, true, 'admin events in the master realm')
-  // The first-login flow that links people provisioned ahead (SCIM, LDAP) is there to choose.
+  // The first-login flow that links people synced ahead (LDAP) is there to choose.
   assert.ok((await call('GET', '/authentication/flows')).some(flow => flow.alias === 'link by trusted email'))
+  assert.deepEqual(await call('GET', '/clients?clientId=scim'), [], 'no Keycloak SCIM client')
 })
 
 test('a person made in Keycloak signs in with SSO, gets an account and a slate; disabled, they lose access', async () => {
@@ -308,7 +332,7 @@ test('a sign-in ticket works only in the browser that started the sign-in (no lo
   }
 })
 
-test('SCIM provisions a person ahead; they sign in through the company provider and are linked; deactivated over SCIM, they lose access', async () => {
+test('SCIM provisions a person into Slatebox ahead; they sign in through the company provider and are linked; deactivated over SCIM, they lose access', async () => {
   const call = await admin(box, adminPassword)
   // The company's own identity provider, here a second realm of the same Keycloak, offering OpenID Connect.
   await call('POST', '', { realm: 'corp', enabled: true, sslRequired: 'external' }, { realm: '' })
@@ -332,12 +356,14 @@ test('SCIM provisions a person ahead; they sign in through the company provider 
       issuer: `${box.url}/auth/realms/corp`, validateSignature: 'false', defaultScope: 'openid email profile', syncMode: 'FORCE',
     },
   })
-  // The company provisions Cy over SCIM before Cy has ever signed in.
+  // The company provisions Cy into Slatebox over SCIM before Cy has ever signed in: an account in
+  // the team, with no password.
   const scim = await scimClient(box, box.id)
   const made = await scim('POST', '/Users', {
     schemas: ['urn:ietf:params:scim:schemas:core:2.0:User'], userName: 'cyd', active: true,
     name: { givenName: 'Cy', familyName: 'Scim' }, emails: [{ value: 'cy@example.test', primary: true }],
   })
+  assert.deepEqual(await standing(box.id, 'cy@example.test'), { team: FIRST_ADMIN.team, owner: false, claims: [], serverAdmin: false })
   const cy = await person()
   try {
     await companySignIn(cy.page, box.url, 'corp', 'cy.corp', 'cy corp password 1')
@@ -347,14 +373,15 @@ test('SCIM provisions a person ahead; they sign in through the company provider 
         throw new Error(`${error.message}: ${cy.page.url()} ${refused}`)
       })
     assert.equal(user.email, 'cy@example.test')
-    // Linked to the SCIM-provisioned person, not a second one.
-    const people = await call('GET', '/users?email=cy@example.test&exact=true')
-    assert.equal(people.length, 1)
-    assert.equal(people[0].id, made.id)
-    await scim('PATCH', `/Users/${made.id}`, {
-      schemas: ['urn:ietf:params:scim:api:messages:2.0:PatchOp'], Operations: [{ op: 'replace', path: 'active', value: false }],
+    // Linked to the account SCIM made, not a second one.
+    assert.equal(user.id, made.id)
+    // Turned off over SCIM: the open tab is signed out at once, and the account stays (disabled).
+    const off = await scim('PATCH', `/Users/${made.id}`, {
+      schemas: ['urn:ietf:params:scim:api:messages:2.0:PatchOp'], Operations: [{ op: 'Replace', path: 'active', value: 'False' }],
     })
-    await waitFor(async () => (await cy.page.evaluate(() => window.Meteor.userId())) !== user.id, { timeout: 150, every: 2000, what: 'the session to be revoked' })
+    assert.equal(off.active, false)
+    await waitFor(async () => (await cy.page.evaluate(() => window.Meteor.userId())) !== user.id, { timeout: 30, every: 1000, what: 'the session to end' })
+    assert.equal(JSON.parse(await database(box.id, `return (await db.collection('users').findOne({ _id: ${JSON.stringify(made.id)} })).disabledBy`)), 'scim')
   } finally {
     await cy.close()
   }
@@ -419,7 +446,7 @@ test('a backup carries Keycloak: restored into a new installation, the same peop
   } finally { await again.close() }
   // SCIM answers at the new address: the company's provider can still remove people.
   const scim = await scimClient(fresh, fresh.id)
-  assert.ok((await scim('GET', '/Users?filter=' + encodeURIComponent('userName eq "bob"'))).totalResults >= 1)
+  assert.ok((await scim('GET', '/Users?filter=' + encodeURIComponent('userName eq "bo@example.test"'))).totalResults >= 1)
   await remove(fresh.id)
   // The copy of Keycloak's database that travelled in the archive is not left in the restored data.
   const leftover = await docker(['exec', fresh.id, 'sh', '-c', 'ls /data/tmp'])
@@ -432,7 +459,7 @@ test('a new address keeps SCIM working; with SLATEBOX_SSO_ADMIN=closed the admin
   const moved = await start({ data: box.data, port: await freePort(), env: { SLATEBOX_SSO: 'keycloak', SLATEBOX_SSO_ADMIN: 'closed', SLATEBOX_SSO_DEFAULT_ROLE: 'none' } })
   await healthy(moved.id)
   const scim = await scimClient(moved, moved.id)
-  assert.ok((await scim('GET', '/Users?filter=' + encodeURIComponent('userName eq "bob"'))).totalResults >= 1, 'SCIM answers at the new address')
+  assert.ok((await scim('GET', '/Users?filter=' + encodeURIComponent('userName eq "bo@example.test"'))).totalResults >= 1, 'SCIM answers at the new address')
   for (const path of ['/auth/admin/', '/auth/admin/master/console/', '/auth/realms/master/protocol/openid-connect/token', '/auth/realms/master/.well-known/openid-configuration']) {
     const response = await fetch(`${moved.url}${path}`, { redirect: 'manual', method: path.endsWith('/token') ? 'POST' : 'GET' })
     assert.equal(response.status, 404, `${path} is closed`)

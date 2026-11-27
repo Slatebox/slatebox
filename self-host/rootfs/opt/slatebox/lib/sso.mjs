@@ -3,7 +3,7 @@
 // SSO off nothing here runs and Keycloak is not started.
 import { join } from 'node:path'
 import {
-  KEYCLOAK_DATA, KEYCLOAK_HOME, KEYCLOAK_MANAGEMENT_PORT, KEYCLOAK_PORT, Plain, SCIM_CLIENT, SSO_CLIENT, SSO_INIT_CLIENT,
+  KEYCLOAK_DATA, KEYCLOAK_HOME, KEYCLOAK_MANAGEMENT_PORT, KEYCLOAK_PORT, Plain, SSO_CLIENT, SSO_INIT_CLIENT,
   SSO_PATH, SSO_REALM,
 } from './common.mjs'
 
@@ -63,6 +63,9 @@ export function appSettings({ url, secrets, only, defaultRole = 'member', domain
       authorizationEndpoint: `${issuer}/protocol/openid-connect/auth`,
       // The code and the refresh tokens go to Keycloak on loopback, never over the network.
       tokenEndpoint: `${internal}/realms/${SSO_REALM}/protocol/openid-connect/token`,
+      // its signing keys, for the ID token's signature check, on loopback too
+      jwksUri: `${internal}/realms/${SSO_REALM}/protocol/openid-connect/certs`,
+      endSessionEndpoint: `${issuer}/protocol/openid-connect/logout`,
       clientId: SSO_CLIENT,
       clientSecret: secrets.ssoClientSecret,
       redirectUri: `${url.origin}/sso/callback`,
@@ -143,36 +146,10 @@ export function appClient({ url, secrets }) {
   }
 }
 
-/** A client for SCIM provisioning (OAuth 2.0 client credentials), allowed to manage users. */
-export function scimClient({ url, secrets }) {
-  return {
-    clientId: SCIM_CLIENT,
-    name: 'SCIM provisioning',
-    enabled: true,
-    protocol: 'openid-connect',
-    publicClient: false,
-    clientAuthenticatorType: 'client-secret',
-    secret: secrets.scimClientSecret,
-    standardFlowEnabled: false,
-    implicitFlowEnabled: false,
-    directAccessGrantsEnabled: false,
-    serviceAccountsEnabled: true,
-    protocolMappers: [{
-      name: 'scim-audience',
-      protocol: 'openid-connect',
-      protocolMapper: 'oidc-audience-mapper',
-      config: { 'included.custom.audience': scimAudience(url), 'access.token.claim': 'true', 'id.token.claim': 'false' },
-    }],
-  }
-}
-
-/** The audience SCIM tokens must carry: SCIM's own address under this installation's issuer. */
-export const scimAudience = url => `${issuerFor(url)}/scim/v2`
-
 /**
  * The first-login flow for a company provider whose email addresses are trusted: a person who
- * already exists in the realm with the same address (provisioned over SCIM or synced from the
- * directory) is linked automatically instead of being asked for a Keycloak password they do not
+ * already exists in the realm with the same address (synced from the directory over LDAP) is
+ * linked automatically instead of being asked for a Keycloak password they do not
  * have; anyone else gets a new user. It is not the realm's default: an operator chooses it, under
  * "First login flow override", only for a provider with Trust Email on (see the guide).
  */
@@ -210,7 +187,6 @@ export function realm() {
     eventsListeners: [],
     adminEventsEnabled: true,
     adminEventsDetailsEnabled: false,
-    scimApiEnabled: true,
   }
 }
 

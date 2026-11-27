@@ -62,6 +62,7 @@ export const ADMIN_SECTIONS = Object.freeze([
   Object.freeze({ id: 'overview', to: '/admin', title: 'Admin overview', detail: 'People, plans, payments and agent usage on this server' }),
   Object.freeze({ id: 'ai', to: '/admin/ai', title: 'AI control', detail: 'Models, providers, bindings and prompts' }),
   Object.freeze({ id: 'library', to: '/admin/library', title: 'Library review', detail: 'Submissions waiting for review' }),
+  Object.freeze({ id: 'audit', to: '/admin/audit', title: 'Activity log', detail: "What people did on this server's slates, team by team" }),
 ])
 
 /** Pages only a self-hosted server has (settings.public.env 'selfhost', not the Cloud edition). */

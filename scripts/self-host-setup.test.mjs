@@ -228,9 +228,10 @@ test('the server holds the gate: no account of any kind before setup, on self-ho
 
 test('the first single sign-on through the setup link makes the server administrator', () => {
   const sso = read('web/app/server/sso/index.js')
-  assert.match(sso, /const setup = await pendingSsoSetup\(req\)/)
-  assert.match(sso, /completeSetupWith\(setup\.token, \(\) => accountFor\(sso, result\.claims, result\.refreshToken\), \{ teamName: setup\.teamName, via: 'sso' \}\)/)
-  assert.match(sso, /setup \? \[clear, clearSetupCookie\(\)\] : clear/)
+  // Restated (team connections): the setup link applies to the server's own connection, the only one before setup.
+  assert.match(sso, /const setup = connection\.managed \? await pendingSsoSetup\(req\) : null/)
+  assert.match(sso, /completeSetupWith\(setup\.token, \(\) => managedAccountFor\(claims, refreshToken\), \{ teamName: setup\.teamName, via: 'sso' \}\)/)
+  assert.match(sso, /setup \? \[clear, clearSetupCookie\(\)\]\.filter\(Boolean\) : clear/)
 })
 
 test('a setup link or token is never logged', () => {

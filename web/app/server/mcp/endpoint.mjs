@@ -15,6 +15,8 @@
 import { clientGuide, matchSlateResource, promptMessages, resourceExecArgs, servedPrompt, typedExecArgs, typedToolResult } from '../actions/agent-surface.mjs'
 import { describeClient, listedPrompts, listedTemplates, listedTools, renderDeclarations } from '../actions/client-render.mjs'
 import { ActionError } from '../actions/errors.mjs'
+import { clientAddress } from '../actions/http.mjs'
+import { withAuditContext } from '../audit/recorder.mjs'
 import { cleanClient } from '../agent-reach/usage-core.mjs'
 
 export const MCP_PATH = '/mcp'
@@ -309,7 +311,14 @@ export function createMcpHandler({
     })
     try {
       await server.connect(transport)
-      await transport.handleRequest(req, res, req.body)
+      // The activity log's door and address for what this request's calls record (server/audit).
+      let address = null
+      try {
+        address = clientAddress(req, Number.parseInt(process.env.HTTP_FORWARDED_COUNT, 10) || 0) || null
+      } catch {
+        // an address the request does not carry: the entry has none
+      }
+      await withAuditContext({ via: 'mcp', address }, () => transport.handleRequest(req, res, req.body))
     } catch {
       if (!res.headersSent) rpcError(res, 500, -32603, 'The request could not be completed.')
     }

@@ -30,6 +30,8 @@ import './argument-guard'
 // any module builds the action registry: on every self-hosted install whose build carries it, and on
 // Slatebox Cloud by Cloud's key (server/enterprise-loader.mjs).
 import './enterprise'
+// The activity log (server/audit): its sink, sign-in entries and the sealer, before any method runs.
+import './audit/meteor'
 
 // global methods
 import './methods/users'
@@ -127,7 +129,7 @@ import './shapes/meteor'
 import './self-host-setup/meteor'
 // Admin › Updates: update checks against the signed GitHub feed (self-hosted only)
 import './updates/meteor'
-// single sign-on (off unless settings.sso.enabled; see server/sso)
+// single sign-on: each team's own connections, and a self-hosted server's bundled Keycloak (see server/sso)
 import './sso'
 // passkeys: sign in, add one, save a guest with one (server/passkeys; on wherever ROOT_URL is https or localhost)
 import './passkeys/meteor'

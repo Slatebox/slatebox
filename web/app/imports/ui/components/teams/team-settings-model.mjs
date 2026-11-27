@@ -7,10 +7,12 @@
 export const SECTIONS = Object.freeze([
   { id: 'general', label: 'General' },
   { id: 'members', label: 'Members & roles' },
+  { id: 'security', label: 'Sign-in & security' },
   { id: 'billing', label: 'Plan & billing' },
   { id: 'ai', label: 'Agents & AI' },
   { id: 'branding', label: 'Branding' },
   { id: 'data', label: 'Data' },
+  { id: 'activity', label: 'Activity log' },
   { id: 'danger', label: 'Danger zone' },
 ])
 
@@ -20,8 +22,10 @@ export const SECTIONS = Object.freeze([
  *   admin      the team admin claim (permissions: claimId admin)
  *   owner      users.isOrgOwner
  *   billing    Slatebox Business is sold here (payments.cloud) or the server has a meter (team balance)
- * Members read General, Members & roles and Plan & billing; admins change them and also see Agents
- * & AI, Branding (the brand kit is admin-only) and Data (team.export is admin-only). The danger
+ * Members read General, Members & roles and Plan & billing; admins change them and also see
+ * Sign-in & security (single sign-on and SCIM, teamSso.* and teamScim.*), Agents & AI, Branding
+ * (the brand kit is admin-only), Data (team.export is admin-only) and the Activity log (audit.list
+ * is for the owner and admins). The danger
  * zone is for admins: only the owner can delete, and an admin who is not is told who can.
  */
 export function teamSettingsSections({ inTeam, admin, owner, billing }) {
@@ -29,10 +33,12 @@ export function teamSettingsSections({ inTeam, admin, owner, billing }) {
   const show = {
     general: true,
     members: true,
+    security: Boolean(admin),
     billing: Boolean(billing),
     ai: Boolean(admin),
     branding: Boolean(admin),
     data: Boolean(admin),
+    activity: Boolean(admin || owner),
     danger: Boolean(admin || owner),
   }
   return SECTIONS.filter((s) => show[s.id])
@@ -112,7 +118,7 @@ export function deleteTeamState({ implications, failed = false, owner, teamName,
 
 /** The intro under the page title, naming only the sections this person sees. */
 export function settingsIntro(sections, teamName) {
-  const words = { general: 'its name', members: 'people', billing: 'plan', ai: 'AI', branding: 'brand kit', data: 'data' }
+  const words = { general: 'its name', members: 'people', security: 'sign-in', billing: 'plan', ai: 'AI', branding: 'brand kit', data: 'data', activity: 'activity log' }
   const parts = sections.map((s) => words[s.id]).filter(Boolean)
   if (!teamName || parts.length === 0) return null
   const list = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`

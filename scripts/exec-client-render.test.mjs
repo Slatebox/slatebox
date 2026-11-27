@@ -34,10 +34,10 @@ const writeAction = (overrides = {}) => defineAction({
 const registryWith = (...extra) =>
   createRegistry({ actions: [...appActions, ...extra], components: appComponents, scopes: API_TOKEN_SCOPES });
 
-test("a method exists for each HTTP action an agent may call, except token management, exec itself and team moves", () => {
+test("a method exists for each HTTP action an agent may call, except token management, exec itself, team moves and the activity log", () => {
   const expected = appActions
     .filter((a) => a.mounts.http && a.principals.includes("agent"))
-    .filter((a) => !/^apiTokens\./.test(a.id) && !/^exec\./.test(a.id) && !/^teamMove\./.test(a.id) && a.id !== "slates.addPhoto")
+    .filter((a) => !/^apiTokens\./.test(a.id) && !/^exec\./.test(a.id) && !/^teamMove\./.test(a.id) && a.id !== "slates.addPhoto" && !/^audit\./.test(a.id))
     .map((a) => a.id)
     .sort();
   assert.deepEqual(manifest.methods.map((m) => m.name), expected);
@@ -50,6 +50,9 @@ test("a method exists for each HTTP action an agent may call, except token manag
   // A photo (up to 8 MB) is more than a script or an MCP call carries: the phone app's and the API's door only.
   assert.ok(NEVER_BOUND.some((rule) => rule.test("slates.addPhoto")));
   assert.equal(manifest.methods.some((m) => m.name.startsWith("teamMove.")), false, "no team moves in client.json");
+  // The activity log is the team admin's record, pulled by a SIEM; a script never carries it into a model.
+  assert.ok(NEVER_BOUND.some((rule) => rule.test("audit.list")));
+  assert.equal(manifest.methods.some((m) => m.name.startsWith("audit.")), false, "no activity log in client.json");
   assert.deepEqual(boundActions(registry).map((a) => a.id).sort(), expected);
   // A DDP-only action is not reachable from a script until it has a route.
   const ddpOnly = defineAction({ ...writeAction(), id: "things.local", principals: ["person"], mounts: { ddp: true }, idempotency: "optional" });

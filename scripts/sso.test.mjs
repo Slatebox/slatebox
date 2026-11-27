@@ -20,26 +20,40 @@ const config = {
   issuer: 'https://boards.example.com/auth/realms/slatebox',
   authorizationEndpoint: 'https://boards.example.com/auth/realms/slatebox/protocol/openid-connect/auth',
   tokenEndpoint: 'http://127.0.0.1:8080/auth/realms/slatebox/protocol/openid-connect/token',
+  jwksUri: 'http://127.0.0.1:8080/auth/realms/slatebox/protocol/openid-connect/certs',
+  // the bundled Keycloak answers on the container's loopback, over plain http
+  allowHttp: true,
   clientId: 'slatebox',
   clientSecret: 'client-secret-for-tests',
   redirectUri: 'https://boards.example.com/sso/callback',
 }
 
+// The provider's signing key: ID tokens are signed (RS256) and checked against its JWKS.
+const { generateKeyPair, exportJWK, SignJWT } = await import(app + 'node_modules/jose/dist/webapi/index.js')
+const signing = await generateKeyPair('RS256', { extractable: true })
+const stranger = await generateKeyPair('RS256', { extractable: true })
+const jwks = { keys: [{ ...(await exportJWK(signing.publicKey)), kid: 'kc-1', alg: 'RS256', use: 'sig' }] }
 const b64url = (value) => Buffer.from(JSON.stringify(value)).toString('base64url')
-const idToken = (claims) => `${b64url({ alg: 'RS256', typ: 'JWT' })}.${b64url(claims)}.signature-not-checked-on-the-back-channel`
+const idToken = (claims, { key = signing.privateKey } = {}) => new SignJWT(claims).setProtectedHeader({ alg: 'RS256', kid: 'kc-1', typ: 'JWT' }).sign(key)
 const goodClaims = (nonce, extra = {}) => ({
   iss: config.issuer, aud: 'slatebox', azp: 'slatebox', sub: 'kc-user-1', nonce,
   exp: NOW / 1000 + 300, iat: NOW / 1000 - 5,
   email: 'Ada@Example.com', email_verified: true, given_name: 'Ada', family_name: 'Lovelace', ...extra,
 })
 
-/** A token endpoint that records what it was sent. */
+/** A token endpoint that records what it was sent (the provider's keys are answered too, unrecorded). */
 function tokenEndpoint(reply) {
   const calls = []
-  const fetch = async (url, init) => {
-    calls.push({ url, body: new URLSearchParams(init.body), headers: init.headers, method: init.method })
+  const fetch = async (input, init = {}) => {
+    const url = String(input?.href ?? input?.url ?? input)
+    const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+    if (url === config.jwksUri) return json(200, jwks)
+    calls.push({ url, body: new URLSearchParams(String(init.body ?? '')), headers: init.headers, method: init.method })
     const { status = 200, body } = typeof reply === 'function' ? reply(calls.at(-1)) : reply
-    return { ok: status >= 200 && status < 300, status, json: async () => body }
+    // a real token endpoint always answers an access token and its type with a success
+    const answer = status < 300 ? { access_token: 'at', token_type: 'Bearer', ...body } : { ...body }
+    if (answer.id_token && typeof answer.id_token.then === 'function') answer.id_token = await answer.id_token
+    return json(status, answer)
   }
   return { fetch, calls }
 }
@@ -348,7 +362,7 @@ test('H2: an API token stops working once its account is revoked, disabled or de
   assert.equal(await service.authenticateApiRequest(req), null)
 })
 
-test('M1: a sign-in ticket works only in the browser tab that started the sign-in', () => {
+test('M1: a sign-in ticket works only in the browser tab that started the sign-in', async () => {
   const verifier = tickets.newVerifier()
   assert.match(verifier, /^[A-Za-z0-9_-]{43}$/)
   // /sso/login refuses a sign-in that is not bound to a browser.
@@ -360,19 +374,19 @@ test('M1: a sign-in ticket works only in the browser tab that started the sign-i
 
   let now = NOW
   const store = tickets.createTicketStore({ now: () => now })
-  const ticket = store.issue('victim-or-attacker', opened.binding)
+  const ticket = await store.issue('victim-or-attacker', opened.binding)
   // Another browser (no verifier, or its own) cannot redeem it, and the attempt burns it.
-  assert.equal(store.redeem(ticket, undefined), null)
-  const again = store.issue('u', opened.binding)
-  assert.equal(store.redeem(again, tickets.newVerifier()), null)
-  assert.equal(store.redeem(again, verifier), null, 'a ticket is tried once')
+  assert.equal(await store.redeem(ticket, undefined), null)
+  const again = await store.issue('u', opened.binding)
+  assert.equal(await store.redeem(again, tickets.newVerifier()), null)
+  assert.equal(await store.redeem(again, verifier), null, 'a ticket is tried once')
   // The tab that started the sign-in redeems it, once, within a minute.
-  const good = store.issue('u', opened.binding)
-  assert.equal(store.redeem(good, verifier), 'u')
-  assert.equal(store.redeem(good, verifier), null)
-  const late = store.issue('u', opened.binding)
+  const good = await store.issue('u', opened.binding)
+  assert.equal(await store.redeem(good, verifier), 'u')
+  assert.equal(await store.redeem(good, verifier), null)
+  const late = await store.issue('u', opened.binding)
   now += 61_000
-  assert.equal(store.redeem(late, verifier), null)
+  assert.equal(await store.redeem(late, verifier), null)
 })
 
 test('M1: the callback carries the binding from the sealed state to the ticket', async () => {

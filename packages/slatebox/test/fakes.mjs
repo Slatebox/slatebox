@@ -173,7 +173,7 @@ export class FakeDocker {
       if (args.includes('health')) return container.health === 'healthy' ? ok() : fail('The app is not ready (HTTP 502 from /readyz).')
       if (args.includes('sso') && args.includes('sessions')) {
         // The app's last session check (an image from 0.2.2 on); an older image has no such command.
-        if (!this.commands.includes('sso-sessions')) return fail('Usage: slatebox sso [admin-password | scim-secret | events [N]]')
+        if (!this.commands.includes('sso-sessions')) return fail('Usage: slatebox sso [admin-password | events [N]]')
         return ok(`${JSON.stringify(this.ssoSessions)}\n`)
       }
       if (args.includes('tunnel')) return this.commands.includes('tunnel') ? ok('{"configured":true,"ready":true,"connections":4}\n') : fail('Usage, from the Docker host:', 2)

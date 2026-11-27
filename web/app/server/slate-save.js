@@ -5,9 +5,20 @@ import { Mongo } from 'meteor/mongo'
 import { Slates } from '../imports/api/common/models'
 import { createSlateSaveCore } from './slate-save-core.mjs'
 import { growthStep } from './growth/meteor'
+import { audit } from './audit/recorder.mjs'
+import { slateWriteEntries } from './audit/slate-entries.mjs'
 
 // One row per save: { _id: slateId:revision, slateId, revision, at, source, actor, notes, fields }.
 export const SlateEvents = new Mongo.Collection('slateEvents')
+
+// The activity log: a slate created, copied, renamed or edited, whichever door it came through.
+// A save inside a transaction is written only once the action that ran it succeeds (deferred).
+// Not awaited: the save answers without waiting for the log.
+const logSlateWrite = (change) => {
+  for (const [entry, options] of slateWriteEntries(change)) {
+    audit.record(entry, { ...options, deferred: Boolean(change.session) })
+  }
+}
 
 // A slate a person or guest made counts towards the growth funnel's "first slate" (server/growth,
 // Slatebox Cloud only). Inside a caller's transaction it is left to the account's next report.
@@ -25,6 +36,7 @@ export const slateSaveCore = countingFirstSlate(createSlateSaveCore({
   slates: Slates.rawCollection(),
   events: SlateEvents.rawCollection(),
   onEventError: (error, row) => console.error('slate event not logged', row.slateId, row.revision, error.message),
+  onWrite: logSlateWrite,
 }))
 
 Meteor.startup(async () => {
@@ -53,4 +65,5 @@ export const fencedSlateSaveCore = countingFirstSlate(createSlateSaveCore({
   },
   events: SlateEvents.rawCollection(),
   onEventError: (error, row) => console.error('slate event not logged', row.slateId, row.revision, error.message),
+  onWrite: logSlateWrite,
 }))

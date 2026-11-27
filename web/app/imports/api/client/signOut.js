@@ -16,14 +16,18 @@ let quiet = false
 let memberId = null
 
 // The account menu's Sign out (on wide screens and in the phone's sheet).
-export function signOut() {
+// When the person's team asks that signing out of Slatebox also signs them out at their identity
+// provider, the browser goes there afterwards (it sends them back to the sign-in page).
+export async function signOut() {
   if (leaving) return undefined
   leaving = true
+  let provider = null
+  try { provider = (await Meteor.callAsync('sso.signOutUrl'))?.url || null } catch { /* sign out here only */ }
   return signOutAndLeave({
     logout: () => new Promise((resolve, reject) => Meteor.logout(error => (error ? reject(error) : resolve()))),
     logoutHere: () => Accounts.makeClientLoggedOut(),
     storage: storage(),
-    leave,
+    leave: (path) => leave(provider || path),
   })
 }
 

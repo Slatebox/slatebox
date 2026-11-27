@@ -5,6 +5,7 @@ import { pathParams } from './registry.mjs'
 import { buildOpenApi } from './openapi.mjs'
 import { declaredProperty, resolveRef } from './schema.mjs'
 import { principalFromVisitor } from './principal.mjs'
+import { withAuditContext } from '../audit/recorder.mjs'
 
 export const API_BASE = '/api/v1'
 const expressPath = (path) => path.replace(/\{([A-Za-z0-9]+)\}/g, ':$1')
@@ -144,11 +145,13 @@ export function mountHttp(app, registry, { express, authenticate, forwardedCount
         // An agent's save the gate held is sent again, once the person agreed, with the
         // confirmation id it answered with.
         const confirm = req.get('slatebox-confirm')
-        const result = await registry.run(principal, action.id, input, {
-          idempotencyKey: key === undefined ? undefined : key.trim(),
-          ...(exec && { exec }),
-          ...(confirm !== undefined && { confirm: confirm.trim() }),
-        })
+        // The activity log's door and address for what this call records (server/audit/recorder.mjs).
+        const result = await withAuditContext({ via: exec ? 'exec' : 'api', address: clientAddress(req, forwardedCount) || null }, () =>
+          registry.run(principal, action.id, input, {
+            idempotencyKey: key === undefined ? undefined : key.trim(),
+            ...(exec && { exec }),
+            ...(confirm !== undefined && { confirm: confirm.trim() }),
+          }))
         setRateHeaders(res, result.meta?.rateLimit)
         if (result.meta?.replayed) res.setHeader('Idempotent-Replayed', 'true')
         if (action.publicCache && principal.kind === 'visitor') publicHeaders(res, action)

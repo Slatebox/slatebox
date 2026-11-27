@@ -245,6 +245,8 @@ Meteor.publish(CONSTANTS.publications.orgUsers, async function () {
           emails: 1,
           orgId: 1,
           isOrgOwner: 1,
+          // turned off over SCIM (server/scim): the team page says so
+          isDisabled: 1,
         },
       }
     )
