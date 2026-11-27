@@ -23,6 +23,23 @@ const PICTURE_URL = /^(https:\/\/[A-Za-z0-9.-]+(:\d{1,5})?(\/[A-Za-z0-9._~!$&*+,
 export const PICTURE_URL_MAX = 2000
 export const isPictureUrl = (value) => typeof value === 'string' && value.length <= PICTURE_URL_MAX && PICTURE_URL.test(value) && !/(^|\/)\.\.(\/|$)/.test(value)
 
+/**
+ * An uploaded picture's address as a background names it (as a photo note does): https in full; a
+ * file this app serves itself over plain http (a self-hosted server) by its path on the app
+ * (/files/...), which every browser on it opens. Another host over http is no address: null.
+ */
+export function pictureAddress(url, origin) {
+  if (typeof url !== 'string') return null
+  if (/^https:\/\//.test(url)) return isPictureUrl(url) ? url : null
+  try {
+    const at = new URL(url, origin)
+    if (at.origin !== new URL(origin).origin) return null
+    return isPictureUrl(at.pathname) ? at.pathname : null
+  } catch {
+    return null
+  }
+}
+
 const angleOf = (value) => (Number.isInteger(value) && value >= 0 && value <= 359 ? value : null)
 
 /** A gradient made safe: { type, colors: 2 or 3 hex colors, angle? (linear) }, or null. */

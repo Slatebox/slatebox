@@ -25,7 +25,7 @@ import CONSTANTS from '../../../api/common/constants'
 import uploadImage from '../../../api/client/uploadImage'
 import PayNotice from '../PayNotice'
 import { textOn } from '../presentations/presentationStyles.mjs'
-import { DIM_DEFAULT, DIM_MAX, GRADIENT_PRESETS, gradientCss, isPictureUrl, sameGradient } from '../presentations/presentationBackground.mjs'
+import { DIM_DEFAULT, DIM_MAX, GRADIENT_PRESETS, gradientCss, isPictureUrl, pictureAddress, sameGradient } from '../presentations/presentationBackground.mjs'
 
 const label = { display: 'block', mt: 1.5, mb: 0.5, fontWeight: 600 }
 const swatchGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(64px, 1fr))', gap: 0.75 }
@@ -148,8 +148,8 @@ export function PicturePicker({ current = null, color, tints, busy = false, onAp
     if (file.size > UPLOAD_MAX) { setProblem('The picture is larger than 20 MB.'); return }
     setProgress(0)
     try {
-      const url = await uploadImage(file, setProgress)
-      if (!isPictureUrl(url)) throw new Error('The uploaded picture could not be used as a background.')
+      const url = pictureAddress(await uploadImage(file, setProgress), window.location.origin)
+      if (!url) throw new Error('The uploaded picture could not be used as a background.')
       await use(url)
     } catch (error) {
       setProblem(error.message || 'The upload failed.')

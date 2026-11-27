@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { createRequire } from 'node:module'
 import {
-  DIM_DEFAULT, GRADIENT_PRESETS, blend, cleanBackgroundOverride, gradientCss, isPictureUrl, readBackground, shownBackground, withBackground,
+  DIM_DEFAULT, GRADIENT_PRESETS, blend, pictureAddress, cleanBackgroundOverride, gradientCss, isPictureUrl, readBackground, shownBackground, withBackground,
 } from '../web/app/imports/ui/components/presentations/presentationBackground.mjs'
 import { revertToOriginal, setSlateBackground, takeOffStyle, wearStyle, wornStyle } from '../web/app/imports/ui/components/presentations/presentationBake.mjs'
 import { STYLES, cleanStyleRef, resolveStyle, textOn } from '../web/app/imports/ui/components/presentations/presentationStyles.mjs'
@@ -84,6 +84,11 @@ test('the sanitizer refuses pictures and values that are not safe', () => {
     assert.throws(() => readBackground({ picture: { url } }), /https address/, String(url))
     assert.equal(cleanBackgroundOverride({ picture: { url } }), null, String(url))
   }
+  // An upload's address: https in full; this app's own file over plain http (a self-host) by its path; another http host never.
+  assert.equal(pictureAddress('https://bucket.example.com/2026/u_a.png', 'http://localhost:3000'), 'https://bucket.example.com/2026/u_a.png')
+  assert.equal(pictureAddress('http://localhost:3000/files/2026/u_a.png', 'http://localhost:3000'), '/files/2026/u_a.png')
+  assert.equal(pictureAddress('http://evil.example.com/files/u_a.png', 'http://localhost:3000'), null)
+  assert.equal(pictureAddress('javascript:alert(1)', 'http://localhost:3000'), null)
   for (const url of ['https://images.example.com/a.jpg?w=1200&q=80', '/files/u_aaaaaaaaaaaaaaaaa_abc.png', '/sbimages/abc.jpg']) assert.equal(isPictureUrl(url), true, url)
   assert.throws(() => readBackground('red'), /like #/)
   assert.throws(() => readBackground({ color: 'rgb(1,2,3)' }), /like #/)
