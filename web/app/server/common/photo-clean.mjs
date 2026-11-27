@@ -1,7 +1,7 @@
 // A photo from someone's phone, made safe to store and show (slates.addPhoto): turned upright by its
-// EXIF orientation, shrunk to fit 2560 pixels, and written again as JPEG (quality 85), or PNG when
-// it has see-through parts. sharp writes no metadata unless asked (withMetadata is never called), so
-// the stored copy carries no EXIF (its GPS location included), XMP or IPTC.
+// EXIF orientation, shrunk to fit 2560 pixels, and written again from its bare pixels as JPEG
+// (quality 85), or PNG when it has see-through parts. Nothing the sent file carried is copied over,
+// so the stored copy has no EXIF (its GPS location included), XMP, IPTC, ICC or PNG text chunk.
 //
 // Only a JPEG, PNG or WebP by its first bytes reaches sharp: anything else (a GIF, an SVG, which sharp
 // would otherwise draw with no time limit, a PDF, a HEIC) is refused before it is read.
@@ -57,10 +57,20 @@ export async function cleanPhoto(bytes, { limits = PHOTO_CLEAN_LIMITS } = {}) {
     const source = sharp(bytes, { limitInputPixels: limits.maxPixels, failOn: 'error' })
     const { hasAlpha } = await source.metadata()
     // rotate() with no angle turns the picture upright by its EXIF orientation, then drops the tag.
-    const pipeline = source.rotate().resize({ width: limits.maxSide, height: limits.maxSide, fit: 'inside', withoutEnlargement: true })
+    const pixels = await source
+      .rotate()
+      .resize({ width: limits.maxSide, height: limits.maxSide, fit: 'inside', withoutEnlargement: true })
+      .toColourspace('srgb')
+      .raw({ depth: 'uchar' })
+      .toBuffer({ resolveWithObject: true })
+    // Written again from its bare pixels: nothing the sent file carried reaches the stored copy. sharp
+    // drops EXIF, XMP and IPTC on its own, but a PNG's text chunks (tEXt, zTXt, iTXt: a title, an
+    // author, a comment, an ImageMagick "Raw profile type exif" with a GPS location) would pass through.
+    const { width, height, channels } = pixels.info
+    const fresh = sharp(pixels.data, { raw: { width, height, channels } })
     const out = hasAlpha
-      ? await pipeline.png({ compressionLevel: 9 }).toBuffer({ resolveWithObject: true })
-      : await pipeline.jpeg({ quality: limits.jpegQuality, mozjpeg: true }).toBuffer({ resolveWithObject: true })
+      ? await fresh.png({ compressionLevel: 9 }).toBuffer({ resolveWithObject: true })
+      : await fresh.jpeg({ quality: limits.jpegQuality, mozjpeg: true }).toBuffer({ resolveWithObject: true })
     return {
       bytes: out.data,
       width: out.info.width,

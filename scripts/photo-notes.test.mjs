@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { test } from "node:test";
+import { crc32 as zlibCrc32 } from "node:zlib";
 import { cleanPhoto, photoKind, PHOTO_CLEAN_LIMITS } from "../web/app/server/common/photo-clean.mjs";
 import { dateFolder, uploadKey, uploadKeyFor } from "../web/app/server/common/upload-keys.mjs";
 import { createHourlyLimit } from "../web/app/server/media/media-lookup.mjs";
@@ -150,6 +151,60 @@ test("cleaning: a see-through PNG stays PNG, an opaque one becomes JPEG, a large
   assert.deepEqual([big.width, big.height], [2560, 853]);
   const webp = await cleanPhoto(await sharp({ create: { width: 20, height: 20, channels: 3, background: "#333" } }).webp().toBuffer());
   assert.equal(webp.type, "image/jpeg");
+});
+
+// A PNG's chunks by type (IHDR, tEXt, IDAT ...), in order.
+function pngChunks(bytes) {
+  const types = [];
+  for (let at = 8; at + 8 <= bytes.length;) {
+    const length = bytes.readUInt32BE(at);
+    types.push(bytes.subarray(at + 4, at + 8).toString("latin1"));
+    at += 12 + length;
+  }
+  return types;
+}
+// The PNG with chunks of its own put in after IHDR (each with its CRC).
+function withPngChunks(bytes, chunks) {
+  const ihdrEnd = 8 + 12 + bytes.readUInt32BE(8);
+  const made = chunks.map(([type, data]) => {
+    const body = Buffer.concat([Buffer.from(type, "latin1"), Buffer.from(data, "latin1")]);
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(body.length - 4);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(zlibCrc32(body) >>> 0);
+    return Buffer.concat([length, body, crc]);
+  });
+  return Buffer.concat([bytes.subarray(0, ihdrEnd), ...made, bytes.subarray(ihdrEnd)]);
+}
+
+test("cleaning: a PNG's text chunks (a title, an author, an ImageMagick EXIF profile with a GPS location) are never stored", async () => {
+  const input = withPngChunks(await png(true), [
+    ["tEXt", "Title\0Home, 12 Elm Street"],
+    ["tEXt", "Author\0Jane Doe"],
+    ["tEXt", "Raw profile type exif\0\nexif\n  20\nGPSLatitude 51.5 GPSLongitude -0.12\n"],
+    ["iTXt", "XML:com.adobe.xmp\0\0\0\0\0<x:xmpmeta><exif:GPSLatitude>51,30N</exif:GPSLatitude></x:xmpmeta>"],
+  ]);
+  assert.ok(pngChunks(input).includes("tEXt") && pngChunks(input).includes("iTXt"), "the fixture carries text chunks");
+  const out = await cleanPhoto(input);
+  assert.equal(out.type, "image/png");
+  assert.deepEqual(pngChunks(out.bytes).filter((type) => !["IHDR", "pHYs", "IDAT", "IEND"].includes(type)), [], "only the picture's own chunks (pHYs: its density, which the encoder writes)");
+  for (const words of ["Elm Street", "Jane Doe", "GPSLatitude", "Raw profile"]) assert.equal(out.bytes.includes(Buffer.from(words)), false, words);
+  // A JPEG keeps nothing either: no APP segment past the JFIF header, no comment.
+  const jpeg = await cleanPhoto(withPngChunks(await png(false), [["tEXt", "Comment\0GPS 51.5,-0.12"]]));
+  assert.equal(jpeg.bytes.includes(Buffer.from("GPS 51.5")), false);
+});
+
+test("cleaning: a 16-bit PNG, a grey one with see-through parts and a CMYK JPEG are read too", async () => {
+  const sixteen = await sharp({ create: { width: 20, height: 10, channels: 4, background: { r: 10, g: 200, b: 30, alpha: 0.5 } } }).toColourspace("rgb16").png().toBuffer();
+  assert.equal((await sharp(sixteen).metadata()).depth, "ushort", "the fixture is 16-bit");
+  const deep = await cleanPhoto(sixteen);
+  assert.deepEqual([deep.type, deep.width, deep.height], ["image/png", 20, 10]);
+  const grey = await cleanPhoto(await sharp({ create: { width: 12, height: 8, channels: 4, background: { r: 90, g: 90, b: 90, alpha: 0.4 } } }).toColourspace("b-w").png().toBuffer());
+  assert.equal(grey.type, "image/png");
+  assert.equal((await sharp(grey.bytes).metadata()).hasAlpha, true);
+  const cmyk = await cleanPhoto(await sharp({ create: { width: 16, height: 16, channels: 3, background: "#c33" } }).toColourspace("cmyk").jpeg().toBuffer());
+  assert.deepEqual([cmyk.type, cmyk.width, cmyk.height], ["image/jpeg", 16, 16]);
+  assert.equal((await sharp(cmyk.bytes).metadata()).space, "srgb");
 });
 
 test("cleaning: only a JPEG, PNG or WebP by its first bytes is read; anything else is refused before sharp sees it", async () => {
