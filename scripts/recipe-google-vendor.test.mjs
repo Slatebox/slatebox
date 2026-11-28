@@ -46,7 +46,7 @@ test('watch: a channel per file on activate (its token an HMAC of its id); Googl
   assert.equal(watch.type, 'web_hook')
   assert.equal(watch.token, channelToken('watch-secret-0123456789', watch.id))
   assert.ok(verifyChannelToken('watch-secret-0123456789', watch.id, watch.token))
-  assert.ok(!verifyChannelToken('watch-secret-0123456789', watch.id, watch.token.slice(0, -1) + '0'))
+  assert.ok(!verifyChannelToken('watch-secret-0123456789', watch.id, watch.token.slice(0, -1) + (watch.token.endsWith('0') ? '1' : '0')), 'one character changed')
   assert.equal(await w.vendor.activated(instance), 0, 'already watched')
   const [route] = w.vendor.routes()
   const ping = async (headers) => {
