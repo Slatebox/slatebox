@@ -247,18 +247,30 @@ export function AgentDetails({ agent, anchorEl = null, onClose, shareId = null }
     for (const action of which.actions.filter((a) => pendingCount(a) > 0)) await decide(shareId, { decision, actionId: action.actionId })
   })
   const openAgent = agent
+  // The panel grows after it opens (the invited agent's own controls load in), so it is measured
+  // again whenever its size changes; otherwise it keeps its first, shorter spot and runs off the
+  // bottom of the screen. Taller than the screen, it scrolls inside.
+  const popover = useRef(null)
+  const [panel, setPanel] = useState(null)
+  useEffect(() => {
+    if (!panel || typeof ResizeObserver === 'undefined') return undefined
+    const watch = new ResizeObserver(() => popover.current?.updatePosition())
+    watch.observe(panel)
+    return () => watch.disconnect()
+  }, [panel])
   return (
     <>
       <Popover
+        action={popover}
         open={Boolean(openAgent && anchorEl)}
         anchorEl={anchorEl}
         onClose={onClose}
         anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
         transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-        slotProps={{ paper: { sx: { mt: -1, borderRadius: 2.5 } } }}
+        slotProps={{ paper: { sx: { mt: -1, borderRadius: 2.5, maxHeight: 'calc(100% - 32px)', overflowY: 'auto' } } }}
       >
         {openAgent && (
-          <Box sx={{ p: 2, width: 340, maxWidth: 'calc(100vw - 32px)', boxSizing: 'border-box' }} aria-label={openAgent.label + ' details'} data-agent-panel="">
+          <Box ref={setPanel} sx={{ p: 2, width: 340, maxWidth: 'calc(100vw - 32px)', boxSizing: 'border-box' }} aria-label={openAgent.label + ' details'} data-agent-panel="">
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Hexagon color={agentColor(openAgent.colorIndex)} size={22} style={{}} />
               <Typography variant="subtitle2">{openAgent.label}</Typography>

@@ -141,6 +141,13 @@ test('the corner is one pill: no full-width strip, no hard border, no floating I
   assert.doesNotMatch(listener, /export function AgentChips/)
   assert.doesNotMatch(listener, /borderStyle: 'dashed'/)
   assert.match(listener, /export function AgentDetails/)
+  // The agent's details grow after they open (its invited controls load in), so the popover is placed
+  // again on every size change and scrolls inside when taller than the screen (owner, 2026-11-27: the
+  // bottom, Who approves and below, ran off the screen).
+  assert.match(listener, /<Popover\s+action=\{popover\}/)
+  assert.match(listener, /new ResizeObserver\(\(\) => popover\.current\?\.updatePosition\(\)\)/)
+  assert.match(listener, /<Box ref=\{setPanel\}[^>]*data-agent-panel=""/)
+  assert.match(listener, /maxHeight: 'calc\(100% - 32px\)', overflowY: 'auto'/)
   const users = src('web/app/imports/ui/components/CollaborationUsers.jsx')
   const huddle = src('web/app/imports/ui/components/huddle/CollaborationHuddle.jsx')
   for (const file of [users, huddle]) {

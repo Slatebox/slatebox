@@ -112,6 +112,19 @@ test('a connected agent is added to a slate with one click on Add: cursor and ch
   await expect(chipPanel.locator(`[data-agent-invited-controls="${NAME}"]`)).toBeVisible()
   await expect(chipPanel.locator('[data-agent-acting]')).toHaveValue('off', { timeout: 15000 })
   await expect(chipPanel).toContainText('Ask first: each waits on a card')
+  // Once its invited controls have loaded in, the whole panel is on the screen, also on a shorter one
+  // (owner, 2026-11-27: Who approves and below ran off the bottom).
+  const onScreen = async (height) => {
+    const paper = page.locator('.MuiPopover-paper').filter({ has: chipPanel })
+    await expect.poll(async () => {
+      const b = await paper.boundingBox()
+      return Boolean(b && b.y >= 0 && b.y + b.height <= height + 1)
+    }, { timeout: 5000 }).toBe(true)
+  }
+  await onScreen(900)
+  await page.setViewportSize({ width: 1100, height: 600 })
+  await onScreen(600)
+  await page.setViewportSize({ width: 1440, height: 900 })
   await shot(page, '03-added-one-click')
   expect(await page.evaluate(() => window.__dialogs)).toBe(0)
   await page.keyboard.press('Escape')
