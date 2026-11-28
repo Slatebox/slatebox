@@ -725,7 +725,7 @@ test('wiring: /scim/v2 is mounted on the app, parses its own bodies, and Keycloa
   assert.equal(isScimPath('/scim/v2/Users'), true)
   assert.equal(isScimPath('/SCIM/V2/Users'), true)
   assert.equal(isScimPath('/scimx'), false)
-  assert.match(read('web/app/server/expressApp.js'), /isScimPath\(req\.path\) \? next\(\) : json\(req, res, next\)/)
+  assert.match(read('web/app/server/expressApp.js'), /isApiPath\(req\.path\)( \|\| \w+\(req\.path\))* \|\| isScimPath\(req\.path\)( \|\| \w+\(req\.path\))* \? next\(\) : json\(req, res, next\)/)
   assert.match(read('web/app/server/apiHooks.js'), /mountScimRoutes\(app\)/)
   assert.match(read('web/app/server/actions/mount.js'), /\n {4}teamScim,\n/)
   assert.doesNotMatch(read('self-host/Dockerfile'), /scim-api/)

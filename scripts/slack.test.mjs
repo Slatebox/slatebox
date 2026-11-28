@@ -521,7 +521,7 @@ test('the raw body: Slack\'s paths skip express.json, so the signature is checke
   assert.equal(isSlackPath('/integrations/slack/interactive'), true)
   assert.equal(isSlackPath('/connectors/oauth/start'), false)
   const app = readFileSync(new URL('../web/app/server/expressApp.js', import.meta.url), 'utf8')
-  assert.match(app, /isApiPath\(req\.path\) \|\| isMcpPath\(req\.path\) \|\| isScimPath\(req\.path\) \|\| isSlackPath\(req\.path\) \? next\(\) : json\(req, res, next\)/)
+  assert.match(app, /isApiPath\(req\.path\)( \|\| \w+\(req\.path\))* \|\| isSlackPath\(req\.path\)( \|\| \w+\(req\.path\))* \? next\(\) : json\(req, res, next\)/)
 })
 
 test('events: a retried event_id is handled once; the answer comes before the work', async () => {
