@@ -28,6 +28,7 @@ import githubPrImpact from '../../recipes/github-pr-impact/index.mjs'
 import githubMermaidSync from '../../recipes/github-mermaid-sync/index.mjs'
 import linearRoadmap from '../../recipes/linear-roadmap/index.mjs'
 import linearCycleBoard from '../../recipes/linear-cycle-board/index.mjs'
+import linearReleaseMap from '../../recipes/linear-release-map/index.mjs'
 import { slackVendorFactory } from './vendors/slack/factory.mjs'
 import { googleVendorFactory } from './vendors/google/factory.mjs'
 import { githubVendorFactory } from './vendors/github/factory.mjs'
@@ -36,7 +37,7 @@ import { linearVendorFactory } from './vendors/linear/factory.mjs'
 
 export const RECIPE_MODULES = Object.freeze([
   githubArchitecture, githubPrImpact, githubMermaidSync, // GitHub (the Slatebox GitHub App)
-  linearRoadmap, linearCycleBoard, // Linear (its API, as the person)
+  linearRoadmap, linearCycleBoard, linearReleaseMap, // Linear (its API, as the person; the release map reads GitHub too)
   slackDecisionLog, slackTimeline, slackConcepts, slackDigest, // Slack (one channel ledger)
   googleSheetBoard, googleDesignDoc, // Google (drive.file)
   webhookRender, projectIndex, // any system; the project itself

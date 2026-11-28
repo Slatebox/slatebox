@@ -2,8 +2,8 @@
 // Not MIT: see enterprise/README.md.
 //
 // The two addresses GitHub calls:
-//   POST /integrations/github/events     the App's webhook: push, pull_request, installation,
-//                                        installation_repositories. Checked first (X-Hub-Signature-256
+//   POST /integrations/github/events     the App's webhook: push, pull_request, release (published),
+//                                        installation, installation_repositories. Checked first (X-Hub-Signature-256
 //                                        over the raw body, verify.mjs); one that fails gets 401 and
 //                                        nothing else. Each X-GitHub-Delivery is handled once (an hour).
 //                                        The answer comes at once (GitHub waits 10 s); the work after:
@@ -62,6 +62,14 @@ export function triggerOf(event, body) {
         commits: (body.commits || []).slice(-20).map((c) => ({ sha: c.id, message: clip(c.message, 500) })),
         paths: [...paths].sort(),
       },
+    }
+  }
+  if (event === 'release') {
+    // a published release (a release map draws what it shipped); drafts and edits are not one
+    if (body.action !== 'published' || !body.release?.tag_name || body.release.draft) return null
+    return {
+      match: { vendor: 'github', event: 'github.release', installationId: String(installationId), repo },
+      trigger: { kind: 'vendor', event: 'github.release', repo, tag: clip(body.release.tag_name, 100), prerelease: Boolean(body.release.prerelease) },
     }
   }
   if (event === 'pull_request') {

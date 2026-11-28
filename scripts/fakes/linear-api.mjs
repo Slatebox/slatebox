@@ -55,7 +55,7 @@ export function fakeLinear(opts = {}) {
       const data = {}
       const errors = []
       for (const [, alias, id] of body.query.matchAll(/(i\d+): issue\(id: "([^"]+)"\)/g)) {
-        const known = RELEASE_ISSUES[id] || (opts.issues || {})[id]
+        const known = (opts.issues || RELEASE_ISSUES)[id]
         if (!known) {
           data[alias] = null
           errors.push({ message: 'Entity not found', path: [alias], extensions: { code: 'INPUT_ERROR' } })

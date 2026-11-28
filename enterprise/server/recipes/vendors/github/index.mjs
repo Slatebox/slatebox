@@ -28,7 +28,7 @@ import { createGithubStores } from './store.mjs'
 // Back to Admin › AI control › Integration apps (the tab by ?tab=), saying how it went.
 export const ADMIN_BACK = (status) => `/admin/ai?tab=integration-apps&github=${status}`
 
-export const READ_CALLS = Object.freeze(['head', 'repo', 'branch', 'compare', 'contents', 'tarball', 'pull', 'pullFiles', 'issueComments', 'ref', 'commit'])
+export const READ_CALLS = Object.freeze(['head', 'repo', 'branch', 'compare', 'contents', 'tarball', 'pull', 'pullFiles', 'issueComments', 'ref', 'commit', 'releases'])
 
 const signInNeeded = (message) => Object.assign(new GithubError(message, { status: 401, code: 'sign_in_needed' }), { name: 'SignInNeeded' })
 const accessLost = (message) => Object.assign(new GithubError(message, { status: 403, code: 'blocked_access' }), { name: 'AccessLost' })

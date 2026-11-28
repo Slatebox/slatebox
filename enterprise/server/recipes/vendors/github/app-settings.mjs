@@ -63,7 +63,8 @@ export function appManifest(origin, { cloud = false, test = false, name = null }
     public: who.public,
     // contents:write is used only for diagram pull requests a person allows per recipe (the standing permission).
     default_permissions: { metadata: 'read', contents: 'write', pull_requests: 'write', checks: 'write' },
-    default_events: ['push', 'pull_request'],
+    // release: the Linear release map draws what each published release shipped
+    default_events: ['push', 'pull_request', 'release'],
   }
 }
 

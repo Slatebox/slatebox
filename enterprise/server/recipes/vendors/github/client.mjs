@@ -150,6 +150,14 @@ export function createGithubClient({ fetch = globalThis.fetch, apiBase = GITHUB_
       return readTarball(bytes, { want, maxFileBytes })
     },
     pull: async (repo, number) => call('GET', `/repos/${seg(checkRepo(repo))}/pulls/${Number(number)}`),
+    /** The newest published releases (20 at most, drafts left out): { tag, name, publishedAt, url, prerelease }. */
+    async releases(repo) {
+      const list = (await call('GET', `/repos/${seg(checkRepo(repo))}/releases`, { query: { per_page: 20 } })) || []
+      return list.filter((r) => !r.draft && r.tag_name).map((r) => ({
+        tag: `${r.tag_name}`.slice(0, 100), name: `${r.name || r.tag_name}`.slice(0, 200), publishedAt: r.published_at || null,
+        url: typeof r.html_url === 'string' && r.html_url.startsWith('https://') ? r.html_url : null, prerelease: Boolean(r.prerelease),
+      }))
+    },
     pullFiles: async (repo, number) =>
       paged(`/repos/${seg(checkRepo(repo))}/pulls/${Number(number)}/files`, {}, GITHUB_LIMITS.filePages).then((files) =>
         files.map((f) => ({ path: f.filename, status: f.status, previous: f.previous_filename ?? null }))),
