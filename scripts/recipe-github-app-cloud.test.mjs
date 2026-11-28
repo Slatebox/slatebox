@@ -35,7 +35,7 @@ test('Cloud makes one public App named Slatebox, homepage slatebox.com, with thi
   assert.deepEqual(m.callback_urls, ['https://app.slatebox.com/integrations/github/installed'])
   assert.equal(m.setup_url, 'https://app.slatebox.com/integrations/github/installed')
   assert.deepEqual(m.default_permissions, LEAST)
-  assert.deepEqual(m.default_events, ['push', 'pull_request'])
+  assert.deepEqual(m.default_events, ['push', 'pull_request', 'release'])
   const t = appManifest('https://test.slatebox.com', { cloud: true, test: true })
   assert.equal(t.name, 'Slatebox (test)')
   assert.equal(t.public, true)
