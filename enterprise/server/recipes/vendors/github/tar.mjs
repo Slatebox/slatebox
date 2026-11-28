@@ -96,7 +96,18 @@ export function writeTarball(files, { top = 'acme-repo-0000000/' } = {}) {
     const body = enc.encode(content)
     const header = new Uint8Array(512)
     const name = `${top}${path}`
-    put(header, 0, name.length <= 100 ? name : name.slice(-100), 100)
+    // ustar: a long name is split at a slash into prefix (155) and name (100).
+    let prefix = ''
+    let short = name
+    if (name.length > 100) {
+      // the first slash that leaves at most 100 characters after it, with at most 155 before
+      let at = -1
+      for (let i = name.indexOf('/'); i >= 0 && at < 0; i = name.indexOf('/', i + 1)) if (name.length - i - 1 <= 100 && i <= 155) at = i
+      if (at < 0) throw new Error(`A path too long for a tarball: ${name.slice(0, 40)}…`)
+      prefix = name.slice(0, at)
+      short = name.slice(at + 1)
+    }
+    put(header, 0, short, 100)
     put(header, 100, '0000644\0', 8)
     put(header, 108, '0000000\0', 8)
     put(header, 116, '0000000\0', 8)
@@ -106,7 +117,7 @@ export function writeTarball(files, { top = 'acme-repo-0000000/' } = {}) {
     header[156] = 48
     put(header, 257, 'ustar\0', 6)
     put(header, 263, '00', 2)
-    if (name.length > 100) put(header, 345, name.slice(0, name.length - 100).replace(/\/$/, ''), 155)
+    if (prefix) put(header, 345, prefix, 155)
     let sum = 0
     for (const b of header) sum += b
     put(header, 148, `${sum.toString(8).padStart(6, '0')}\0 `, 8)

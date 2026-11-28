@@ -37,14 +37,14 @@ function docRows(collection, id = 'app') {
     remove: () => collection.deleteOne({ _id: id }),
   }
 }
-function flowRows(collection) {
+function flowRows(collection, now) {
   return {
     put: (state, value, expiresAt) => collection.insertOne({ _id: state, value, expiresAt }),
     async take(state) {
       const doc = await collection.findOne({ _id: state })
       if (!doc) return null
       const { deletedCount } = await collection.deleteOne({ _id: state })
-      if (!deletedCount || (doc.expiresAt && new Date(doc.expiresAt).getTime() < Date.now())) return null
+      if (!deletedCount || (doc.expiresAt && new Date(doc.expiresAt).getTime() < now())) return null
       return doc.value
     },
   }
@@ -54,7 +54,7 @@ export function createVendor(deps) {
   const { collections, now = () => Date.now(), log = () => {}, later, fetch = globalThis.fetch } = deps
   const stores = createGithubStores({ installations: collections.installations, deliveries: collections.deliveries, now })
   const appSettings = createGithubAppSettings({
-    rows: docRows(collections.appSettings), master: deps.master ?? null, settings: deps.settings, flows: flowRows(collections.flows), fetch, audit: deps.audit, now, origin: deps.origin,
+    rows: docRows(collections.appSettings), master: deps.master ?? null, settings: deps.settings, flows: flowRows(collections.flows, now), fetch, audit: deps.audit, now, origin: deps.origin,
   })
   const apiBase = async () => (await appSettings.credentials()).apiUrl || GITHUB_API
   const tokens = createInstallationTokens({

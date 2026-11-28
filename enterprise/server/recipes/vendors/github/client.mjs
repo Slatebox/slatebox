@@ -124,8 +124,8 @@ export function createGithubClient({ fetch = globalThis.fetch, apiBase = GITHUB_
       const branch = await call('GET', `/repos/${seg(repo)}/branches/${seg(info.default_branch)}`)
       return { defaultBranch: info.default_branch, sha: branch.commit.sha, private: Boolean(info.private), protected: Boolean(branch.protected) }
     },
-    repo: (repo) => call('GET', `/repos/${seg(checkRepo(repo))}`),
-    branch: (repo, name) => call('GET', `/repos/${seg(checkRepo(repo))}/branches/${seg(name)}`, { allow404: true }),
+    repo: async (repo) => call('GET', `/repos/${seg(checkRepo(repo))}`),
+    branch: async (repo, name) => call('GET', `/repos/${seg(checkRepo(repo))}/branches/${seg(name)}`, { allow404: true }),
     /** compare base...head: files (up to 300) and commit messages. */
     async compare(repo, base, head) {
       const data = await call('GET', `/repos/${seg(checkRepo(repo))}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`, { query: { per_page: 100 } })
@@ -149,24 +149,24 @@ export function createGithubClient({ fetch = globalThis.fetch, apiBase = GITHUB_
       if (bytes.length > GITHUB_LIMITS.tarballBytes) throw new GithubError('The repository is too large to read at once.', { status: 413, code: 'too_large' })
       return readTarball(bytes, { want, maxFileBytes })
     },
-    pull: (repo, number) => call('GET', `/repos/${seg(checkRepo(repo))}/pulls/${Number(number)}`),
-    pullFiles: (repo, number) =>
+    pull: async (repo, number) => call('GET', `/repos/${seg(checkRepo(repo))}/pulls/${Number(number)}`),
+    pullFiles: async (repo, number) =>
       paged(`/repos/${seg(checkRepo(repo))}/pulls/${Number(number)}/files`, {}, GITHUB_LIMITS.filePages).then((files) =>
         files.map((f) => ({ path: f.filename, status: f.status, previous: f.previous_filename ?? null }))),
-    issueComments: (repo, number) => paged(`/repos/${seg(checkRepo(repo))}/issues/${Number(number)}/comments`, {}, GITHUB_LIMITS.commentPages),
-    createComment: (repo, number, body) => call('POST', `/repos/${seg(checkRepo(repo))}/issues/${Number(number)}/comments`, { body: { body } }),
-    updateComment: (repo, id, body) => call('PATCH', `/repos/${seg(checkRepo(repo))}/issues/comments/${Number(id)}`, { body: { body } }),
-    createCheckRun: (repo, run) => call('POST', `/repos/${seg(checkRepo(repo))}/check-runs`, { body: run }),
-    ref: (repo, branch) => call('GET', `/repos/${seg(checkRepo(repo))}/git/ref/heads/${seg(branch)}`, { allow404: true }),
-    commit: (repo, sha) => call('GET', `/repos/${seg(checkRepo(repo))}/git/commits/${encodeURIComponent(sha)}`),
-    createTree: (repo, tree) => call('POST', `/repos/${seg(checkRepo(repo))}/git/trees`, { body: tree }),
-    createCommit: (repo, commit) => call('POST', `/repos/${seg(checkRepo(repo))}/git/commits`, { body: commit }),
-    createRef: (repo, branch, sha) => call('POST', `/repos/${seg(checkRepo(repo))}/git/refs`, { body: { ref: `refs/heads/${branch}`, sha } }),
+    issueComments: async (repo, number) => paged(`/repos/${seg(checkRepo(repo))}/issues/${Number(number)}/comments`, {}, GITHUB_LIMITS.commentPages),
+    createComment: async (repo, number, body) => call('POST', `/repos/${seg(checkRepo(repo))}/issues/${Number(number)}/comments`, { body: { body } }),
+    updateComment: async (repo, id, body) => call('PATCH', `/repos/${seg(checkRepo(repo))}/issues/comments/${Number(id)}`, { body: { body } }),
+    createCheckRun: async (repo, run) => call('POST', `/repos/${seg(checkRepo(repo))}/check-runs`, { body: run }),
+    ref: async (repo, branch) => call('GET', `/repos/${seg(checkRepo(repo))}/git/ref/heads/${seg(branch)}`, { allow404: true }),
+    commit: async (repo, sha) => call('GET', `/repos/${seg(checkRepo(repo))}/git/commits/${encodeURIComponent(sha)}`),
+    createTree: async (repo, tree) => call('POST', `/repos/${seg(checkRepo(repo))}/git/trees`, { body: tree }),
+    createCommit: async (repo, commit) => call('POST', `/repos/${seg(checkRepo(repo))}/git/commits`, { body: commit }),
+    createRef: async (repo, branch, sha) => call('POST', `/repos/${seg(checkRepo(repo))}/git/refs`, { body: { ref: `refs/heads/${branch}`, sha } }),
     // force is never sent: a branch only moves forward.
-    updateRef: (repo, branch, sha) => call('PATCH', `/repos/${seg(checkRepo(repo))}/git/refs/heads/${seg(branch)}`, { body: { sha, force: false } }),
-    openPulls: (repo, owner, branch) => call('GET', `/repos/${seg(checkRepo(repo))}/pulls`, { query: { head: `${owner}:${branch}`, state: 'open' } }),
-    createPull: (repo, pr) => call('POST', `/repos/${seg(checkRepo(repo))}/pulls`, { body: pr }),
-    updatePull: (repo, number, pr) => call('PATCH', `/repos/${seg(checkRepo(repo))}/pulls/${Number(number)}`, { body: pr }),
-    requestReviewers: (repo, number, reviewers) => call('POST', `/repos/${seg(checkRepo(repo))}/pulls/${Number(number)}/requested_reviewers`, { body: { reviewers } }),
+    updateRef: async (repo, branch, sha) => call('PATCH', `/repos/${seg(checkRepo(repo))}/git/refs/heads/${seg(branch)}`, { body: { sha, force: false } }),
+    openPulls: async (repo, owner, branch) => call('GET', `/repos/${seg(checkRepo(repo))}/pulls`, { query: { head: `${owner}:${branch}`, state: 'open' } }),
+    createPull: async (repo, pr) => call('POST', `/repos/${seg(checkRepo(repo))}/pulls`, { body: pr }),
+    updatePull: async (repo, number, pr) => call('PATCH', `/repos/${seg(checkRepo(repo))}/pulls/${Number(number)}`, { body: pr }),
+    requestReviewers: async (repo, number, reviewers) => call('POST', `/repos/${seg(checkRepo(repo))}/pulls/${Number(number)}/requested_reviewers`, { body: { reviewers } }),
   }
 }

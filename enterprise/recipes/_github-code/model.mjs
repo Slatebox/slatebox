@@ -94,7 +94,15 @@ function moduleOf(path, context, depth) {
     .filter((p) => p.dir && (path === p.dir || path.startsWith(`${p.dir}/`)))
     .sort((a, b) => b.dir.length - a.dir.length)[0]
   if (pkg) return { path: pkg.dir, name: pkg.name }
-  const dirs = dirname(path).split('/').filter(Boolean)
+  const dir = dirname(path)
+  // A JVM source root (src/main/java/com/acme/billing): modules are packages, one level below the
+  // organization's own prefix (com.acme), whatever the folders above the root.
+  const jvm = dir.match(/^((?:.*\/)?src\/(?:main|test)\/(?:java|kotlin|scala))\/(.+)$/)
+  if (jvm) {
+    const kept = jvm[2].split('/').slice(0, depth + 1)
+    return { path: `${jvm[1]}/${kept.join('/')}`, name: kept.join('.') }
+  }
+  const dirs = dir.split('/').filter(Boolean)
   if (!dirs.length) return { path: '', name: '(root)' }
   const kept = dirs.slice(0, depth)
   return { path: kept.join('/'), name: kept.slice(-1)[0] }

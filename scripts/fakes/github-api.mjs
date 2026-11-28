@@ -112,12 +112,13 @@ export function createFakeGithub({ now = () => Date.parse('2026-11-27T12:00:00Z'
       const pr = repo.pulls.get(Number(m[1]))
       if (!pr) return notFound()
       const page = Number(url.searchParams.get('page') || 1)
-      const all = diff(repo, pr.base.sha, pr.head.sha)
+      const all = diff(repo, pr.base.sha, repo.branches.get(pr.head.ref) ?? pr.head.sha)
       return json(200, all.slice((page - 1) * 100, page * 100))
     }
     if ((m = rest.match(/^\/pulls\/(\d+)$/))) {
       const pr = repo.pulls.get(Number(m[1]))
       if (!pr) return notFound()
+      if (pr.state === 'open' && repo.branches.has(pr.head.ref)) pr.head.sha = repo.branches.get(pr.head.ref)
       if (method === 'PATCH') {
         Object.assign(pr, body)
         return json(200, pr)
@@ -215,9 +216,16 @@ export function createFakeGithub({ now = () => Date.parse('2026-11-27T12:00:00Z'
     return handle(method, url, body)
   }
 
+  function closePull(fullName, number, { merged = false } = {}) {
+    const pr = repos.get(fullName).pulls.get(number)
+    pr.state = 'closed'
+    pr.merged = merged
+  }
+
   return {
     fetch,
     calls,
+    closePull,
     repos,
     addRepo,
     commit,

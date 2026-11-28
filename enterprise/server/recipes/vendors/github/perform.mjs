@@ -62,7 +62,9 @@ async function checkRun(client, write) {
 
 async function prComment(client, write) {
   const marker = COMMENT_MARKER(write.body.marker || write.key)
-  const body = `${clip(write.body.markdown, LIMITS.commentChars - marker.length - 2)}\n\n${marker}`
+  // The slate's address, when the runtime resolved write.body.slate to it.
+  const open = typeof write.body.slateUrl === 'string' && /^https:\/\/[^\s()]+$/.test(write.body.slateUrl) ? `\n\n[Open in Slatebox](${write.body.slateUrl})` : ''
+  const body = `${clip(write.body.markdown, LIMITS.commentChars - marker.length - open.length - 2)}${open}\n\n${marker}`
   const comments = await client.issueComments(write.target.repo, write.target.number)
   // Ours: the marker, written by an app (a person quoting it is not ours).
   const mine = comments.find((c) => typeof c.body === 'string' && c.body.includes(marker) && (c.performed_via_github_app || c.user?.type === 'Bot'))

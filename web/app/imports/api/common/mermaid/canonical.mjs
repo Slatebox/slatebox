@@ -97,10 +97,12 @@ const arrowOf = (child, parent) => (child && parent ? 'both' : child || parent ?
  * What a slate's diagram says, with no geometry: nodes and frames by id, lines by from->to.
  * { nodes: [{ id, text, shape, link }], frames: [{ id, text, parent, members }], edges: [{ id, from, to, label, arrow, stroke }] }
  * A frame is a note drawn behind notes it wholly holds (export.mjs's rule); a workshop's board is
- * not part of the diagram (warnings say so).
+ * not part of the diagram (warnings say so). options.exclude: note ids to leave out.
  */
-export function canonicalGraph(slate) {
-  const graph = slateGraph(slate)
+export function canonicalGraph(slate, { exclude = null } = {}) {
+  // exclude: note ids that are about the diagram, not in it (a recipe's legend notes): left out.
+  const skip = exclude ? new Set(exclude) : null
+  const graph = slateGraph(skip ? { ...slate, nodes: (slate?.nodes || []).filter((n) => !skip.has(`${n?.options?.id ?? ''}`)) } : slate)
   const isFrame = (id) => graph.frames.members.has(id)
   const nodes = []
   const frames = []
