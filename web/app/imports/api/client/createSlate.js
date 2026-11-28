@@ -178,6 +178,9 @@ async function createSlate(
     // until the first note or board, so every slate is not one more lone note.
     // "Add a slate" in a project (/new?projectId=): the first save files it there (pendingProject.mjs).
     const projectId = isGuest ? null : claimProjectForSave(sessionStore())
+    // Canvas.jsx's first save of a new slate (saveSlateLite.js) reaches the server before this queued
+    // one, so it carries the project too: whichever makes the slate files it there.
+    slate.newSlateProjectId = projectId || null
     await saveSlateLite({
       slate,
       userId: newSlate.userId, // Ensure correct user ID context

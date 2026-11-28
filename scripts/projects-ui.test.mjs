@@ -238,9 +238,11 @@ test('the first save of a new slate carries the project; /new remembers it', () 
   const create = app('imports/api/client/createSlate.js')
   assert.match(create, /claimProjectForSave\(sessionStore\(\)\)/)
   assert.match(create, /\.\.\.\(projectId && \{ projectId \}\)/)
-  // createSlate's first save goes through saveSlateLite: it must send the project on (test.slatebox.com,
-  // 2026-11-27: it dropped it, so "Add a slate" made the slate in My slates instead of the project).
-  assert.match(create, /await saveSlateLite\(\{[\s\S]*?\.\.\.\(projectId && \{ projectId \}\)[\s\S]*?\}\)/)
+  // A new slate is made by Canvas.jsx's first save (saveSlateLite.js), which reaches the server before
+  // createSlate's queued one (saveSlate.js): it must carry the project too (test.slatebox.com,
+  // 2026-11-27: it did not, so "Add a slate" made the slate in My slates instead of the project).
+  assert.match(create, /slate\.newSlateProjectId = projectId \|\| null/)
+  assert.match(ui('pages/Canvas.jsx'), /if \(isNew [^\n]*\n(?:\s*\/\/[^\n]*\n)*\s*await saveSlateLite\(\{routeKey:id,[^)]*\.\.\.\(slate\.current\.newSlateProjectId && \{ projectId: slate\.current\.newSlateProjectId \}\)\}\)/)
   const lite = app('imports/api/client/saveSlateLite.js')
   assert.match(lite, /^\s+projectId,\n\}\) => \{/m)
   assert.match(lite, /Meteor\.callAsync\(CONSTANTS\.methods\.slates\.update, \{[\s\S]*?\.\.\.\(projectId && \{ projectId \}\),\n\s+\}\)/)

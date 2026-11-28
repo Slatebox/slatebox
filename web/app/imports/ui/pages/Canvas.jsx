@@ -871,7 +871,9 @@ export default function Canvas() {
     // set slate name and always attach shareId, userId and orgId to the dispatched slate
     slate.current.shareId = sBase.shareId
     if (isNew && !asEmbed && Meteor.userId() && Meteor.userId()===sBase.userId) {
-      await saveSlateLite({routeKey:id,userId:sBase.userId,orgId:sBase.orgId,slate:slate.current})
+      // "Add a slate" in a project: this save makes the slate, so it files it there (createSlate.js)
+      await saveSlateLite({routeKey:id,userId:sBase.userId,orgId:sBase.orgId,slate:slate.current,
+        ...(slate.current.newSlateProjectId && { projectId: slate.current.newSlateProjectId })})
     }
     slate.current.userId = sBase.userId
     slate.current.orgId = sBase.orgId
