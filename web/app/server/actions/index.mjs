@@ -56,6 +56,15 @@ import startTileActions from './start-tiles.mjs'
 import auditActions from './audit.mjs'
 import { ACTION_AUDIT } from '../audit/action-specs.mjs'
 import teamSsoActions from './team-sso.mjs'
+import projectsList from './projects-list.mjs'
+import projectsGet from './projects-get.mjs'
+import projectsCreate from './projects-create.mjs'
+import projectsUpdate from './projects-update.mjs'
+import projectsDelete from './projects-delete.mjs'
+import projectsSlates from './projects-slates.mjs'
+import projectsMoveSlate from './projects-move-slate.mjs'
+import projectsAccess from './projects-access.mjs'
+import projectsShare from './projects-share.mjs'
 
 export const actions = [
   slatesGet,
@@ -120,6 +129,16 @@ export const actions = [
   ...auditActions,
   // a team's single sign-on (Team settings > Sign-in & security; server/sso)
   ...teamSsoActions,
+  // projects: drives of slates people make, nest folders in and share (server/projects)
+  projectsList,
+  projectsGet,
+  projectsCreate,
+  projectsUpdate,
+  projectsDelete,
+  projectsSlates,
+  projectsMoveSlate,
+  projectsAccess,
+  projectsShare,
 ]
 
 export const components = { ...slateComponents }

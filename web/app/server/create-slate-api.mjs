@@ -59,13 +59,16 @@ export function createPrivateSlateOperation({
   appOrigin,
   now = Date.now,
 }) {
-  return async function create({ token, key, body }) {
+  // placement: where the slate goes, already checked by the action (server/projects/place.mjs):
+  // { projectId, orgId }, or null for the person's own slates.
+  return async function create({ token, key, body, placement = null }) {
     if (typeof key !== 'string' || !/^[!-~]{1,128}$/.test(key))
       throw invalid(
         'Supply an Idempotency-Key of 1–128 printable characters without spaces.'
       )
     const {kind, content, fingerprintInput} = readCreation(body)
-    const intent = createHash('sha256').update(fingerprintInput).digest('hex')
+    // A slate made in a project is a different request from the same brief made outside one.
+    const intent = createHash('sha256').update(placement?.projectId ? `${fingerprintInput}\0project:${placement.projectId}` : fingerprintInput).digest('hex')
     const receiptKey = { tokenId: token._id, idempotencyKey: key }
     const replay = async (session) => {
       const receipt = await runs.findOne(receiptKey, { session })
@@ -106,10 +109,11 @@ export function createPrivateSlateOperation({
         const row = privateSlateDocument({
           content,
           id: 'api-' + kind + '-' + shareId,
-          user,
+          user: placement?.projectId ? { _id: user._id, orgId: placement.orgId } : user,
           shareId,
           now: createdAt,
         })
+        if (placement?.projectId) row.projectId = placement.projectId
         const response = {
           shareId,
           url: new URL('/canvas/' + shareId, appOrigin()).href,

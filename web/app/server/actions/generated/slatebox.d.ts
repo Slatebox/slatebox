@@ -1864,6 +1864,307 @@ declare namespace slatebox.profile.settings {
   }>;
 }
 
+declare namespace slatebox.projects {
+  /** Get project sharing. Who can open a project: its owner, each person and team it is shared with and their role, invitations to addresses with no account yet, and the link's role and address. The project's owner and managers may read it. @scope projects:share */
+  function access(input: {
+    /** A project (a drive) or one of its folders. (1–64 characters) */
+    projectId: string;
+  }): Promise<{
+    projectId: string;
+    owner: {
+      userId: string;
+      name?: string;
+      [key: string]: unknown;
+    };
+    link: {
+      role: "none" | "viewer" | "commenter" | "editor";
+      url: string | null;
+      [key: string]: unknown;
+    };
+    grants: Array<{
+      kind: "user" | "team";
+      role: "none" | "viewer" | "commenter" | "editor" | "manager";
+      userId?: string | null;
+      orgId?: string | null;
+      /** For an invitation to an address with no account yet. */
+      email?: string | null;
+      pending?: boolean;
+      name?: string;
+      granted?: string | null;
+      [key: string]: unknown;
+    }>;
+    sharingRevision?: number;
+    [key: string]: unknown;
+  }>;
+}
+
+declare namespace slatebox.projects {
+  /** Create project. Make a project: a drive of slates you own and can share like a shared drive (your team's when you are in one). With parentId, make a folder in that project or folder instead (an editor of it may; folders go at most 3 levels deep). @scope projects:write */
+  function create(input: {
+    /** (1–120 characters) */
+    name: string;
+    /** (at most 2000 characters) */
+    description?: string;
+    /** A palette index for the project's dot. (0 to 11) */
+    color?: number | null;
+    /** Make a folder in this project or folder. (1–64 characters) */
+    parentId?: string;
+  }): Promise<({
+    projectId: string;
+    /** A drive is a project; a folder sits in one. */
+    kind: "drive" | "folder";
+    /** The project this folder is in (the project itself for a drive). */
+    driveId: string;
+    parentId?: string | null;
+    /** (0 to 3) */
+    depth?: number;
+    name: string;
+    description?: string;
+    color?: number | null;
+    ownerId?: string;
+    orgId?: string | null;
+    /** Your role in the project. */
+    role: "owner" | "manager" | "editor" | "commenter" | "viewer";
+    recipesPaused?: boolean;
+    created?: string | null;
+    updated?: string | null;
+    url?: string;
+    mode?: string;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.projects {
+  /** Delete project. Delete a folder, or a whole project. A folder that holds slates or folders moves them to moveContentsTo (its parent by default) first; a manager deletes only empty folders, the owner any. Deleting a project (its owner only) deletes the slates its owner owns in it, with their sharing and comments, and gives every other slate back to its owner. This cannot be undone. mode "preview" says how many slates would be deleted and given back without changing anything. @scope projects:write @modes save|preview @destructive */
+  function delete(input: {
+    /** A project (a drive) or one of its folders. (1–64 characters) */
+    projectId: string;
+    /** For a folder: where its slates and folders go (its parent by default). (1–64 characters) */
+    moveContentsTo?: string;
+    /** preview returns what would change and saves nothing. (default "save") */
+    mode?: "save" | "preview";
+  }): Promise<({
+    projectId: string;
+    deleted: boolean;
+    folders?: number;
+    /** Slates of the project's owner that are (or would be) deleted. */
+    deletedSlates: number;
+    /** Slates of other people that go (or would go) back to them. */
+    returnedSlates: number;
+    /** For a folder: slates moved to where its contents went. */
+    movedSlates?: number;
+    mode?: string;
+    [key: string]: unknown;
+  }) & { mode: "save" | "preview" }>;
+}
+
+declare namespace slatebox.projects {
+  /** Get project. Read a project or one of its folders: its name, your role, the folders directly in it, the folders above it and how many slates it holds. A drive link's key (linkKey, the part after /p/) opens a project shared by link. @scope projects:read */
+  function get(input: {
+    /** A project (a drive) or one of its folders. (1–64 characters) */
+    projectId: string;
+    /** The key of a link to the project (/p/<key>). Not used by tokens. (16–64 characters) */
+    linkKey?: string;
+  }): Promise<{
+    projectId: string;
+    /** A drive is a project; a folder sits in one. */
+    kind: "drive" | "folder";
+    /** The project this folder is in (the project itself for a drive). */
+    driveId: string;
+    parentId?: string | null;
+    /** (0 to 3) */
+    depth?: number;
+    name: string;
+    description?: string;
+    color?: number | null;
+    ownerId?: string;
+    orgId?: string | null;
+    /** Your role in the project. */
+    role: "owner" | "manager" | "editor" | "commenter" | "viewer";
+    recipesPaused?: boolean;
+    created?: string | null;
+    updated?: string | null;
+    url?: string;
+    path: Array<{
+      projectId: string;
+      name: string;
+      [key: string]: unknown;
+    }>;
+    folders: Array<{
+      projectId: string;
+      name: string;
+      depth?: number;
+      [key: string]: unknown;
+    }>;
+    /** (at least 0) */
+    slateCount: number;
+    ownerName?: string;
+    [key: string]: unknown;
+  }>;
+}
+
+declare namespace slatebox.projects {
+  /** List projects. List your projects (shareable drives of slates): the ones you own first, then the ones shared with you, each with your role. With parentId, list the folders in that project or folder instead. @scope projects:read */
+  function list(input: {
+    /** List the folders in this project or folder. (1–64 characters) */
+    parentId?: string;
+  }): Promise<{
+    projects: Array<{
+      projectId: string;
+      /** A drive is a project; a folder sits in one. */
+      kind: "drive" | "folder";
+      /** The project this folder is in (the project itself for a drive). */
+      driveId: string;
+      parentId?: string | null;
+      /** (0 to 3) */
+      depth?: number;
+      name: string;
+      description?: string;
+      color?: number | null;
+      ownerId?: string;
+      orgId?: string | null;
+      /** Your role in the project. */
+      role: "owner" | "manager" | "editor" | "commenter" | "viewer";
+      recipesPaused?: boolean;
+      created?: string | null;
+      updated?: string | null;
+      url?: string;
+      [key: string]: unknown;
+    }>;
+    [key: string]: unknown;
+  }>;
+}
+
+declare namespace slatebox.projects {
+  /** Move slate to project. Put a slate in a project or folder, move it to another one, or take it out of its project (projectId null), back to its owner's slates. The slate's owner may move it into any project they can edit; a manager of its project may move any slate within that project or give it back to its owner. Everyone in a project can open its slates at their role there. @scope projects:write @confirm */
+  function moveSlate(input: {
+    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
+    shareId: string;
+    /** The project or folder it goes in; null takes it out of its project. (1–64 characters) */
+    projectId: string | null;
+  }): Promise<({
+    shareId: string;
+    projectId: string | null;
+    moved: boolean;
+    mode?: string;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.projects {
+  /** Share project. Share a project, as a shared drive is shared: with one person (userId, or email, which invites an address that has no account yet), with your whole team (orgId, your own team, if you may make team slates), or with anyone who has the link (link). Roles: viewer opens every slate, commenter comments too, editor edits and adds slates and folders, manager also organizes and shares. role "none" (or link "none") takes access away; rotate makes a new link and turns the old one off. The project's owner and managers may share it. @scope projects:share @confirm */
+  function share(input: {
+    /** A project (a drive) or one of its folders. (1–64 characters) */
+    projectId: string;
+    /** (1–128 characters) */
+    userId?: string;
+    /** (3–320 characters) */
+    email?: string;
+    /** Your team, to share with everyone in it. (1–128 characters) */
+    orgId?: string;
+    /** For a person or a team. */
+    role?: "none" | "viewer" | "commenter" | "editor" | "manager";
+    /** What anyone with the link can do. */
+    link?: "none" | "viewer" | "commenter" | "editor";
+    /** With link: make a new link address; the old one stops working. */
+    rotate?: boolean;
+  }): Promise<({
+    projectId: string;
+    owner: {
+      userId: string;
+      name?: string;
+      [key: string]: unknown;
+    };
+    link: {
+      role: "none" | "viewer" | "commenter" | "editor";
+      url: string | null;
+      [key: string]: unknown;
+    };
+    grants: Array<{
+      kind: "user" | "team";
+      role: "none" | "viewer" | "commenter" | "editor" | "manager";
+      userId?: string | null;
+      orgId?: string | null;
+      /** For an invitation to an address with no account yet. */
+      email?: string | null;
+      pending?: boolean;
+      name?: string;
+      granted?: string | null;
+      [key: string]: unknown;
+    }>;
+    sharingRevision?: number;
+    mode?: string;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
+declare namespace slatebox.projects {
+  /** List project slates. List the slates in a project or folder, newest first, with each one's link: the folder's own and, unless nested is false, those in its folders too. Anyone with a role in the project may. Filter by name with q. @scope projects:read */
+  function slates(input: {
+    /** A project (a drive) or one of its folders. (1–64 characters) */
+    projectId: string;
+    /** Include the slates in its folders. (default true) */
+    nested?: boolean;
+    /** Part of the slate name. (1–200 characters) */
+    q?: string;
+    /** (1 to 100, default 50) */
+    limit?: number;
+  }): Promise<{
+    slates: Array<{
+      shareId: string;
+      name: string;
+      description?: string;
+      visibility?: "private" | "unlisted" | "public";
+      owner: "you" | "someone";
+      projectId: string;
+      updated?: string | null;
+      url: string;
+      [key: string]: unknown;
+    }>;
+    [key: string]: unknown;
+  }>;
+}
+
+declare namespace slatebox.projects {
+  /** Update project. Rename a project or folder, change its description or color, move a folder to another folder of the same project (parentId), or pause and resume the recipes that keep the project's slates up to date (recipesPaused, a whole project only). A project is renamed by its owner and managers; a folder by its editors; folders are moved by managers. @scope projects:write */
+  function update(input: {
+    /** A project (a drive) or one of its folders. (1–64 characters) */
+    projectId: string;
+    /** (1–120 characters) */
+    name?: string;
+    /** (at most 2000 characters) */
+    description?: string;
+    /** A palette index for the project's dot. (0 to 11) */
+    color?: number | null;
+    /** Move this folder into that folder (or the project itself). (1–64 characters) */
+    parentId?: string;
+    /** Pause (true) or resume (false) every recipe in the project. */
+    recipesPaused?: boolean;
+  }): Promise<({
+    projectId: string;
+    /** A drive is a project; a folder sits in one. */
+    kind: "drive" | "folder";
+    /** The project this folder is in (the project itself for a drive). */
+    driveId: string;
+    parentId?: string | null;
+    /** (0 to 3) */
+    depth?: number;
+    name: string;
+    description?: string;
+    color?: number | null;
+    ownerId?: string;
+    orgId?: string | null;
+    /** Your role in the project. */
+    role: "owner" | "manager" | "editor" | "commenter" | "viewer";
+    recipesPaused?: boolean;
+    created?: string | null;
+    updated?: string | null;
+    url?: string;
+    mode?: string;
+    [key: string]: unknown;
+  }) & { mode: "save" }>;
+}
+
 declare namespace slatebox.shapes {
   /** Shape notes. Give notes a shape: a built-in name (ellipse, star), "lib:<id>" or a name from shapes.list, or a candidateId from shapes.generate (saved to your library). Each note keeps its width and takes the shape's proportions. One save; mode "preview" saves nothing. @scope slates:write @modes save|preview */
   function apply(input: {
@@ -2126,12 +2427,14 @@ declare namespace slatebox.slates {
 }
 
 declare namespace slatebox.slates {
-  /** Copy slate. Make a private copy of a slate you may edit, a public slate, or a slate whose presentation is published publicly. Someone who may only view a private slate cannot copy it. The copy is an ordinary private slate. A published presentation of the slate is copied with it as a private presentation of the copy. To use something from the library, fork it (library.fork). @scope slates:write */
+  /** Copy slate. Make a private copy of a slate you may edit, a public slate, or a slate whose presentation is published publicly. Someone who may only view a private slate cannot copy it. The copy is an ordinary private slate, in none of your projects unless projectId names one you can edit. A published presentation of the slate is copied with it as a private presentation of the copy. To use something from the library, fork it (library.fork). @scope slates:write */
   function copy(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
     shareId: string;
     /** (1–200 characters) */
     name?: string;
+    /** Put the copy in this project or folder (you need to be an editor of it). (1–64 characters) */
+    projectId?: string;
   }): Promise<({
     shareId: string;
     /** (at least 1) */
@@ -2141,16 +2444,20 @@ declare namespace slatebox.slates {
 }
 
 declare namespace slatebox.slates {
-  /** Create a slate. Omitting kind creates a playable decision map from a brief of up to 160 characters. kind diagram makes editable notes and connections from your own steps (up to 1200 characters, connect two steps with → or ->) or from a named source. The token owner owns the new private slate. @scope slates:write */
+  /** Create a slate. Omitting kind creates a playable decision map from a brief of up to 160 characters. kind diagram makes editable notes and connections from your own steps (up to 1200 characters, connect two steps with → or ->) or from a named source. The token owner owns the new private slate. With projectId it is made in that project or folder, where the project's people can open it. @scope slates:write */
   function create(input: {
     kind?: "map";
     /** (1–160 characters) */
     brief: string;
+    /** Make the slate in this project or folder (you need to be an editor of it). (1–64 characters) */
+    projectId?: string;
   } | {
     kind: "diagram";
     source?: "sign-in-outage" | "call-status" | "interview-notes";
     /** Plain text, including multiple lines. Connect two named steps using → or ->. Use up to 24 distinct notes including source notes. (1–1200 characters) */
     brief: string;
+    /** Make the slate in this project or folder (you need to be an editor of it). (1–64 characters) */
+    projectId?: string;
   }): Promise<({
     shareId: string;
     url: string;
@@ -2165,7 +2472,7 @@ declare namespace slatebox.slates {
 }
 
 declare namespace slatebox.slates {
-  /** Delete slate. Delete one of your own slates, with its sharing, comments and messages. Only the slate's owner can. This cannot be undone. @scope slates:delete @destructive */
+  /** Delete slate. Delete one of your own slates, with its sharing, comments and messages. Only the slate's owner can, or the owner of the project it is in. This cannot be undone. @scope slates:delete @destructive */
   function delete(input: {
     /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */
     shareId: string;
@@ -2242,6 +2549,8 @@ declare namespace slatebox.slates {
     shareId?: string;
     /** The new slate's name (without shareId). (1–200 characters) */
     name?: string;
+    /** Make the new slate in this project or folder (without shareId; you need to be an editor of it). (1–64 characters) */
+    projectId?: string;
     /** preview returns what would change and saves nothing. (default "save") */
     mode?: "save" | "preview";
   }): Promise<({
@@ -2273,10 +2582,12 @@ declare namespace slatebox.slates {
 }
 
 declare namespace slatebox.slates {
-  /** List slates. List your slates, newest first, as your Slates page shows them: your own (scope "mine"), or your team's that you may open (scope "team": its public slates, and its private slates shared with you, or all of them for a team admin). Filter by name with q. @scope slates:read */
+  /** List slates. List your slates, newest first, as your Slates page shows them: your own (scope "mine", wherever they are), your team's that you may open (scope "team": its public slates, and its private slates shared with you, or all of them for a team admin), or a project's (scope "project" with projectId: every slate in it and its folders, whoever owns it). Filter by name with q. @scope slates:read */
   function list(input: {
     /** (default "mine") */
-    scope?: "mine" | "team";
+    scope?: "mine" | "team" | "project";
+    /** With scope "project": the project or folder. (1–64 characters) */
+    projectId?: string;
     /** Part of the slate name. (1–200 characters) */
     q?: string;
     /** (1 to 100, default 25) */
@@ -2287,7 +2598,9 @@ declare namespace slatebox.slates {
       name: string;
       description?: string;
       visibility: "private" | "unlisted" | "public";
-      owner: "you" | "team";
+      owner: "you" | "team" | "someone";
+      /** The project or folder the slate is in. */
+      projectId?: string;
       updated?: string | null;
       url: string;
       [key: string]: unknown;

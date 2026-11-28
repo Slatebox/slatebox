@@ -20,7 +20,7 @@ function validKey(key) {
 }
 
 const visibilityFields = ['isPrivate', 'isUnlisted', 'isPublic']
-const projection = { nativeConversationRevision: 1, _id: 1, userId: 1, orgId: 1, shareId: 1, sharingRevision: 1, 'options.url_name': 1,
+const projection = { nativeConversationRevision: 1, _id: 1, userId: 1, orgId: 1, shareId: 1, sharingRevision: 1, projectId: 1, 'options.url_name': 1,
   'creative.model': 1, 'creative.revision': 1, 'creative.trades': 1, nativeCanvasDrawing: 1, boards: 1, boardsRevision: 1 }
 
 /**
@@ -63,7 +63,10 @@ export function sharedSaveConditions(board, userId) {
   return conditions
 }
 
-export async function canEditNativeSlate({ access, guestViews, isTeamAdmin, now = Date.now() }, user, board, guestCollaboratorId, routeKey) {
+// projectRoleOf(board, user, { projectKey }) -> the person's role in the slate's project (drive), the
+// slate rule's projectRole (server/projects/access-meteor.js); projectKey is a drive link's key the
+// address carried (?p=<key>).
+export async function canEditNativeSlate({ access, guestViews, isTeamAdmin, projectRoleOf = null, now = Date.now() }, user, board, guestCollaboratorId, routeKey, { projectKey = null } = {}) {
   if (user?._id && board.userId === user._id) return true
   const visibility = slateVisibility(board)
   if (!user?._id && (visibility === 'private' || typeof guestCollaboratorId !== 'string' ||
@@ -81,7 +84,8 @@ export async function canEditNativeSlate({ access, guestViews, isTeamAdmin, now 
     const general = grants.filter(g => !g.userId)
     return general.length === 1 && general[0].slateAccessPermissionId === 'EDIT'
   }
-  return resolveSlateRole(board, user, admin, grants, invitation) === 'EDIT'
+  const projectRole = projectRoleOf && board.projectId ? await projectRoleOf(board, user, { projectKey }) : null
+  return resolveSlateRole(board, user, admin, grants, invitation, projectRole) === 'EDIT'
 }
 
 // Who a browser save is from, for the event log.
@@ -89,7 +93,9 @@ const browserActor = (user, request) => user?._id
   ? { kind: user.isAnonymous ? 'guest' : 'person', userId: user._id }
   : { kind: 'guest', userId: null, ...(typeof request?.guestCollaboratorId === 'string' && { visitor: request.guestCollaboratorId }) }
 
-export async function saveNativeSlate({ slates, saveCore, access, guestViews, isTeamAdmin, rememberInvitedEdit, recordGuestEdit, denied, now = Date.now() }, user, request, attempt = 0) {
+// placeSlate(user, projectId) -> { projectId, orgId }: where a new slate's first save may put it
+// (server/projects/place.mjs checkPlacement); request.projectId names the project (/new?projectId=).
+export async function saveNativeSlate({ slates, saveCore, access, guestViews, isTeamAdmin, projectRoleOf = null, placeSlate = null, rememberInvitedEdit, recordGuestEdit, denied, now = Date.now() }, user, request, attempt = 0) {
   const snapshot = request?.slate
   const id = snapshot?.options?.id
   if (typeof id !== 'string' || !id.length || !Array.isArray(snapshot.nodes)) throw denied()
@@ -102,10 +108,21 @@ export async function saveNativeSlate({ slates, saveCore, access, guestViews, is
   if (!board) {
     if (!user?._id || typeof snapshot.shareId !== 'string' || !snapshot.shareId) throw denied()
     if (await slates.findOne({ shareId: snapshot.shareId, _id: { $ne: id } }, { projection: { _id: 1 } })) throw denied()
+    // A first save into a project: the person must be an editor of it, and the slate is its team's.
+    let placed = null
+    if (request.projectId !== undefined && request.projectId !== null) {
+      if (!placeSlate) throw denied()
+      try {
+        placed = await placeSlate(user, request.projectId)
+      } catch {
+        throw denied()
+      }
+    }
+    const orgId = placed ? placed.orgId : user.orgId
     // Insert only, through the save core (revision 1, search fields, a create event). A racing
     // save must reauthorize against the winning document.
     const made = await saveCore.create({
-      row: { _id: id, userId: user._id, ...(user.orgId && { orgId: user.orgId }),
+      row: { _id: id, userId: user._id, ...(orgId && { orgId }), ...(placed?.projectId && { projectId: placed.projectId }),
         shareId: snapshot.shareId, created: now, lastSaved: now, nodes: snapshot.nodes, options },
       actor: browserActor(user, request),
       source: 'create',
@@ -115,7 +132,8 @@ export async function saveNativeSlate({ slates, saveCore, access, guestViews, is
     if (!board || board.userId !== user._id || board.shareId !== snapshot.shareId) throw denied()
   }
 
-  if (!await canEditNativeSlate({ access, guestViews, isTeamAdmin, now }, user, board, request.guestCollaboratorId, request.routeKey)) throw denied()
+  if (!await canEditNativeSlate({ access, guestViews, isTeamAdmin, projectRoleOf, now }, user, board, request.guestCollaboratorId, request.routeKey,
+    { projectKey: typeof request.projectKey === 'string' ? request.projectKey : null })) throw denied()
 
   // A workshop slate is edited by people who have joined it. A visitor who has not joined reads it,
   // the ordinary notes beside the workshop included.
@@ -168,7 +186,7 @@ export async function saveNativeSlate({ slates, saveCore, access, guestViews, is
     const latest = revision !== undefined && await slates.findOne({ _id: id }, { projection })
     const moved = latest?.creative && ((latest.creative.revision ?? null) !== revision || (many && (latest.boardsRevision ?? null) !== (board.boardsRevision ?? null)))
     if (moved && attempt < 4) {
-      return saveNativeSlate({ slates, saveCore, access, guestViews, isTeamAdmin, rememberInvitedEdit, recordGuestEdit, denied, now }, user, request, attempt + 1)
+      return saveNativeSlate({ slates, saveCore, access, guestViews, isTeamAdmin, projectRoleOf, placeSlate, rememberInvitedEdit, recordGuestEdit, denied, now }, user, request, attempt + 1)
     }
     throw denied()
   }

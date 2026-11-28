@@ -2,6 +2,9 @@ import { defineAction } from './registry.mjs'
 import { tokenLike } from './principal.mjs'
 import { ref } from './slate-schemas.mjs'
 import { nativeDiagramSources } from '../../imports/api/common/native-diagram-brief.mjs'
+import { problem } from './errors.mjs'
+
+const projectIdField = { type: 'string', minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$', description: 'Make the slate in this project or folder (you need to be an editor of it).' }
 
 const created = { shareId: { type: 'string' }, url: { type: 'string', format: 'uri' } }
 
@@ -9,7 +12,7 @@ export default defineAction({
   id: 'slates.create',
   title: 'Create a slate',
   description:
-    'Omitting kind creates a playable decision map from a brief of up to 160 characters. kind diagram makes editable notes and connections from your own steps (up to 1200 characters, connect two steps with → or ->) or from a named source. The token owner owns the new private slate.',
+    'Omitting kind creates a playable decision map from a brief of up to 160 characters. kind diagram makes editable notes and connections from your own steps (up to 1200 characters, connect two steps with → or ->) or from a named source. The token owner owns the new private slate. With projectId it is made in that project or folder, where the project\'s people can open it.',
   toolset: 'slates',
   kind: 'write',
   scope: 'slates:write',
@@ -26,6 +29,7 @@ export default defineAction({
       kind: { type: 'string', enum: ['map', 'diagram'] },
       brief: { type: 'string', minLength: 1, maxLength: 1200 },
       source: { type: 'string', enum: nativeDiagramSources },
+      projectId: projectIdField,
     },
     required: ['brief'],
     additionalProperties: false,
@@ -35,6 +39,7 @@ export default defineAction({
         properties: {
           kind: { const: 'map' },
           brief: { type: 'string', minLength: 1, maxLength: 160, pattern: '^[^<>\\x00-\\x1f\\x7f]+$', example: 'Who can approve a customer refund?' },
+          projectId: projectIdField,
         },
         required: ['brief'],
         additionalProperties: false,
@@ -49,6 +54,7 @@ export default defineAction({
             description: 'Plain text, including multiple lines. Connect two named steps using → or ->. Use up to 24 distinct notes including source notes.',
             example: 'Field report → Support reply',
           },
+          projectId: projectIdField,
         },
         required: ['kind', 'brief'],
         additionalProperties: false,
@@ -63,6 +69,14 @@ export default defineAction({
   },
   failure: { code: 'slate_create_failed', message: 'The slate could not be created. Retry with the same key.' },
   tool: { name: 'create_slate', title: 'Draw a flowchart, diagram or decision map', description: 'Draw a flowchart, process diagram or decision map on a new private slate (a canvas the team can edit live) and return its link: steps written as "A -> B" (kind "diagram"), or a decision map from a one-line question. Mind maps and Gantt project plans are drawn from Mermaid by import_mermaid.' },
-  handler: (principal, input, { deps, idempotencyKey }) =>
-    deps.createPrivateSlate({ token: tokenLike(principal), key: idempotencyKey, body: input }),
+  async handler(principal, input, { deps, idempotencyKey }) {
+    const { projectId, ...body } = input
+    let placement = null
+    if (projectId !== undefined) {
+      const user = await deps.loadUser(principal.userId)
+      if (!user || user.isAnonymous) throw problem(403, 'registration_required', 'Create an account to do this.')
+      placement = await deps.placeSlate(user, projectId, { token: principal.kind === 'agent' })
+    }
+    return deps.createPrivateSlate({ token: tokenLike(principal), key: idempotencyKey, body, placement })
+  },
 })

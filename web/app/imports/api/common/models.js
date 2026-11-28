@@ -161,3 +161,12 @@ const ScimTokens = new Mongo.Collection('scimTokens')
 const ScimGroups = new Mongo.Collection('scimGroups')
 
 export { ScimTokens, ScimGroups }
+
+// Projects (server/projects): drives of slates people create, nest folders in (at most three deep)
+// and share; a slate names the one it sits in (slate.projectId). projectAccess holds a drive's
+// grants (a person, a team, or the link); folders inherit their drive's. Written only through the
+// projects actions (server/permissions.js keeps the browser out), published by 'projects'.
+const Projects = new Mongo.Collection('projects')
+const ProjectAccess = new Mongo.Collection('projectAccess')
+
+export { Projects, ProjectAccess }

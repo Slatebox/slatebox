@@ -7,12 +7,27 @@ import { Random } from 'meteor/random'
 import { MongoInternals } from 'meteor/mongo'
 import { Meteor } from 'meteor/meteor'
 import { audit } from '../audit/recorder.mjs'
+import { slateProjectRoleOf } from '../projects/access-meteor'
+import { projectCan } from '../../imports/api/common/project-roles.mjs'
 
 const method = {}
 
+// Whose sharing a person may change on a slate's own link: the owner's, and on a slate in a
+// project, its owner's for the project's owner and managers (server/projects). Answers the
+// slate's owner id, or null.
+async function linkOwnerFor(slateId, userId) {
+  if (typeof slateId !== 'string' || !userId) return null
+  const board = await Slates.findOneAsync({ _id: slateId }, { fields: { _id: 1, userId: 1, projectId: 1 } })
+  if (!board) return null
+  if (board.userId === userId) return userId
+  if (!board.projectId) return null
+  const user = await Meteor.users.findOneAsync({ _id: userId }, { fields: { _id: 1, orgId: 1 } })
+  return projectCan(await slateProjectRoleOf(board, user), 'share') ? board.userId : null
+}
+
 method[CONSTANTS.methods.slateAccess.get] = async (opts) => {
   const user = await Meteor.userAsync()
-  if (user && await Slates.findOneAsync({ _id: opts.id, userId: user._id }, {fields:{_id:1}})) {
+  if (user && await linkOwnerFor(opts?.id, user._id)) {
     const access = await SlateAccess.find({ slateId: opts.id }).fetchAsync()
     return access
   }
@@ -63,7 +78,10 @@ async function changeSharing(slateId, userId, change) {
 method[CONSTANTS.methods.slateAccess.configureLink] = async function ({ slateId, type, permission, initialize = false }) {
   if (!this.userId || typeof slateId !== 'string' || !['private', 'unlisted', 'public'].includes(type) ||
       !['READ', 'COMMENT', 'EDIT'].includes(permission)) throw new Meteor.Error('invalid-link', 'Choose a valid sharing option.')
-  await changeSharing(slateId, this.userId, store => configureGeneralLink(store, {
+  // The owner, or the owner or a manager of the slate's project (as the owner's change).
+  const ownerId = await linkOwnerFor(slateId, this.userId)
+  if (!ownerId) throw new Meteor.Error('unavailable', 'Only the owner can change sharing.')
+  await changeSharing(slateId, ownerId, store => configureGeneralLink(store, {
     type, permission, initialize, generateKey: () => Random.id(8),
   }))
   // a link opened to others is a first share in the growth funnel (Slatebox Cloud only)

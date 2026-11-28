@@ -7,8 +7,9 @@ import { shareIdInput } from './slate-schemas.mjs'
 // What belongs to the source, not to a copy: its identity, sharing, links, counters and history.
 // `library` (a builder or review slate's mode) is the source's; `libraryOrigin` (the library item a
 // slate was forked from) is not listed: it carries through every later copy, the provenance chain.
+// `projectId` (the project the source sits in) is the source's: a copy goes where its maker puts it.
 export const sourceOnly = ['_id', 'shareId', 'userId', 'orgId', 'created', 'lastSaved', 'revision', 'recentTouches',
-  'sharingRevision', 'nativeConversationRevision', 'lastNativeCanvasProposal', 'livePresentation', 'archivedDate', 'library']
+  'sharingRevision', 'nativeConversationRevision', 'lastNativeCanvasProposal', 'livePresentation', 'archivedDate', 'library', 'projectId']
 // The source's own sharing and search fields, and what belongs to its author's work on it: the
 // AI conversation it started (welcomeAid) and the files attached to that conversation, and the
 // Google Doc it was last exported to with that export's rendered images, and the slate as it was before
@@ -21,7 +22,7 @@ export const sourceOnlyOptions = ['url_name', 'accessKey', 'allowCollaboration',
 const templateOptions = ['isTemplate', 'templateApproved', 'templateMarkdown', 'templateTags', 'tags', 'basedOnTemplate', 'templateName', 'isCommunity', 'isFeatured']
 
 /** The new slate's document, before the save core stores it. */
-export function copyDocument(source, { id, shareId, user, now, name, libraryOrigin }) {
+export function copyDocument(source, { id, shareId, user, now, name, libraryOrigin, placement = null }) {
   const copy = structuredClone(source)
   for (const key of sourceOnly) delete copy[key]
   copy.options = { ...copy.options }
@@ -49,11 +50,14 @@ export function copyDocument(source, { id, shareId, user, now, name, libraryOrig
     // Sharing belongs to the source. The new owner shares the copy separately.
     isPrivate: true, isUnlisted: false, isPublic: false,
   })
+  // In a project (placement, checked by place.mjs): the project's team's, as every slate in it.
+  const orgId = placement?.projectId ? placement.orgId : user.orgId
   return {
     ...copy,
     _id: id,
     userId: user._id,
-    ...(user.orgId && { orgId: user.orgId }),
+    ...(orgId && { orgId }),
+    ...(placement?.projectId && { projectId: placement.projectId }),
     shareId,
     created: now,
     lastSaved: now,
@@ -64,7 +68,7 @@ export default defineAction({
   id: 'slates.copy',
   title: 'Copy slate',
   description:
-    'Make a private copy of a slate you may edit, a public slate, or a slate whose presentation is published publicly. Someone who may only view a private slate cannot copy it. The copy is an ordinary private slate. A published presentation of the slate is copied with it as a private presentation of the copy. To use something from the library, fork it (library.fork).',
+    'Make a private copy of a slate you may edit, a public slate, or a slate whose presentation is published publicly. Someone who may only view a private slate cannot copy it. The copy is an ordinary private slate, in none of your projects unless projectId names one you can edit. A published presentation of the slate is copied with it as a private presentation of the copy. To use something from the library, fork it (library.fork).',
   toolset: 'slates',
   kind: 'write',
   scope: 'slates:write',
@@ -79,6 +83,7 @@ export default defineAction({
     properties: {
       shareId: shareIdInput,
       name: { type: 'string', minLength: 1, maxLength: 200 },
+      projectId: { type: 'string', minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$', description: 'Put the copy in this project or folder (you need to be an editor of it).' },
     },
     required: ['shareId'],
     additionalProperties: false,
@@ -101,11 +106,13 @@ export default defineAction({
   async handler(principal, input, { deps, now, resource: { source, presentation } }) {
     const user = await deps.loadUser(principal.userId)
     if (!user) throw problem(404, 'not_found', 'Slate not found or unavailable.')
+    const placement = input.projectId !== undefined ? await deps.placeSlate(user, input.projectId, { token: principal.kind === 'agent' }) : null
     const shareId = await deps.generateShareId()
     const id = deps.newId()
     const row = copyDocument(source, {
       id, shareId, user, now: now(),
       name: input.name,
+      placement,
     })
     const made = await deps.saveCore.create({ row, actor: principal, source: 'copy' })
     // A slate's published presentation goes with it, as a private presentation of the copier's. A

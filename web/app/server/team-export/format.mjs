@@ -149,7 +149,8 @@ export const canonicalJson = (value) => JSON.stringify(canonical(value ?? null))
 // What a slate holds, apart from who owns it, where it lives and when it was saved: the part an
 // export and an import must keep the same. Files are named by their content, so a slate whose
 // pictures moved to new addresses hashes the same.
-export const IDENTITY_FIELDS = ['_id', 'shareId', 'userId', 'orgId', 'created', 'lastSaved', 'revision', 'recentTouches', 'teamImportId', 'importedVisibility', 'importedFrom']
+// projectId: the project a slate sits in is this server's (an export carries no projects).
+export const IDENTITY_FIELDS = ['_id', 'shareId', 'userId', 'orgId', 'created', 'lastSaved', 'revision', 'recentTouches', 'teamImportId', 'importedVisibility', 'importedFrom', 'projectId']
 // options.shareId repeats the slate's share address, which a move changes.
 const OPTION_IDENTITY = ['id', 'shareId', 'isPrivate', 'isPublic', 'isUnlisted', 'searchName', 'searchText', 'searchDescription']
 

@@ -1,3 +1,5 @@
+import { maxSlateRole, projectRoleToSlateRole } from '../projects/project-role.mjs'
+
 const roles = ['NONE', 'READ', 'COMMENT', 'EDIT']
 const permitted = grant => roles.includes(grant?.slateAccessPermissionId) && grant.slateAccessPermissionId !== 'NONE'
   ? grant.slateAccessPermissionId : null
@@ -8,7 +10,16 @@ export function slateVisibility(board) {
 
 // Native saves and the canvas reader use the same active grant rows. A bare
 // board URL cannot choose between two different invitations on older slates.
-export function resolveSlateRole(board, user, isAdmin, rows, invitation) {
+//
+// projectRole: the person's role in the project (drive) the slate sits in, from
+// server/projects/project-access.mjs (null when the slate is in none, or the person has none). A
+// drive's people get its role on every slate in it, on top of the slate's own sharing: the higher
+// of the two wins.
+export function resolveSlateRole(board, user, isAdmin, rows, invitation, projectRole = null) {
+  return maxSlateRole(ownSlateRole(board, user, isAdmin, rows, invitation), projectRoleToSlateRole(projectRole))
+}
+
+function ownSlateRole(board, user, isAdmin, rows, invitation) {
   if (user?._id && user._id === board.userId) return 'EDIT'
   const type = slateVisibility(board)
   const grants = rows.filter(row => row.slateId === board._id && row.type === type)

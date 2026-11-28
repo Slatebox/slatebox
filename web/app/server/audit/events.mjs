@@ -94,6 +94,16 @@ export const AUDIT_ACTIONS = Object.freeze({
   'scim.groupMapped': { group: 'scim', text: 'mapped {target} to {role}' },
   'scim.roleChanged': { group: 'scim', text: 'changed the role of {target} to {role} through its directory groups' },
   'scim.recipientSet': { group: 'scim', text: 'chose {target} to receive the slates of people turned off' },
+  // Projects (server/projects): drives of slates, their folders and who they are shared with
+  'project.created': { group: 'projects', text: 'made the project {target}' },
+  'project.renamed': { group: 'projects', text: 'renamed the project {from} to {to}' },
+  'project.deleted': { group: 'projects', text: 'deleted the project {target}, with {count} of its owner\'s slates' },
+  'project.folder_created': { group: 'projects', text: 'made the folder {target}' },
+  'project.folder_deleted': { group: 'projects', text: 'deleted the folder {target}' },
+  'project.slate_moved': { group: 'projects', text: 'moved {target} {mode}' },
+  'project.access_changed': { group: 'projects', text: 'shared {target} ({mode}): {role}' },
+  'project.link_changed': { group: 'projects', text: 'set the link to {target}: people with it can {role}' },
+  'project.recipes_paused': { group: 'projects', text: 'set the recipes in {target}: {mode}' },
   // The log itself
   'audit.exported': { group: 'log', text: 'exported the activity log ({format})' },
   'audit.viewedByStaff': { group: 'log', text: 'opened the activity log (Slatebox staff)' },
@@ -103,12 +113,14 @@ export const AUDIT_ACTIONS = Object.freeze({
 export const AUDIT_ACTION_IDS = Object.freeze(Object.keys(AUDIT_ACTIONS))
 export const ACTOR_KINDS = Object.freeze(['person', 'guest', 'agent', 'integration', 'scim', 'sso', 'system', 'staff'])
 export const VIAS = Object.freeze(['app', 'api', 'mcp', 'exec', 'scim', 'sso', 'system'])
-export const TARGET_TYPES = Object.freeze(['slate', 'team', 'person', 'token', 'comment', 'presentation', 'library', 'connection', 'domain', 'group', 'log', 'integration'])
+export const TARGET_TYPES = Object.freeze(['slate', 'team', 'person', 'token', 'comment', 'presentation', 'library', 'connection', 'domain', 'group', 'log', 'integration', 'project'])
 // The only details an entry may carry. Values: a string of at most DETAIL_MAX characters, a
 // number or a boolean.
 export const DETAIL_KEYS = Object.freeze([
   'from', 'to', 'role', 'mode', 'format', 'count', 'method', 'reason', 'actionId', 'source',
   'reported', 'protocol', 'preset', 'domain', 'group', 'scope', 'staff',
+  // projects: the project (drive or folder) an entry is about and where a slate went
+  'projectId', 'targetProjectId',
 ])
 export const DETAIL_MAX = 120
 export const NAME_MAX = 120

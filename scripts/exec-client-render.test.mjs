@@ -200,7 +200,7 @@ test("describe's index gives each method the start of its summary; a query or me
     assert.equal(method.kind, whole.kind, method.name);
     assert.deepEqual(method.modes, whole.modes.some((mode) => mode !== "save") ? whole.modes : undefined, method.name);
   }
-  assert.equal(index.find((m) => m.name === "slates.copy").index, "({shareId,name?})");
+  assert.equal(index.find((m) => m.name === "slates.copy").index, "({shareId,name?,projectId?})");
   const detailed = describeClient(manifest, { methods: ["slates.copy"] }).methods[0];
   assert.deepEqual([detailed.title, detailed.kind, detailed.modes, detailed.index], ["Copy slate", "write", ["save"], undefined]);
 });

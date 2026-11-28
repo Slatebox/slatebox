@@ -18,6 +18,8 @@ import { check, Match } from 'meteor/check'
 import { DDPRateLimiter } from 'meteor/ddp-rate-limiter'
 import { createGuestAccount, createTrustedUser, guestLoginToken } from '../common/accounts'
 import { resolveSlateRole, slateVisibility } from './slate-role.mjs'
+import { slateProjectRoleOf } from '../projects/access-meteor'
+import { projectsCore } from '../projects/meteor'
 import { isSharedGuestPassword } from '../common/shared-guest-password.mjs'
 import { setupRequired } from '../self-host-setup/state.js'
 import { NOT_SET_UP_MESSAGE } from '../self-host-setup/core.mjs'
@@ -109,18 +111,21 @@ method[CONSTANTS.methods.users.getSlateAccessUrl] = async function getSlateAcces
   check(opts, Match.ObjectIncluding({ slateId: String, nodeId: Match.Maybe(String) }))
   const user = this.userId && await Meteor.users.findOneAsync(this.userId, { fields: { orgId: 1, isMasterUser: 1 } })
   if (!user) return null
-  const slate = await Slates.findOneAsync({ _id: opts.slateId }, { fields: { _id: 1, userId: 1, orgId: 1, shareId: 1, options: 1 } })
+  const slate = await Slates.findOneAsync({ _id: opts.slateId }, { fields: { _id: 1, userId: 1, orgId: 1, shareId: 1, options: 1, projectId: 1 } })
   if (!slate) return null
   const isAdmin = Boolean(user.isMasterUser === true ||
     (user.orgId && user.orgId === slate.orgId && await AuthManager.userHasClaim(user._id, [CONSTANTS.claims.admin._id])))
-  // The slate's id alone is not its link: only the owner, a team admin, a person the sharing
-  // names, or anyone for a public slate gets the address.
   const grants = slate.userId === user._id ? [] : await SlateAccess.find({ slateId: slate._id, type: slateVisibility(slate) }, {
     fields: { slateId: 1, type: 1, userId: 1, accessKey: 1, slateAccessPermissionId: 1 },
   }).fetchAsync()
+  // The slate rule decides, with the person's role in the slate's project. The slate's id alone is
+  // still not its link: an unlisted slate's general link role is not handed to whoever knows its id,
+  // only to the owner, a team admin, a person the sharing names, the slate's project's people, or
+  // anyone for a public slate.
+  const projectRole = await slateProjectRoleOf(slate, user)
   const named = grants.some((g) => g.userId === user._id)
-  if (slate.userId !== user._id && !isAdmin && !named && !slate.options?.isPublic) return null
-  if (!resolveSlateRole(slate, user, isAdmin, grants)) return null
+  if (slate.userId !== user._id && !isAdmin && !named && !projectRole && !slate.options?.isPublic) return null
+  if (!resolveSlateRole(slate, user, isAdmin, grants, undefined, projectRole)) return null
   return `/canvas/${slate.shareId}${opts.nodeId ? `/${opts.nodeId}` : ''}`
 }
 
@@ -642,6 +647,8 @@ method[CONSTANTS.methods.users.delete] = async function removeOwnAccount() {
   // every presentation they made (a deck keeps a copy of the slate and its pictures) and its chat
   await SlatePresentations.removeAsync(owner)
   await SlatePresentationConversations.removeAsync(owner)
+  // their projects by the project rule (others' slates go back to them), and their shares in others
+  await projectsCore.personGone(user._id)
   await Messages.removeAsync(owner)
   // the person's own AI connections, keys and choices
   await ProviderKeys.removeAsync({ ownerType: 'user', ownerId: user._id })

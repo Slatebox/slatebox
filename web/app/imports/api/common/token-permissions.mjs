@@ -17,6 +17,9 @@ export const tokenPermissions = [
   { scope: 'profile:read', label: 'Read what Slatebox knows about me (About you)', explain: 'See the facts in your About you, such as your role, your tools and your goals, so the app can make things for your work.' },
   { scope: 'profile:write', label: 'Add to and change what Slatebox knows about me (About you)', explain: 'Add, change, hide and remove facts in your About you. It cannot turn personalization or its sources on or off.' },
   { scope: 'audit:read', label: "Read my team's activity log (team owners and admins only)", explain: 'See who did what to which slate, when and through which door, and export it. Names and ids only, never note text or comments. Only if you own your team or are an admin of it.' },
+  { scope: 'projects:read', label: 'See my projects and the slates in them', explain: 'See the projects you own or that are shared with you, their folders and the slates in them.' },
+  { scope: 'projects:write', label: 'Organize my projects', explain: 'Make projects and folders, rename them, move slates into and out of them, and delete projects you own. Your role in each project still decides what you can do there.' },
+  { scope: 'projects:share', label: 'Share projects I manage', explain: 'See who has access to a project you manage, and invite people, your team or anyone with the link. Widening who can open a project always asks you first in a script.' },
 ]
 
 export const permissionLabel = (scope) => tokenPermissions.find((item) => item.scope === scope)?.label || scope

@@ -33,6 +33,9 @@ import AuthManager from '../../imports/api/common/AuthManager'
 import CONSTANTS from '../../imports/api/common/constants'
 import { boardEmbed } from '../../imports/api/common/slate-embed.mjs'
 import { audit } from '../audit/recorder.mjs'
+import { projectAccess, slateProjectRoleOf } from '../projects/access-meteor'
+import { checkPlacement } from '../projects/place.mjs'
+import { projectCan } from '../../imports/api/common/project-roles.mjs'
 
 // Where published board pictures are served from: the instance itself when self-hosted.
 export const embedViewerOrigin = () =>
@@ -61,6 +64,8 @@ export const slateOpenStores = {
     fields: { slateId: 1, type: 1, userId: 1, accessKey: 1, slateAccessPermissionId: 1 },
   }).fetchAsync(),
   isTeamAdmin: userId => AuthManager.userHasClaim(userId, [CONSTANTS.claims.admin._id]),
+  // A slate in a project: the project's people get its role (server/projects).
+  projectRoleOf: slateProjectRoleOf,
 }
 
 const method = {}
@@ -115,10 +120,15 @@ method[CONSTANTS.methods.slates.remove] = async (opts) => {
   if (user) {
     const queryable = await slateFilter({ type: 'mine' })
     queryable.push({ _id: { $in: opts.slateIds } })
-    const slates = await Slates.find(
-      { $and: queryable },
-      { fields: { _id: 1, options: 1, shareId: 1, userId: 1, orgId: 1, 'creative.model.kind': 1 } }
-    ).fetchAsync()
+    const fields = { _id: 1, options: 1, shareId: 1, userId: 1, orgId: 1, projectId: 1, 'creative.model.kind': 1 }
+    const slates = await Slates.find({ $and: queryable }, { fields }).fetchAsync()
+    // A project's owner deletes slates in it too, whoever made them (server/projects).
+    const others = Array.isArray(opts.slateIds)
+      ? await Slates.find({ _id: { $in: opts.slateIds.filter(id => typeof id === 'string') }, userId: { $ne: user._id }, projectId: { $type: 'string' } }, { fields }).fetchAsync()
+      : []
+    for (const slate of others) {
+      if (await slateProjectRoleOf(slate, user) === 'owner') slates.push(slate)
+    }
     if (slates) {
       // eslint-disable-next-line no-restricted-syntax
       for (const slate of slates) {
@@ -139,6 +149,9 @@ method[CONSTANTS.methods.slates.update] = async function updateSlate(request) {
     access: SlateAccess.rawCollection(),
     guestViews: GuestViews.rawCollection(),
     isTeamAdmin: userId => AuthManager.userHasClaim(userId, [CONSTANTS.claims.admin._id]),
+    projectRoleOf: slateProjectRoleOf,
+    // /new?projectId=: the first save puts the slate in that project, for an editor of it
+    placeSlate: (user, projectId) => checkPlacement({ access: projectAccess }, user, projectId),
     denied: () => new Meteor.Error('save-denied', 'You do not have permission to save this slate.'),
   }, await Meteor.userAsync(), request)
 }
@@ -151,10 +164,16 @@ export async function getSlatesForUser(opts, user) {
   if (!opts || (opts.shareId !== undefined && opts.shareId !== null && typeof opts.shareId !== 'string')) {
     throw new Meteor.Error('invalid-argument', 'A slate is opened by its share id.')
   }
+  // A drive link's key (/canvas/<id>?p=<key>) and a project list's project are strings too.
+  for (const key of ['projectKey', 'projectId']) {
+    if (opts[key] !== undefined && opts[key] !== null && (typeof opts[key] !== 'string' || opts[key].length > 128)) {
+      throw new Meteor.Error('invalid-argument', `${key} is a string.`)
+    }
+  }
   if (opts.shareId) {
     // Who may open it, and as what: the same rule the collaboration relay's room token follows
     // (slate-open-role.mjs, collaborators.init).
-    const opened = await openSlateRole(slateOpenStores, opts.shareId, user)
+    const opened = await openSlateRole(slateOpenStores, opts.shareId, user, { projectKey: opts.projectKey || null })
     if (!opened) return null
     const { slate, accessLevel } = opened
     if (slate?.creative) slate.creative = readCreativeState(slate.creative)
@@ -179,8 +198,17 @@ export async function getSlatesForUser(opts, user) {
       return null
     }
   } else if (user?._id) {
+    // A project's slates (its page): the project, or with nested its folders too, for anyone with a
+    // role in it. No role: an empty list, as for a project that does not exist.
+    let projectIds
+    if (opts.type === 'project') {
+      const role = opts.projectId ? await projectAccess.roleFor(user, opts.projectId, { linkKey: opts.projectKey || null }) : null
+      if (!role) return { slates: [], counts: { total: 0 } }
+      projectIds = await projectAccess.folderIds(opts.projectId, { nested: opts.nested === true })
+    }
     const sFilter = await slateFilter({
       type: opts.type,
+      projectIds,
       filterString: opts.filterString,
       private: opts.private,
       aiSuitable: opts.aiSuitable,
@@ -237,7 +265,9 @@ method[CONSTANTS.methods.slates.createSnapshot] = async (opts) => {
     // Optional-chain: findOneAsync resolves undefined for a slate not yet persisted
     // (new/unsaved), and reading .userId of undefined threw a 500. A missing slate
     // correctly fails this check and skips the snapshot.
-    if (slate?.userId !== Meteor?.userId()) {
+    // The owner, and a manager or the owner of the slate's project.
+    if (slate?.userId !== Meteor?.userId() &&
+        !(slate?.projectId && projectCan(await slateProjectRoleOf(slate, await Meteor.userAsync()), 'snapshotSlates'))) {
       return false
     }
     const last = await SlateSnapshots.findOneAsync(
