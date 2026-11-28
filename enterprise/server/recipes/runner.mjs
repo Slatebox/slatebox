@@ -25,10 +25,10 @@
 import { budgetLimits, createBudget, BudgetExceeded } from './budgets.mjs'
 import { createRecipeContext } from './context.mjs'
 import { createRecipeAI } from './metering.mjs'
-import { recipePrincipal, savesDirectly } from './principal.mjs'
+import { recipePrincipal, recipeTokenId, savesDirectly } from './principal.mjs'
 import { isRetryable, logLine, RECIPE_LIMITS } from './queue.mjs'
 import { reconcileBoard, reconcileSlate, matchNewItems, contentHash } from './reconcile.mjs'
-import { touchedSince } from './ownership.mjs'
+import { takesOwnership, touchedSince } from './ownership.mjs'
 import { statusDesired, STATUS_ROLE } from './status-slate.mjs'
 import { applyGraphPatch, applyOutputNotes, InterceptFailed } from './webhooks/intercept.mjs'
 
@@ -314,17 +314,23 @@ export function createRunner(deps) {
   async function boardStateOf(instance, role, key = '') {
     const slateId = instance.slateMap?.[key ? `${role}/${key}` : role]
     if (!slateId || !slates.board) return null
-    const rows = await store.notes.find({ instanceId: instance._id, slateId, kind: { $in: ['board', 'card', 'lane'] } }).toArray()
+    const rows = await store.notes.find({ instanceId: instance._id, slateId, kind: { $in: ['card', 'lane'] } }).toArray()
     const out = []
-    for (const row of rows.filter((r) => r.kind === 'board')) {
-      const current = await slates.board(slateId, row.key, instance._id)
+    for (const boardKey of [...new Set(rows.map((r) => r.boardKey).filter(Boolean))]) {
+      const current = await slates.board(slateId, boardKey, instance._id)
       if (!current) continue
+      const row = { key: boardKey }
       const mineOn = (kind, id) => rows.find((r) => r.kind === kind && r.noteId === id && r.boardKey === row.key)
       const laneKeyOf = (id) => mineOn('lane', id)?.key?.replace(/^lane:/, '') ?? null
+      // what people did since the last run counts now (reconcile records it after the run)
+      const since = instance.lastRun?.revisionBySlate?.[slateId] ?? -1
+      const touched = touchedSince(await slates.events(slateId, since), slateId, since, recipeTokenId(instance._id))
       const cards = []
       for (const card of current.cards || []) {
         const mine = mineOn('card', card.id)
-        if (mine && !mine.gone) cards.push({ key: mine.key.replace(/^card:/, ''), lane: laneKeyOf(card.laneId), owner: mine.owner, label: card.label })
+        if (!mine || mine.gone) continue
+        const owner = mine.owner === 'person' || takesOwnership(touched.get(card.id)) ? 'person' : 'recipe'
+        cards.push({ key: mine.key.replace(/^card:/, ''), lane: laneKeyOf(card.laneId), owner, label: card.label })
       }
       out.push({ key: row.key.replace(/^board:/, ''), cards })
     }

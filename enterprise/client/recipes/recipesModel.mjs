@@ -386,6 +386,9 @@ export function scopeFromConfig(kind, config = {}) {
   if (kind.startsWith('github.')) return { repos: c.repos || (c.repo ? [c.repo] : []), ...(kind === 'github.pull_request' && { paths: c.paths || ['docs/architecture/*.mmd'] }) }
   if (kind === 'slack.post') return { channels: c.postChannels || c.channels || [] }
   if (kind === 'google.write_sheet') return { files: c.fileNames || c.files || [] }
+  // Linear: the teams the recipe reads, and only an issue's status.
+  if (kind === 'linear.update_item') return { teams: c.teams || [], fields: ['state'] }
+  if (kind === 'linear.comment') return { teams: c.teams || [] }
   return {}
 }
 

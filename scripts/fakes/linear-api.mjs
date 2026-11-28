@@ -21,8 +21,6 @@ export function fakeLinear(opts = {}) {
   let unauthorized = Boolean(opts.unauthorizedOnce)
   const projects = opts.projects || PROJECTS
   const blockers = opts.blockers || BLOCKING_ISSUES
-  const cycleIssues = opts.cycleIssues || CYCLE_ISSUES
-  const cycle = opts.cycle === undefined ? CYCLE : opts.cycle
   const answer = (status, body) => ({ status, ok: status < 300, text: async () => JSON.stringify(body), json: async () => body })
   async function fetch(url, init) {
     const body = JSON.parse(init.body)
@@ -46,6 +44,9 @@ export function fakeLinear(opts = {}) {
       return answer(200, { data: { issues: page(blockers.filter((i) => want.has(i.project.id)), v.after, size) } })
     }
     if (op === 'ActiveCycle') {
+      // read on every call, so a test can roll the cycle over or change its issues between runs
+      const cycleIssues = opts.cycleIssues || CYCLE_ISSUES
+      const cycle = opts.cycle === undefined ? CYCLE : opts.cycle
       const team = Object.values(TEAMS).find((t) => t.id === v.team)
       if (!team) return answer(200, { data: { team: null } })
       return answer(200, { data: { team: { ...team, states: { nodes: STATES }, activeCycle: cycle && team.key === 'ENG' ? { ...cycle, issues: page(cycleIssues, v.after, size) } : null } } })

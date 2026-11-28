@@ -16,10 +16,11 @@ import { manifest as googleDesignDoc } from '../../recipes/google-design-doc/man
 import { manifest as webhookRender } from '../../recipes/webhook-render/manifest.mjs'
 import { manifest as projectIndex } from '../../recipes/project-index/manifest.mjs'
 import { manifest as linearRoadmap } from '../../recipes/linear-roadmap/manifest.mjs'
+import { manifest as linearCycleBoard } from '../../recipes/linear-cycle-board/manifest.mjs'
 
 export const CATALOG = Object.freeze([
   githubArchitecture, githubPrImpact, githubMermaidSync,
-  linearRoadmap,
+  linearRoadmap, linearCycleBoard,
   slackDecisionLog, slackTimeline, slackConcepts, slackDigest,
   googleSheetBoard, googleDesignDoc,
   webhookRender, projectIndex,
