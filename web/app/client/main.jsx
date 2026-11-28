@@ -19,6 +19,7 @@ import SlateLoading from '../imports/ui/components/SlateLoading'
 import { useTracker } from 'meteor/react-meteor-data'
 import { creationRoute } from '../imports/api/common/first-slate-route.mjs'
 import { STORAGE_KEY } from '../imports/api/common/first-slate.mjs'
+import { rememberProjectForNew } from '../imports/api/client/pendingProject.mjs'
 import CONSTANTS from '../imports/api/common/constants'
 import Login from '../imports/ui/pages/Login'
 import GuestStartGate from '../imports/ui/components/GuestStartGate'
@@ -64,6 +65,12 @@ function CreationEntry({ alias = false }) {
   }, [])
   // Decided once per address: the first run makes the guest itself (a login), and must not be swapped out while it does.
   const decided = useRef(null)
+  // "Add a slate" in a project opens /new?projectId=: the new slate's first save files it there. /new
+  // without one forgets an earlier choice, so a slate started from the menu stays in My slates.
+  useEffect(() => {
+    if (alias) return
+    try { rememberProjectForNew(window.sessionStorage, new URLSearchParams(search).get('projectId')) } catch { /* no storage */ }
+  }, [alias, search])
   if (alias) return <Navigate replace to={'/new' + search + hash} />
   if (decided.current?.at !== search + hash) decided.current = null
   const route = decided.current?.route ?? creationRoute({ hash, search, profileStart: account.profileStart, member: account.member, stored: storedStart(), tiles: account.tiles })

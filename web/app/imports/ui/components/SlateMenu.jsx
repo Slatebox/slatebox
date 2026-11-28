@@ -9,6 +9,7 @@ import FileCopyIcon from '@mui/icons-material/FileCopy'
 import DeleteIcon from '@mui/icons-material/Delete'
 import LockOpenIcon from '@mui/icons-material/LockOpen'
 import LockIcon from '@mui/icons-material/Lock'
+import DriveFileMoveOutlinedIcon from '@mui/icons-material/DriveFileMoveOutlined'
 import { useAtom } from 'jotai'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
 import MenuItem from '@mui/material/MenuItem'
@@ -20,14 +21,18 @@ import CONSTANTS from '../../api/common/constants'
 import AuthManager from '../../api/common/AuthManager'
 
 import slateProps from '../propTypes/slateProps'
+import MoveToProjectDialog from './projects/MoveToProjectDialog'
+import { ROLE_RANK } from './projects/projectsModel.mjs'
 
 import {
   globalMessage,
   slateRererender,
 } from '../jotai/atoms'
 
-// The menu on a slate in your own lists (My slates, Team slates): make a copy, delete it, make it public or private.
-export default function SlateMenu({ slate }) {
+// The menu on a slate in your own lists (My slates, Team slates, a project): make a copy, move it to a
+// project, delete it, make it public or private. projectRole: the person's role on the project the list
+// shows (a manager moves any slate within it, and takes others' slates out).
+export default function SlateMenu({ slate, projectRole = null }) {
   const theme = useTheme()
   const [, setRerender] = useAtom(slateRererender)
   const [, setMessage] = useAtom(globalMessage)
@@ -75,6 +80,9 @@ export default function SlateMenu({ slate }) {
   }
 
   const [slateAnchorEl, setSlateAnchorEl] = React.useState(null)
+  const [moving, setMoving] = React.useState(false)
+  const signedIn = Boolean(Meteor.userId()) && !Meteor.user()?.isAnonymous
+  const canMove = signedIn && (Meteor.userId() === slate.userId || (slate.projectId && (ROLE_RANK[projectRole] ?? 0) >= ROLE_RANK.manager))
 
   function showSlateMenu(e) {
     e.stopPropagation()
@@ -122,6 +130,19 @@ export default function SlateMenu({ slate }) {
               </ListItemIcon>
               <Typography>Make a copy</Typography>
             </MenuItem>
+            {canMove && (
+              <MenuItem
+                onClick={(e) => {
+                  hideSlateMenu(e)
+                  setMoving(true)
+                }}
+              >
+                <ListItemIcon>
+                  <DriveFileMoveOutlinedIcon />
+                </ListItemIcon>
+                <Typography>Move to project…</Typography>
+              </MenuItem>
+            )}
             {(Meteor.userId() === slate.userId ||
                 AuthManager.userHasClaim(Meteor.userId(), [
                   CONSTANTS.claims.admin._id,
@@ -154,6 +175,10 @@ export default function SlateMenu({ slate }) {
                 </MenuItem>
               )}
           </Menu>
+          {canMove && (
+            <MoveToProjectDialog open={moving} slate={slate} onClose={() => setMoving(false)}
+              onMoved={() => { setMoving(false); setRerender(Random.id()) }} />
+          )}
         </>
     </div>
   )

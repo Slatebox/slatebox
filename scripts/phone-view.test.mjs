@@ -181,7 +181,9 @@ test('making a slate: each create route is behind PhoneViewGate, outside GuestSt
 
 test('entry points to making a slate are gone on a phone', () => {
   assert.match(ui('Main.jsx'), /title: 'Create slate',\s*path: '\/new',\s*icon: <AddIcon \/>,\s*show: !phoneView,/)
-  assert.match(ui('components/DisplaySlates.jsx'), /showAdd=\{!phoneView\}/)
+  // A project page draws its own Add a slate (ProjectHeader, editors only, never on a phone).
+  assert.match(ui('components/DisplaySlates.jsx'), /showAdd=\{!phoneView && type !== 'project'\}/)
+  assert.match(ui('components/projects/projectsModel.mjs'), /const edit = !phone && atLeast\(role, 'editor'\)/)
   assert.match(ui('components/DisplaySlates.jsx'), /phone: phoneView \}\)/)
   assert.match(ui('pages/Library.jsx'), /actions=\{phoneView \? undefined : <Button[^\n]*Build your own component/)
   const item = ui('pages/LibraryItem.jsx')
@@ -192,8 +194,9 @@ test('entry points to making a slate are gone on a phone', () => {
   assert.match(ui('components/personal/ForYou.jsx'), /!stale && canBuild && <Button/)
   // A slate card on a phone: no options (Make a copy, Delete, privacy) and no selection box.
   const list = ui('components/DisplaySlates.jsx')
-  assert.match(list, /\{!phoneView && <SlateMenu slate=\{slate\} \/>\}/)
-  assert.match(list, /\{type !== 'team' && !phoneView && \(\s*<Checkbox/)
+  assert.match(list, /\{!phoneView && <SlateMenu slate=\{slate\} projectRole=\{projectRole\} \/>\}/)
+  // Selection (for Delete) is on My slates only: never on team or project slates others may own.
+  assert.match(list, /\{type === 'mine' && !phoneView && \(\s*<Checkbox/)
   assert.equal(list.match(/<SlateMenu /g).length, 1)
   // A slate id nobody has made yet: on a phone it goes to /new's note, never saved as a new slate.
   assert.match(ui('pages/Canvas.jsx'), /if \(getSlate\?\.exists === false && phoneViewRef\.current\) \{\s*history\('\/new', \{ replace: true \}\)\s*return\s*\}\s*if \(getSlate\?\.exists === false\) \{\s*isNew = true/)

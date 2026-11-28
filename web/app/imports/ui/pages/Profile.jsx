@@ -31,6 +31,7 @@ import { adminLinksFor } from '../../api/common/server-admin.mjs'
 import useServerAdmin from '../common/useServerAdmin'
 import Box from '@mui/material/Box'
 import Link from '@mui/material/Link'
+import EnterpriseSlot from '../common/EnterpriseSlot'
 
 const BASE_DAILY_URL = Meteor.settings.public.dailyBaseUrl
 // /profile?tab=developer opens the Developer tab (the instance description links there);
@@ -502,6 +503,8 @@ export default function Profile() {
           </TabPanel>
           <TabPanel value={tabValue} index="ai">
             <AISettings />
+            {/* Pause all my recipes (enterprise code, where recipes are on; nothing elsewhere). */}
+            <EnterpriseSlot name="profile.recipes" />
           </TabPanel>
           {metered && (
             <TabPanel value={tabValue} index="credits">

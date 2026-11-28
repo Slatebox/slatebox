@@ -149,6 +149,10 @@ export default function AdminTools() {
             <Grid size={12}>
               <EnterpriseSlot name="admin.teamAddresses" />
             </Grid>
+            {/* Admin › Recipes: the install's switch for recipes (enterprise/client/recipes/RecipesAdmin.jsx); empty elsewhere */}
+            <Grid size={12}>
+              <EnterpriseSlot name="admin.recipes" />
+            </Grid>
             <Grid size={12}>
               <AIControlCard />
             </Grid>

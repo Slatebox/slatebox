@@ -10,6 +10,9 @@ import { presetNoteStyle } from '../../ui/common/noteStyle.mjs'
 import { DEFAULT_PRESET_QUERY, defaultPreset as teamStyle } from '../common/brandSettings.mjs'
 import { loadSlateFaces } from '../../ui/components/presentations/slateFaces.mjs'
 import { backgroundColors, presetContainerStyle } from '../common/slateBackground.mjs'
+import { claimProjectForSave } from './pendingProject.mjs'
+
+const sessionStore = () => { try { return window.sessionStorage } catch { return null } }
 
 async function createSlate(
   slateBase,
@@ -173,10 +176,13 @@ async function createSlate(
     }
     // A plain new slate starts empty: the canvas shows its welcome (ui/components/SlateWelcome.jsx)
     // until the first note or board, so every slate is not one more lone note.
+    // "Add a slate" in a project (/new?projectId=): the first save files it there (pendingProject.mjs).
+    const projectId = isGuest ? null : claimProjectForSave(sessionStore())
     await saveSlateLite({
       slate,
       userId: newSlate.userId, // Ensure correct user ID context
       orgId: newSlate.orgId, // Ensure correct org ID context
+      ...(projectId && { projectId }),
       pkg: {},
     })
     newSlate = JSON.parse(slate.exportJSON())

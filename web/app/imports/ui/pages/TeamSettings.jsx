@@ -57,6 +57,7 @@ import AppPage from '../common/AppPage'
 import {
   confirmsName, deleteTeamState, pickSection, settingsIntro, teamNameProblem, teamSettingsSections, TEAM_NAME_MAX,
 } from '../components/teams/team-settings-model.mjs'
+import EnterpriseSlot from '../common/EnterpriseSlot'
 
 const ICONS = {
   general: TuneOutlined,
@@ -492,6 +493,8 @@ export default function TeamSettings() {
             <LinkRow to="/integrations" testId="link-integrations" title="Integrations" detail="Your connected agents and Google account." />
           </Card>
         )}
+        {/* Allow recipes for this team (enterprise code, where recipes are on; nothing elsewhere). */}
+        <EnterpriseSlot name="team.recipes" />
       </>
     )
   } else if (active === 'branding') {

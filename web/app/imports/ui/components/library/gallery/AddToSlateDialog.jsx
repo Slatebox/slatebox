@@ -14,29 +14,48 @@ import Typography from '@mui/material/Typography'
 import CircularProgress from '@mui/material/CircularProgress'
 import AddIcon from '@mui/icons-material/Add'
 import DashboardIcon from '@mui/icons-material/Dashboard'
+import Select from '@mui/material/Select'
+import MenuItem from '@mui/material/MenuItem'
+import Box from '@mui/material/Box'
 import CONSTANTS from '../../../../api/common/constants'
+import useProjects from '../../projects/useProjects'
+import { ROLE_RANK, sortDrives } from '../../projects/projectsModel.mjs'
 
 /**
- * "Add to a slate" for a smart component: a new slate, or one of the person's own slates (most recently saved first).
+ * "Add to a slate" for a smart component: a new slate, or one of the person's own slates (most recently saved first),
+ * or a slate in one of their projects they may edit (the project picker).
  * The choice goes back to the item page, which adds the board with library.fork and opens that slate.
  */
 export default function AddToSlateDialog({ open, title, busy, onPick, onClose }) {
   const [slates, setSlates] = useState(null)
+  // '' is My slates; otherwise a drive the person edits in (editor or more).
+  const [projectId, setProjectId] = useState('')
+  const projects = useProjects()
+  const { owned, shared } = sortDrives((projects || []).filter((p) => (ROLE_RANK[p.role] ?? 0) >= ROLE_RANK.editor), Meteor.userId())
+  const drives = [...owned, ...shared]
 
   useEffect(() => {
     if (!open) return
     if (!Meteor.userId()) { setSlates([]); return }
     let gone = false
     setSlates(null)
-    Meteor.callAsync(CONSTANTS.methods.slates.get, { type: 'mine', skip: 0, limit: 20 })
+    Meteor.callAsync(CONSTANTS.methods.slates.get, projectId ? { type: 'project', projectId, skip: 0, limit: 20 } : { type: 'mine', skip: 0, limit: 20 })
       .then(answer => { if (!gone) setSlates((answer?.slates ?? []).filter(slate => slate?.shareId)) }, () => { if (!gone) setSlates([]) })
     return () => { gone = true }
-  }, [open])
+  }, [open, projectId])
 
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="xs" aria-labelledby="add-to-slate-title">
       <DialogTitle id="add-to-slate-title">Add {title} to a slate</DialogTitle>
       <DialogContent dividers sx={{ p: 0 }}>
+        {drives.length > 0 && (
+          <Box sx={{ px: 2, pt: 1.5, pb: 1 }}>
+            <Select size="small" fullWidth value={projectId} onChange={e => setProjectId(e.target.value)} displayEmpty inputProps={{ 'aria-label': 'Where to look' }}>
+              <MenuItem value="">My slates</MenuItem>
+              {drives.map(d => <MenuItem key={d._id} value={d._id}>{d.name}</MenuItem>)}
+            </Select>
+          </Box>
+        )}
         <List dense disablePadding>
           <ListItemButton onClick={() => onPick(null)} disabled={busy} data-add-target="new">
             <ListItemIcon><AddIcon /></ListItemIcon>
