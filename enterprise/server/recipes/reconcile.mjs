@@ -472,9 +472,12 @@ export function reconcileBoard({ desired, current, owned = new Map(), touched = 
       stats.unchanged += 1
       continue
     }
+    const editsBefore = edits.length
     if (there.label !== card.label) edits.push({ kind: 'rename_card', card: there.id, label: String(card.label).slice(0, 200) })
     if (laneId.get(card.lane) && there.laneId !== laneId.get(card.lane)) edits.push({ kind: 'move_card', card: there.id, lane: laneId.get(card.lane) })
-    stats.updated += 1
+    // a card already as wanted (its row's hash was from before) is unchanged: only its hash is recorded
+    if (edits.length > editsBefore) stats.updated += 1
+    else stats.unchanged += 1
     ownedUpdates.push({ ...mine, hash, updated: now })
   }
   for (const mine of owned.values()) {
