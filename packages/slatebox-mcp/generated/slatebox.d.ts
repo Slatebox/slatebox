@@ -1996,6 +1996,14 @@ declare namespace slatebox.projects {
       depth?: number;
       [key: string]: unknown;
     }>;
+    /** Every folder in the project (the drive), at any depth. */
+    driveFolders?: Array<{
+      projectId: string;
+      parentId: string;
+      name: string;
+      depth?: number;
+      [key: string]: unknown;
+    }>;
     /** (at least 0) */
     slateCount: number;
     ownerName?: string;

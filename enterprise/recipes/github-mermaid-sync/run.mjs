@@ -15,7 +15,7 @@
 // until the two have agreed once. Loop prevention: our own merged body is recognized by its hash,
 // and an import that changes nothing exports nothing new.
 import { applyPlanToJSON } from 'slateboxjs/operations'
-import { bodyHashOf, canonicalFromModel, canonicalGraph, extractMermaid, parseMermaid, slateToMermaid, syncPlans } from '../../../web/app/imports/api/common/mermaid/index.mjs'
+import { bodyHashOf, canonicalFromModel, canonicalGraph, extractMermaid, parseMermaid, slateToMermaid, syncPlans } from '/imports/api/common/mermaid/index.mjs'
 import { graphChanges, mergeGraphs } from './merge.mjs'
 
 const KEEP_PROPOSED = 5

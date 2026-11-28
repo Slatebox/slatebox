@@ -408,6 +408,14 @@ export function reconcileBoard({ desired, current, owned = new Map(), touched = 
   const edits = []
   const byKey = new Map([...owned.values()].map((r) => [r.key, r]))
   const laneId = new Map()
+  // A board the recipe just added holds its component's own empty lanes (a team board's To do,
+  // Doing, Review, Done, Won't do), and a board holds at most five: those lanes are renamed to the
+  // recipe's, and any left over removed. Only while the board is untouched: no cards, and no lane
+  // the recipe already keeps (after that, a lane someone adds is theirs).
+  const fresh = cur.cards.length === 0 && ![...owned.values()].some((r) => r.kind === 'lane')
+  const wantedLabels = new Set((desired.lanes || []).map((l) => l.label.trim().toLowerCase()))
+  const spare = fresh ? cur.lanes.filter((l) => !wantedLabels.has(l.label.trim().toLowerCase())) : []
+  const laneEdits = []
   for (const lane of desired.lanes || []) {
     const rowFor = byKey.get(`lane:${lane.key}`)
     const there = rowFor && cur.lanes.find((l) => l.id === rowFor.noteId)
@@ -416,11 +424,18 @@ export function reconcileBoard({ desired, current, owned = new Map(), touched = 
     if (found) {
       laneId.set(lane.key, found.id)
       if (!rowFor) ownedUpdates.push({ _id: `${instanceId}:${slateId}:${found.id}`, instanceId, slateId, noteId: found.id, key: `lane:${lane.key}`, kind: 'lane', owner: byLabel && !there ? 'person' : 'recipe', personProps: [], hash: contentHash(lane.label), gone: false, updated: now })
+    } else if (spare.length) {
+      const reuse = spare.shift()
+      laneEdits.push({ kind: 'rename_lane', lane: reuse.id, label: lane.label.slice(0, 80), key: `lane:${lane.key}` })
+      laneId.set(lane.key, reuse.id)
+      ownedUpdates.push({ _id: `${instanceId}:${slateId}:${reuse.id}`, instanceId, slateId, noteId: reuse.id, key: `lane:${lane.key}`, kind: 'lane', owner: 'recipe', personProps: [], hash: contentHash(lane.label), gone: false, updated: now })
     } else {
-      edits.push({ kind: 'add_lane', label: lane.label.slice(0, 80), key: `lane:${lane.key}` })
+      laneEdits.push({ kind: 'add_lane', label: lane.label.slice(0, 80), key: `lane:${lane.key}` })
       laneId.set(lane.key, lane.label)
     }
   }
+  if ((desired.lanes || []).length >= 2) for (const left of spare) laneEdits.push({ kind: 'remove_lane', lane: left.id, key: `lane-default:${left.id}` })
+  edits.push(...laneEdits)
   const wanted = new Set()
   for (const card of desired.cards || []) {
     const key = `card:${card.key}`

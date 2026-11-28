@@ -5,7 +5,7 @@
 // changed amber, removed red, the modules depending on changed ones grey; new lines green, dropped
 // ones red; one summary note; the endpoint changes in a frame; a link back to the pull request) and
 // a GitHub comment (prComment: a Mermaid flowchart LR of the same, at most 40 nodes, GitHub draws it).
-import { idNamer, quoted } from '../../../web/app/imports/api/common/mermaid/text.mjs'
+import { idNamer, quoted } from '/imports/api/common/mermaid/text.mjs'
 import { IMPACT, KIND_COLORS, LINE, pullUrl, SHAPES, shortSha, weightWidth } from '../_github-code/look.mjs'
 
 export const COMMENT_NODES = 40

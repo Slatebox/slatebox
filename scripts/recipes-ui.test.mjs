@@ -82,6 +82,7 @@ test('an instance card’s last and next run lines', () => {
   assert.equal(nextRunLine({ state: 'active', nextDueAt: NOW + 5 * 60e3 }, NOW), 'Next run in 5 min')
   assert.equal(nextRunLine({ state: 'active', triggers: [{ kind: 'vendor', event: 'github.push' }] }, NOW), 'Runs on every push')
   assert.equal(nextRunLine({ state: 'active', triggers: [{ kind: 'manual' }] }, NOW), 'Runs when someone clicks Run now')
+  assert.equal(nextRunLine({ state: 'active', triggers: [{ kind: 'inbound' }] }, NOW), 'Runs when a webhook calls it')
   assert.equal(nextRunLine({ state: 'paused' }, NOW), stateChip('paused').help)
 })
 

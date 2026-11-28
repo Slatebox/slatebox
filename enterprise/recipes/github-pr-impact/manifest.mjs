@@ -13,7 +13,7 @@ export const manifest = Object.freeze({
   label: 'Pull request impact',
   agentName: 'PR reviewer',
   integration: 'github',
-  description: 'Draws what each pull request changes in your architecture, on a slate reviewers can annotate, and as one diagram comment on the pull request.',
+  summary: 'Draws what each pull request changes in your architecture, on a slate reviewers can annotate, and as one diagram comment on the pull request.',
   needs: { github: ['metadata:read', 'contents:read', 'pull_requests:read'] },
   triggers: Object.freeze([
     { kind: 'vendor', event: 'github.pull_request', debounceMs: 120000, default: true },

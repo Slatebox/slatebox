@@ -59,7 +59,7 @@ const registry = createAppRegistry({
 })
 
 const appOrigin = () => String(Meteor.settings.public?.baseUrl || Meteor.absoluteUrl()).replace(/\/+$/, '')
-const slateRow = (slateId) => Slates.findOneAsync({ _id: slateId }, { fields: { nodes: 1, revision: 1, shareId: 1, 'options.name': 1, creative: 1, boards: 1, options: 1, userId: 1, orgId: 1 } })
+const slateRow = (slateId) => Slates.findOneAsync({ _id: slateId }, { fields: { nodes: 1, revision: 1, shareId: 1, creative: 1, boards: 1, options: 1, userId: 1, orgId: 1 } })
 
 function slatesAdapter() {
   const shareOf = async (slateId) => (await Slates.findOneAsync({ _id: slateId }, { fields: { shareId: 1 } }))?.shareId
@@ -117,7 +117,14 @@ function slatesAdapter() {
     async boardEdits(principal, slateId, boardId, edits) {
       const slate = await slateRow(slateId)
       const board = slateBoards(slate).find((b) => b.id === boardId)
-      await registry.run(principal, 'slates.applyOperations', { shareId: slate.shareId, plan: { message: 'Keep the board up to date', operations: [{ kind: 'workshop_edits', boardId, edits, expectedRevision: board?.revision ?? 0 }] }, mode: 'save' }, { idempotencyKey: `${principal.runId}:${slateId}:${boardId}:${contentHash(edits).slice(0, 12)}` })
+      try {
+        await registry.run(principal, 'slates.applyOperations', { shareId: slate.shareId, plan: { message: 'Keep the board up to date', operations: [{ kind: 'workshop_edits', boardId, edits, expectedRevision: board?.revision ?? 0 }] }, mode: 'save' }, { idempotencyKey: `${principal.runId}:${slateId}:${boardId}:${contentHash(edits).slice(0, 12)}` })
+      } catch (error) {
+        // which edit the board's rules refused, by kind (never its words)
+        const at = error?.details?.editIndex
+        console.warn('[recipes] board edit refused', error?.code, Number.isInteger(at) ? `edit ${at} (${edits[at]?.kind})` : '', edits.map((e) => e.kind).join(','))
+        throw error
+      }
     },
     async mermaidHash(slateId) {
       const slate = await slateRow(slateId)
@@ -236,6 +243,7 @@ export function startRecipes({ via = null, isUnlocked = () => true, projects, re
     store, queue, clock, recipeOf, projects, switches, vendors, slates: slatesAdapter(), presence, permissions, outbound, intercepts,
     complete: completeWith(), withAI: withRecipeAI(runAIAction), audit, notify, firstName, quarantine: (value) => quarantine(value), origin: appOrigin,
     budgetOverrides: () => Meteor.settings.selfHosted?.recipes?.budgets || null,
+    onUnexpected: (error, where) => console.warn('[recipes] run failed', where.recipeId, where.runId, String(error?.stack || error).split('\n').slice(0, 6).join(' | ')),
   })
   const service = createRecipeService({
     store, queue, runner, clock, randomId, recipeOf, catalog, projects, switches, permissions, outbound, sealer, checkHookUrl,

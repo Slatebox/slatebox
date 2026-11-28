@@ -203,3 +203,20 @@ test('boards: cards added, renamed, moved and removed; a card a person moved is 
   const gone = reconcileBoard({ desired: { ...desired, cards: [] }, current: after, owned, instanceId: 'i1', slateId: 's1' })
   assert.deepEqual(gone.edits, [{ kind: 'remove_card', card: 'c1' }])
 })
+
+test('a board the recipe just added: its component\'s empty lanes are renamed to the recipe\'s, the rest removed (a board holds at most five)', () => {
+  const current = { lanes: ['To do', 'Doing', 'Review', 'Done', "Won't do"].map((label, k) => ({ id: `l${k}`, label })), cards: [] }
+  const desired = { key: 'changes', lanes: [{ key: 'this-week', label: 'This week' }, { key: 'last-week', label: 'Last week' }, { key: 'earlier', label: 'Earlier' }], cards: [{ key: 'c1', label: 'api now uses ledger', lane: 'this-week' }] }
+  const out = reconcileBoard({ desired, current, instanceId: 'i1', slateId: 's1' })
+  assert.deepEqual(out.edits.map((e) => [e.kind, e.lane ?? null, e.label ?? null]), [
+    ['rename_lane', 'l0', 'This week'], ['rename_lane', 'l1', 'Last week'], ['rename_lane', 'l2', 'Earlier'],
+    ['remove_lane', 'l3', null], ['remove_lane', 'l4', null],
+    ['add_card', 'l0', 'api now uses ledger'],
+  ])
+  assert.equal(out.edits.filter((e) => e.kind === 'add_lane').length, 0)
+  // Once the recipe keeps its lanes, a lane a person adds is theirs: never renamed or removed.
+  const kept = new Map(['l0', 'l1', 'l2'].map((id, k) => [id, { noteId: id, key: `lane:${desired.lanes[k].key}`, kind: 'lane', owner: 'recipe' }]))
+  const later = { lanes: [{ id: 'l0', label: 'This week' }, { id: 'l1', label: 'Last week' }, { id: 'l2', label: 'Earlier' }, { id: 'p1', label: 'Parked' }], cards: [] }
+  const again = reconcileBoard({ desired: { ...desired, cards: [] }, current: later, owned: kept, instanceId: 'i1', slateId: 's1' })
+  assert.deepEqual(again.edits, [])
+})

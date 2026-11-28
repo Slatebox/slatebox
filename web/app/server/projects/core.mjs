@@ -240,6 +240,8 @@ export function createProjectsCore({
       ...projectView(project, role, { appOrigin: appOrigin() }),
       path: path.map((id) => ({ projectId: id, name: (byId.get(id) || drive).name })),
       folders: folders.map((row) => ({ projectId: row._id, name: row.name, depth: row.depth })),
+      // every folder in the drive, so a page can draw the whole tree from one answer
+      driveFolders: tree.filter((row) => row._id !== drive._id).map((row) => ({ projectId: row._id, parentId: row.parentId, name: row.name, depth: row.depth })),
       slateCount,
       ownerName: await nameOf(drive.ownerId),
     }

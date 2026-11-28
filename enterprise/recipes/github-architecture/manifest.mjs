@@ -15,7 +15,7 @@ export const manifest = Object.freeze({
   label: 'Living architecture',
   agentName: 'GitHub architect',
   integration: 'github',
-  description: 'Keeps a service map, module graphs and the API surface of your repositories up to date on every merge, with a board of what changed.',
+  summary: 'Keeps a service map, module graphs and the API surface of your repositories up to date on every merge, with a board of what changed.',
   needs: { github: ['metadata:read', 'contents:read'] },
   triggers: Object.freeze([
     { kind: 'vendor', event: 'github.push', debounceMs: 120000, default: true },

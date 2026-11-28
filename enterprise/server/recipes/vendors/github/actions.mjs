@@ -17,13 +17,23 @@ import { guardControlWrite } from '/server/actions/ai-providers.mjs'
 const VIEW = {
   type: 'object',
   description: 'appId, slug, clientId, apiUrl (public); ready (every credential set); fingerprints { clientSecret, privateKey, webhookSecret } (sha256:…, never the secret); source (admin, settings or none); installUrl; secretsAvailable; updatedAt; updatedBy.',
+  properties: {
+    appId: { type: ['string', 'null'] }, slug: { type: ['string', 'null'] }, clientId: { type: ['string', 'null'] }, apiUrl: { type: ['string', 'null'] },
+    ready: { type: 'boolean' }, fingerprints: { type: 'object' }, source: { type: 'string', enum: ['admin', 'settings', 'none'] },
+    installUrl: { type: ['string', 'null'] }, secretsAvailable: { type: 'boolean' }, updatedAt: { type: ['string', 'null'] }, updatedBy: { type: ['string', 'null'] },
+  },
 }
 const LINE = (what, max = 200) => ({ type: 'string', minLength: 1, maxLength: max, description: `The App's ${what}.` })
 const OFF = { off: 'the GitHub App setup keeps its own audit (ai.audit.list), as integration apps do' }
 const personOnly = () => 'Only a person sets up the GitHub App.'
 
 /** vendor(): the running GitHub vendor (createVendor), set at server start. */
-export function githubAppActions(vendor) {
+export function githubAppActions(getVendor) {
+  const vendor = () => {
+    const v = getVendor()
+    if (!v) throw Object.assign(new Error('Recipes are starting, or GitHub is not set up here. Try again in a moment.'), { status: 409, code: 'starting' })
+    return v
+  }
   return [
     defineAction({
       id: 'connectors.githubApp.get',
@@ -34,6 +44,7 @@ export function githubAppActions(vendor) {
       scope: 'ai:admin:read',
       principals: ['person', 'agent'],
       mounts: { ddp: true, http: { method: 'GET', path: '/ai/control/github-app', operationId: 'getGithubApp' } },
+      tool: { name: 'get_github_app', title: 'GitHub App', description: 'See how the Slatebox GitHub App is set up on this server, without its secrets. Administrators only.' },
       input: { type: 'object', properties: {}, additionalProperties: false },
       output: VIEW,
       handler: async (principal, _input, { deps }) => {
@@ -123,6 +134,7 @@ export function githubAppActions(vendor) {
       scope: 'recipes:read',
       principals: ['person', 'agent'],
       mounts: { ddp: true, http: { method: 'GET', path: '/recipes/github/installations', operationId: 'listGithubInstallations' } },
+      tool: { name: 'recipes_github_installations', title: 'GitHub repositories for recipes', description: 'List the GitHub repositories the Slatebox app can read for your recipes, and the link to add more.' },
       input: { type: 'object', properties: { projectId: { type: 'string', pattern: '^[A-Za-z0-9]{1,40}$' } }, additionalProperties: false },
       output: {
         type: 'object',

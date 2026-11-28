@@ -27,6 +27,7 @@ export default defineAction({
       ...projectOutput.properties,
       path: { type: 'array', items: { type: 'object', properties: { projectId: { type: 'string' }, name: { type: 'string' } }, required: ['projectId', 'name'] } },
       folders: { type: 'array', items: { type: 'object', properties: { projectId: { type: 'string' }, name: { type: 'string' }, depth: { type: 'integer' } }, required: ['projectId', 'name'] } },
+      driveFolders: { type: 'array', description: 'Every folder in the project (the drive), at any depth.', items: { type: 'object', properties: { projectId: { type: 'string' }, parentId: { type: 'string' }, name: { type: 'string' }, depth: { type: 'integer' } }, required: ['projectId', 'parentId', 'name'] } },
       slateCount: { type: 'integer', minimum: 0 },
       ownerName: { type: 'string' },
     },

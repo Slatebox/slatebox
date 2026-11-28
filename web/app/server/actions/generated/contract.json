@@ -24022,6 +24022,32 @@
               ]
             }
           },
+          "driveFolders": {
+            "type": "array",
+            "description": "Every folder in the project (the drive), at any depth.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "projectId": {
+                  "type": "string"
+                },
+                "parentId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "depth": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "projectId",
+                "parentId",
+                "name"
+              ]
+            }
+          },
           "slateCount": {
             "type": "integer",
             "minimum": 0

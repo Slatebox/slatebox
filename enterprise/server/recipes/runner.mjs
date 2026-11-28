@@ -294,6 +294,8 @@ export function createRunner(deps) {
         const done = await finish({ state: 'skipped', skippedReason: 'hook_failed', log: [...log, logLine(clock(), 'warn', 'hook_failed', error.message)] })
         return { state: done.state }
       }
+      // The server log keeps where an unexpected failure came from (a stack: code paths, never content).
+      if (!aborted && !(error instanceof SignInNeeded) && !Number.isInteger(error?.status)) deps.onUnexpected?.(error, { runId: run._id, recipeId: instance.recipeId })
       say('error', err?.code || 'failed', error instanceof SignInNeeded ? error.message : aborted ? (reasonCode === 'cancelled' ? 'The run was cancelled.' : 'The run took longer than 10 minutes.') : 'The run failed.')
       const retryable = run.mode !== 'preview' && !(error instanceof SignInNeeded) && reasonCode !== 'cancelled' && (aborted || isRetryable(error))
       const finished = await finish({ state: reasonCode === 'cancelled' ? 'cancelled' : 'failed', log, error: err, retryable })

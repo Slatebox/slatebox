@@ -164,6 +164,7 @@ export function nextRunLine(instance, now = Date.now()) {
   if (instance.nextDueAt) return `Next run ${until(instance.nextDueAt, now)}`
   const vendor = (instance.triggers || []).find((t) => t.kind === 'vendor')
   if (vendor) return `Runs ${triggerWords(vendor).replace(/^On /, 'on ')}`
+  if ((instance.triggers || []).some((t) => t.kind === 'inbound')) return 'Runs when a webhook calls it'
   return 'Runs when someone clicks Run now'
 }
 

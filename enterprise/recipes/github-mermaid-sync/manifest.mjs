@@ -15,7 +15,7 @@ export const manifest = Object.freeze({
   label: 'Diagrams as code',
   agentName: 'Diagram keeper',
   integration: 'github',
-  description: 'Keeps your diagrams in the repository as Mermaid files: canvas changes become one pull request, merged file edits update the slates.',
+  summary: 'Keeps your diagrams in the repository as Mermaid files: canvas changes become one pull request, merged file edits update the slates.',
   needs: { github: ['metadata:read', 'contents:read'] },
   triggers: Object.freeze([
     { kind: 'vendor', event: 'github.push', debounceMs: 120000, default: true },

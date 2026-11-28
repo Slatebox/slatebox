@@ -27,8 +27,11 @@ test('GitHub recipe files import only what a recipe may', () => {
     for (const m of readFileSync(file, 'utf8').matchAll(/^\s*(?:import|export)\s[^'"]*?from\s+['"]([^'"]+)['"]|import\(\s*['"]([^'"]+)['"]\s*\)/gm)) {
       const spec = m[1] || m[2]
       if (spec === 'slateboxjs/operations' || spec === 'slateboxjs/workshops') continue
-      assert.ok(spec.startsWith('.'), `${relative(root, file)} imports ${spec}`)
-      const target = resolve(dirname(file), spec)
+      // The Mermaid core is imported by the app's root path (/imports/...), as the Meteor build
+      // resolves it once enterprise/ is staged at web/app/enterprise; everything else is relative.
+      const rooted = /^\/imports\/api\/common\/mermaid\/[\w-]+\.mjs$/.test(spec)
+      assert.ok(spec.startsWith('.') || rooted, `${relative(root, file)} imports ${spec}`)
+      const target = rooted ? join(root, 'web/app', spec) : resolve(dirname(file), spec)
       assert.ok([own, ...allowed].some((dir) => target === dir || target.startsWith(`${dir}/`)), `${relative(root, file)} imports ${spec}`)
     }
     const text = readFileSync(file, 'utf8')
