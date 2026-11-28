@@ -20,7 +20,13 @@ import { createHash, randomBytes } from 'node:crypto'
 export const API_TOKEN_SCOPES = [
   'slates:read', 'slates:write', 'slates:add-photo', 'slates:share', 'slates:delete', 'ai:settings', 'ai:admin', 'ai:admin:read', 'team:export', 'team:import', 'team:move', 'library:review', 'profile:read', 'profile:write', 'audit:read',
   'projects:read', 'projects:write', 'projects:share',
+  // recipes (enterprise/server/recipes): read a project's recipes, change them, run them
+  'recipes:read', 'recipes:write', 'recipes:run',
 ]
+// The scopes only enterprise actions check (recipes.*, enterprise/server/recipes/actions.mjs): a
+// registry built without enterprise code needs none of them (scripts/recipe-actions.test.mjs checks
+// the enterprise registry needs every one).
+export const ENTERPRISE_ONLY_SCOPES = Object.freeze(['recipes:read', 'recipes:write', 'recipes:run'])
 export const ACTIVE_TOKEN_LIMIT = 10
 
 export function hashApiToken(token) {

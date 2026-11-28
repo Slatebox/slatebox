@@ -11,6 +11,7 @@ export const AUDIT_GROUPS = Object.freeze({
   comments: 'Comments',
   projects: 'Projects',
   agents: 'Agents and API',
+  recipes: 'Recipes',
   signin: 'Sign-in',
   sso: 'Single sign-on',
   scim: 'Provisioning (SCIM)',

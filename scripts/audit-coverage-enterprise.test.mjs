@@ -7,13 +7,14 @@ import { connectorActions, integrationActions } from '../enterprise/server/actio
 import { galleryActions } from '../enterprise/server/gallery-admin.mjs'
 import { integrationAppActions } from '../enterprise/server/integration-apps.mjs'
 import { googleActions } from '../enterprise/server/google/actions.mjs'
+import { recipeActions } from '../enterprise/server/recipes/actions.mjs'
 import { createAppRegistry } from '../web/app/server/actions/index.mjs'
 import { ACTION_AUDIT, specProblem } from '../web/app/server/audit/action-specs.mjs'
 import { createEnterpriseHost } from '../web/app/server/enterprise-loader.mjs'
 import { audit } from '../web/app/server/audit/recorder.mjs'
 
 const none = () => ({})
-const enterprise = () => [...connectorActions(none), ...integrationActions(none), ...googleActions(none), ...galleryActions(none, none, none), ...integrationAppActions(none)]
+const enterprise = () => [...connectorActions(none), ...integrationActions(none), ...googleActions(none), ...galleryActions(none, none, none), ...integrationAppActions(none), ...recipeActions(none)]
 
 test('every enterprise write says what the activity log keeps of it', () => {
   const registry = createAppRegistry({ extraActions: enterprise() })

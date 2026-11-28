@@ -20,6 +20,9 @@ export const tokenPermissions = [
   { scope: 'projects:read', label: 'See my projects and the slates in them', explain: 'See the projects you own or that are shared with you, their folders and the slates in them.' },
   { scope: 'projects:write', label: 'Organize my projects', explain: 'Make projects and folders, rename them, move slates into and out of them, and delete projects you own. Your role in each project still decides what you can do there.' },
   { scope: 'projects:share', label: 'Share projects I manage', explain: 'See who has access to a project you manage, and invite people, your team or anyone with the link. Widening who can open a project always asks you first in a script.' },
+  { scope: 'recipes:read', label: 'See the recipes in my projects and their runs', explain: 'See which recipes keep your projects up to date, when they ran, what they changed and the webhooks they send.' },
+  { scope: 'recipes:write', label: 'Add, change, pause and delete recipes, and their webhooks', explain: 'Add recipes to projects you edit, change or pause the ones that run for you, and add webhooks. It cannot let a recipe change anything outside Slatebox.' },
+  { scope: 'recipes:run', label: 'Run and preview recipes, with my data', explain: 'Run a recipe now or preview it, and send it data to draw, such as a dependency graph from your build.' },
 ]
 
 export const permissionLabel = (scope) => tokenPermissions.find((item) => item.scope === scope)?.label || scope

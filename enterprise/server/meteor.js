@@ -41,6 +41,7 @@ import { cardFor, retiredFor } from '../common/gallery.mjs'
 import { communityCard, liveGallery } from './gallery-admin.mjs'
 import { CLOUD_LIBRARY_LIMITS, CLOUD_ORIGIN, cloudLibraryOn, createCloudCatalog } from './cloud-library.mjs'
 import { createVault } from './credentials.mjs'
+import { credentialInUse } from './credential-users.mjs'
 import { createSignIn, probe } from './signin.mjs'
 import { migrateIntegrations, resumeLapsedIntegrations, retireSlackMcp } from './integrations-migrate.mjs'
 import { itemsFromLayout } from './translate.mjs'
@@ -553,7 +554,7 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     if (retired?.marked) console.log('[connectors]', JSON.stringify({ kind: 'slack_mcp_retired', ...retired }))
   })
   // Hourly: forget (and revoke) sign-ins no agent uses any more.
-  const sweep = () => !isUnlocked() ? Promise.resolve() : service.sweep(() => McpCredentials.find({}, { fields: { ownerId: 1, address: 1, createdAt: 1 } }).fetchAsync())
+  const sweep = () => !isUnlocked() ? Promise.resolve() : service.sweep(() => McpCredentials.find({}, { fields: { ownerId: 1, address: 1, createdAt: 1 } }).fetchAsync(), { inUse: credentialInUse })
     .then(({ removed }) => removed && console.log('[connectors]', JSON.stringify({ kind: 'sweep', removed })))
     .catch((error) => console.warn('[connectors] sweep failed', error?.message))
   Meteor.setTimeout(sweep, 60000)

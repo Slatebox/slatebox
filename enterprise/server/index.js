@@ -22,6 +22,7 @@ import { slackActions } from './slack/actions.mjs'
 import { slackRoutes } from './slack/routes.mjs'
 import { signInRoutes } from './routes.mjs'
 import { registerTeamAddresses } from '../team-addresses/index.mjs'
+import { registerRecipes } from './recipes/index.mjs'
 
 // library.cloud: a self-hosted install receives Slatebox Cloud's approved Community integrations (cloud-library.mjs).
 export const manifest = Object.freeze({ name: 'slatebox-enterprise', features: ['agents.invite', 'library.cloud'] })
@@ -30,6 +31,8 @@ export function register(api, context) {
   // Team addresses (<name>.slatebox.team) answer on Slatebox Cloud only, whatever the invited
   // agents' kill switch says; elsewhere their routes answer 404 (../team-addresses/index.mjs).
   registerTeamAddresses(api, context)
+  // Recipes: agents that keep a project's slates up to date (./recipes). Their own switches.
+  registerRecipes(api, context)
   // Nothing a person can reach is added while the kill switch is on.
   if (!context?.agentInvite) return
   let started = null

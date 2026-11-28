@@ -66,6 +66,22 @@ export const AUDIT_ACTIONS = Object.freeze({
   'integration.removed': { group: 'agents', text: 'took an outside agent off a slate' },
   'integration.approved': { group: 'agents', text: 'kept what an outside agent suggested' },
   'integration.changed': { group: 'agents', text: 'changed an integration ({actionId})' },
+  // Recipes (enterprise/server/recipes): agents that keep a project's slates up to date
+  'recipe.created': { group: 'recipes', text: 'added the recipe {target}' },
+  'recipe.updated': { group: 'recipes', text: 'changed the recipe {target}' },
+  'recipe.deleted': { group: 'recipes', text: 'deleted the recipe {target}' },
+  'recipe.enabled': { group: 'recipes', text: 'turned on the recipe {target}' },
+  'recipe.paused': { group: 'recipes', text: 'paused the recipe {target} ({reason})' },
+  'recipe.resumed': { group: 'recipes', text: 'resumed the recipe {target}' },
+  'recipe.transferred': { group: 'recipes', text: 'took over the recipe {target}' },
+  'recipe.run': { group: 'recipes', text: 'ran {target}: {outcome}, {count} slates changed' },
+  'recipe.permission_granted': { group: 'recipes', text: 'let {target} make changes outside Slatebox ({kind})' },
+  'recipe.permission_revoked': { group: 'recipes', text: 'took back the permission of {target} ({kind})' },
+  'recipe.outside_write': { group: 'recipes', text: 'made a change outside Slatebox through {target} ({kind})' },
+  'recipe.hook_added': { group: 'recipes', text: 'added a {kind} webhook to {target}' },
+  'recipe.hook_removed': { group: 'recipes', text: 'removed a webhook from {target}' },
+  'recipe.hook_secret_rotated': { group: 'recipes', text: 'rotated a webhook secret of {target}' },
+  'recipe.install_enabled': { group: 'recipes', text: 'turned recipes {outcome} on this server' },
   // Sign-in
   'signin.succeeded': { group: 'signin', text: 'signed in ({method})' },
   'signin.failed': { group: 'signin', text: 'failed to sign in ({method})' },
@@ -113,7 +129,7 @@ export const AUDIT_ACTIONS = Object.freeze({
 export const AUDIT_ACTION_IDS = Object.freeze(Object.keys(AUDIT_ACTIONS))
 export const ACTOR_KINDS = Object.freeze(['person', 'guest', 'agent', 'integration', 'scim', 'sso', 'system', 'staff'])
 export const VIAS = Object.freeze(['app', 'api', 'mcp', 'exec', 'scim', 'sso', 'system'])
-export const TARGET_TYPES = Object.freeze(['slate', 'team', 'person', 'token', 'comment', 'presentation', 'library', 'connection', 'domain', 'group', 'log', 'integration', 'project'])
+export const TARGET_TYPES = Object.freeze(['slate', 'team', 'person', 'token', 'comment', 'presentation', 'library', 'connection', 'domain', 'group', 'log', 'integration', 'project', 'recipe'])
 // The only details an entry may carry. Values: a string of at most DETAIL_MAX characters, a
 // number or a boolean.
 export const DETAIL_KEYS = Object.freeze([
@@ -121,6 +137,8 @@ export const DETAIL_KEYS = Object.freeze([
   'reported', 'protocol', 'preset', 'domain', 'group', 'scope', 'staff',
   // projects: the project (drive or folder) an entry is about and where a slate went
   'projectId', 'targetProjectId',
+  // recipes
+  'instanceId', 'recipeId', 'runId', 'outcome', 'kind', 'hookId',
 ])
 export const DETAIL_MAX = 120
 export const NAME_MAX = 120

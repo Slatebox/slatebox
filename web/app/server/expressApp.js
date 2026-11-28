@@ -2,7 +2,7 @@ import express from 'express'
 import { isApiPath } from './actions/http.mjs'
 import { isMcpPath } from './mcp/endpoint.mjs'
 import { isScimPath } from './scim/routes.mjs'
-import { isSlackPath } from './raw-body-paths.mjs'
+import { isRawBodyPath } from './raw-body-paths.mjs'
 
 const app = express()
 
@@ -10,9 +10,9 @@ const app = express()
 // error shape for a body that is too large or not JSON (server/actions/http.mjs).
 const json = express.json()
 // /mcp parses its own too (server/mcp/endpoint.mjs), with room for a 64 KiB script, and /scim/v2
-// its application/scim+json (server/scim/routes.mjs). Slack's routes read their raw body
-// themselves, to check Slack's signature over it (server/raw-body-paths.mjs).
-app.use((req, res, next) => (isApiPath(req.path) || isMcpPath(req.path) || isScimPath(req.path) || isSlackPath(req.path) ? next() : json(req, res, next)))
+// its application/scim+json (server/scim/routes.mjs). Signed webhooks read their raw body
+// themselves, to check the signature over it (server/raw-body-paths.mjs).
+app.use((req, res, next) => (isApiPath(req.path) || isMcpPath(req.path) || isScimPath(req.path) || isRawBodyPath(req.path) ? next() : json(req, res, next)))
 
 const nonCacheableHttpCodes = process.env.SB_NON_CACHEABLE_HTTP_CODES?.split(
   ','
