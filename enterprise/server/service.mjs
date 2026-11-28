@@ -1634,12 +1634,15 @@ export function createConnectorService({
    * sign-in with no integration after a day (someone signed in and never connected).
    * credentialRows() -> [{ ownerId, address, createdAt }]
    */
-  async function sweep(credentialRows) {
+  // inUse(row): whether something else still uses the sign-in (a recipe running for its owner,
+  // credential-users.mjs); such a sign-in is kept even with no integration.
+  async function sweep(credentialRows, { inUse = async () => false } = {}) {
     let removed = 0
     for (const row of await credentialRows()) {
       const integration = await integrations.findOne({ ownerId: row.ownerId, address: row.address })
       const orphan = !integration && now() - new Date(row.createdAt).getTime() > AGENT_LIMITS.orphanHours * 3600000
       if (!orphan) continue
+      if (await inUse(row)) continue
       await vault.remove(row.ownerId, row.address).catch(() => {})
       removed++
     }
