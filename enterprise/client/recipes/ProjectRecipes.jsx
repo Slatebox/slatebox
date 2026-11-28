@@ -30,6 +30,7 @@ import CircularProgress from '@mui/material/CircularProgress'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
 import AddIcon from '@mui/icons-material/Add'
 import confirmService from '/imports/ui/common/confirm'
+import usePhoneView from '/imports/ui/common/usePhoneView'
 import { ProjectTab } from '/imports/ui/components/projects/ProjectHeader'
 import { ROLE_RANK } from '/imports/ui/components/projects/projectsModel.mjs'
 import { RecipeInstances } from '../collections'
@@ -58,7 +59,8 @@ export function RecipesTab({ selected, onSelect, Tab = ProjectTab }) {
 export function AddRecipeButton({ projectId, role, onAdded }) {
   const { state } = useCatalog()
   const [open, setOpen] = useState(false)
-  if (state !== 'on' || !atLeast(role, 'editor')) return null
+  const phone = usePhoneView()
+  if (state !== 'on' || phone || !atLeast(role, 'editor')) return null
   return (
     <>
       <Button variant="outlined" size="large" sx={{ borderRadius: 6, px: 3 }} onClick={() => setOpen(true)}>Add a recipe</Button>
@@ -116,7 +118,11 @@ function InstanceCard({ instance, manifest, role, onSetUp, onOpen }) {
   const userId = Meteor.userId()
   const mine = instance.ownerId === userId
   const manager = atLeast(role, 'manager')
-  const canEdit = mine || manager
+  // On a phone a recipe is watched, not changed: Pause stays (a stop is a safety switch), the rest
+  // waits for a computer or tablet.
+  const phone = usePhoneView()
+  const canEdit = !phone && (mine || manager)
+  const canStop = mine || manager
   const [menu, setMenu] = useState(null)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
@@ -149,7 +155,7 @@ function InstanceCard({ instance, manifest, role, onSetUp, onOpen }) {
       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
         {instance.state === 'draft' && canEdit && <Button size="small" variant="contained" disableElevation onClick={() => onSetUp(instance)}>Finish setting up</Button>}
         {instance.state === 'active' && canEdit && <Button size="small" variant="outlined" disabled={busy} onClick={() => act(() => recipesApi.run({ instanceId: instance._id, reason: 'Run now' }), 'Started. It shows in Runs.')}>Run now</Button>}
-        {canPause(instance.state) && canEdit && <Button size="small" disabled={busy} onClick={() => act(() => recipesApi.pause({ instanceId: instance._id }))}>Pause</Button>}
+        {canPause(instance.state) && canStop && <Button size="small" disabled={busy} onClick={() => act(() => recipesApi.pause({ instanceId: instance._id }))}>Pause</Button>}
         {canResume(instance.state) && canEdit && <Button size="small" disabled={busy} onClick={() => act(() => recipesApi.resume({ instanceId: instance._id }))}>Resume</Button>}
         {instance.state === 'needs_sign_in' && mine && <Button size="small" component={Link} to="/integrations">Sign in again</Button>}
         {instance.state === 'blocked_access' && manager && !mine && <Button size="small" disabled={busy} onClick={() => act(() => recipesApi.transfer({ instanceId: instance._id }), 'It now runs for you. Turn on its changes outside Slatebox again if you want them.')}>Take it over</Button>}
@@ -179,6 +185,7 @@ export default function ProjectRecipes({ projectId, project, role }) {
   const [open, setOpen] = useState(null)
   const [paused, setPaused] = useState(Boolean(project?.recipesPaused))
   const [note, setNote] = useState('')
+  const phone = usePhoneView()
   const { instances, ready } = useTracker(() => {
     const sub = Meteor.subscribe('recipes.forProject', projectId)
     return { ready: sub.ready(), instances: RecipeInstances.find({ projectId }, { sort: { created: 1 } }).fetch() }
@@ -187,7 +194,7 @@ export default function ProjectRecipes({ projectId, project, role }) {
   if (state === 'off-admin') return <RecipesOffSwitch />
   if (state !== 'on') return null
   const byId = new Map(recipes.map((r) => [r.id, r]))
-  const editor = atLeast(role, 'editor')
+  const editor = !phone && atLeast(role, 'editor')
   async function setProjectPaused(next) {
     setNote('')
     try { await recipesApi.pauseProject({ projectId, paused: next }); setPaused(next) } catch (e) { setNote(recipeErrorWords(e)) }
@@ -228,7 +235,7 @@ export default function ProjectRecipes({ projectId, project, role }) {
       )}
       {editor && <AddRecipeDialog open={adding} projectId={projectId} draft={draft} onClose={() => setAdding(false)} onDone={() => setAdding(false)} />}
       {open && <RecipeDetails instance={open.instance} manifest={byId.get(open.instance.recipeId)} initial={open.tab}
-        canEdit={open.instance.ownerId === Meteor.userId() || atLeast(role, 'manager')} onClose={() => setOpen(null)} />}
+        canEdit={!phone && (open.instance.ownerId === Meteor.userId() || atLeast(role, 'manager'))} onClose={() => setOpen(null)} />}
     </Box>
   )
 }

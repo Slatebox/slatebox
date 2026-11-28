@@ -30,7 +30,7 @@ export const canResume = (state) => ['paused', 'failed', 'blocked_limit'].includ
 export const canPause = (state) => state === 'active'
 
 export const RUN_STATE_WORDS = Object.freeze({
-  queued: 'Waiting', running: 'Running', done: 'Done', partial: 'Partly done', failed: 'Failed', skipped: 'Skipped', cancelled: 'Cancelled',
+  queued: 'Waiting', running: 'Running', done: 'Done', partial: 'Partly done', failed: 'Failed', skipped: 'Skipped', cancelled: 'Canceled',
 })
 export const SKIPPED_WORDS = Object.freeze({
   paused: 'paused', kill_switch: 'recipes are off', no_change: 'nothing had changed', debounced: 'folded into the next run',

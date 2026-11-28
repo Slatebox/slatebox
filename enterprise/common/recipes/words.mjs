@@ -21,7 +21,7 @@ export const RUN_STATE_WORDS = Object.freeze({
   partial: 'Done in part',
   failed: 'Failed',
   skipped: 'Skipped',
-  cancelled: 'Cancelled',
+  cancelled: 'Canceled',
 })
 
 export const SKIP_WORDS = Object.freeze({

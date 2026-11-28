@@ -368,3 +368,13 @@ test('recipe copy says agent not AI, US spelling, sentence case buttons', () => 
     assert.doesNotMatch(src, />(Run Now|Add A Recipe|Turn On|Send Test|New Secret|Undo This Run|Make It Mine|Select Them)</, f)
   }
 })
+
+test('on a phone the Recipes tab is watched, not changed: no Add a recipe, Run now, Resume or options; Pause stays', () => {
+  const src = ent('recipes/ProjectRecipes.jsx')
+  assert.match(src, /import usePhoneView from '\/imports\/ui\/common\/usePhoneView'/)
+  assert.match(src, /if \(state !== 'on' \|\| phone \|\| !atLeast\(role, 'editor'\)\) return null/)
+  assert.match(src, /const canEdit = !phone && \(mine \|\| manager\)/)
+  assert.match(src, /const editor = !phone && atLeast\(role, 'editor'\)/)
+  assert.match(src, /canPause\(instance\.state\) && canStop && <Button/)
+  assert.match(src, /canEdit=\{!phone && \(open\.instance\.ownerId/)
+})
