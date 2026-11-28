@@ -27,6 +27,7 @@ const saveSlateLite = async ({
   routeKey,
   hasLocalEdit,
   keepProof,
+  projectId,
 }) => {
   // A note and a card trading places is shown at once but is real only once the server has
   // taken it (creativeSlates.play saves its board and drawing together). Until then the drawing
@@ -75,6 +76,9 @@ const saveSlateLite = async ({
     ...(routeKey && { routeKey }),
     ...(hasLocalEdit && { hasLocalEdit: true }),
     ...(keepProof && { keepProof }),
+    // "Add a slate" in a project: a new slate's first save files it there (createSlate.js; the
+    // server places it only when it makes the slate, server/methods/native-slate-save.mjs)
+    ...(projectId && { projectId }),
   })
   rememberSaveBase(slate, exportedSlate)
 

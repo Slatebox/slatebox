@@ -238,6 +238,12 @@ test('the first save of a new slate carries the project; /new remembers it', () 
   const create = app('imports/api/client/createSlate.js')
   assert.match(create, /claimProjectForSave\(sessionStore\(\)\)/)
   assert.match(create, /\.\.\.\(projectId && \{ projectId \}\)/)
+  // createSlate's first save goes through saveSlateLite: it must send the project on (test.slatebox.com,
+  // 2026-11-27: it dropped it, so "Add a slate" made the slate in My slates instead of the project).
+  assert.match(create, /await saveSlateLite\(\{[\s\S]*?\.\.\.\(projectId && \{ projectId \}\)[\s\S]*?\}\)/)
+  const lite = app('imports/api/client/saveSlateLite.js')
+  assert.match(lite, /^\s+projectId,\n\}\) => \{/m)
+  assert.match(lite, /Meteor\.callAsync\(CONSTANTS\.methods\.slates\.update, \{[\s\S]*?\.\.\.\(projectId && \{ projectId \}\),\n\s+\}\)/)
   assert.match(app('imports/api/client/saveSlate.js'), /\.\.\.\(uopts\.projectId && \{ projectId: uopts\.projectId \}\)/)
   assert.match(app('client/main.jsx'), /rememberProjectForNew\(window\.sessionStorage, new URLSearchParams\(search\)\.get\('projectId'\)\)/)
 })
