@@ -119,6 +119,10 @@ export function createSlackRecipeSession({ token, teamId, slackUserId = null, ac
     async isMember(channel) {
       return (await channels()).has(channel)
     },
+    /** The owner's channels, for the setup picker: [{ id, name, private }]. */
+    async channels() {
+      return [...(await channels()).values()]
+    },
     /** { id, name } of one of the owner's channels. */
     async channelInfo(channel) {
       return (await channels()).get(channel) || { id: channel, name: channel }

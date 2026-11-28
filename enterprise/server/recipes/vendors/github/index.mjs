@@ -98,7 +98,8 @@ export function createVendor(deps) {
     async session(instance, { signal = null, budget = null } = {}) {
       const installationId = await installationFor(instance)
       const client = clientFor(installationId, { budget, signal, base: await apiBase() })
-      return Object.freeze(Object.fromEntries([...READ_CALLS.map((name) => [name, client[name]]), ['stats', client.stats], ['installationId', installationId]]))
+      // every HTTP call is counted against the run's budget by the client itself (countsOwnCalls)
+      return Object.freeze(Object.fromEntries([...READ_CALLS.map((name) => [name, client[name]]), ['stats', client.stats], ['installationId', installationId], ['countsOwnCalls', true]]))
     },
     routes() {
       const credentials = () => appSettings.credentials()
@@ -159,6 +160,15 @@ export function createVendor(deps) {
       return performWrite(clientFor(installationId, { signal, base: await apiBase() }), write, { grant })
     },
     checkHardLimits: (write, grant = null) => (checkHardLimits(write, grant) ? 'refused' : null),
+    /** The installation an instance runs on: the one its owner can see that holds every picked repository. */
+    async resolveMatch(match, ownerId) {
+      const repos = match?.github?.repos || []
+      if (!repos.length || match.github.installationId) return match
+      const seen = await stores.installations.forUser(ownerId)
+      const holds = seen.find((doc) => doc.allRepos || repos.every((r) => (doc.repos || []).includes(r)))
+      if (!holds) throw Object.assign(new Error(`Install Slatebox on GitHub for ${repos.join(', ')} first.`), { status: 409, code: 'github_not_installed' })
+      return { ...match, github: { ...match.github, installationId: String(holds._id ?? holds.installationId) } }
+    },
     /** Where "Install Slatebox on GitHub" goes: GitHub's install screen, with Slatebox's signed state. */
     async installUrl(userId, projectId = null) {
       const c = await appSettings.credentials()

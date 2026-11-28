@@ -14,7 +14,7 @@ import { createMemoryDb } from './mongo-memory.mjs'
 import { createFakeProjectsApi } from './projects-api.mjs'
 import { createFakeSlates } from './recipe-slates.mjs'
 
-export function createRecipeWorld({ recipes = [], now = Date.UTC(2026, 10, 27, 12), via = 'cloud', vendors = {}, ai = [] } = {}) {
+export function createRecipeWorld({ recipes = [], now = Date.UTC(2026, 10, 27, 12), via = 'cloud', vendors = {}, realVendors = {}, ai = [] } = {}) {
   const db = createMemoryDb()
   const store = createRecipeStore((name) => db[name])
   let at = now
@@ -43,6 +43,9 @@ export function createRecipeWorld({ recipes = [], now = Date.UTC(2026, 10, 27, 1
     orgRecipesOff: async (orgId) => state.orgOff.has(orgId),
     ownerPaused: async (userId) => state.ownerPaused.has(userId),
     isMember: async (userId, orgId) => state.members.has(`${userId}:${orgId}`),
+    isTeamAdmin: async (userId, orgId) => state.members.has(`${userId}:${orgId}:admin`),
+    setOwnerPaused: async (userId, paused) => { if (paused) state.ownerPaused.add(userId); else state.ownerPaused.delete(userId) },
+    setOrgRecipesOff: async (orgId, off) => { if (off) state.orgOff.add(orgId); else state.orgOff.delete(orgId) },
   }
   const performed = []
   const vendorPlugins = new Map()
@@ -57,6 +60,8 @@ export function createRecipeWorld({ recipes = [], now = Date.UTC(2026, 10, 27, 1
       checkHardLimits: () => null,
     })
   }
+  // Real vendor plug-ins (session, perform, checkHardLimits, resolveMatch as the server runs them), over fake APIs.
+  for (const [name, plugin] of Object.entries(realVendors)) vendorPlugins.set(name, plugin)
   const answers = [...ai]
   const aiCalls = []
   const complete = async (request) => {
@@ -91,6 +96,7 @@ export function createRecipeWorld({ recipes = [], now = Date.UTC(2026, 10, 27, 1
       },
       undo: async (principal, slateId, operationRunId) => ({ undone: operationRunId }),
       connected: async () => true, firstName: async (id) => (id === 'ana' ? 'Ana' : null), isServerAdmin: async (id) => id === 'admin', audit,
+      resolveMatch: async (manifest, match, ownerId) => (vendorPlugins.get(manifest.integration)?.resolveMatch ? vendorPlugins.get(manifest.integration).resolveMatch(match, ownerId) : match),
       notify: async (u, m) => { notices.push({ to: u, ...m }) },
     })
     const inbound = createInbound({ store, clock, sealer, manifestOf: (id) => recipeOf(id)?.manifest, enqueue: (instance, trigger) => queue.enqueue(instance, trigger), isOn: async () => !state.serverOff && state.installEnabled })
@@ -100,7 +106,9 @@ export function createRecipeWorld({ recipes = [], now = Date.UTC(2026, 10, 27, 1
       for (let k = 0; k < max; k += 1) {
         const claimed = await queue.claim()
         if (!claimed) break
-        out.push(await runner.runOne(claimed))
+        const outcome = await runner.runOne(claimed)
+        // the run as recorded (trigger, skippedReason, log), beside what runOne answered
+        out.push({ ...outcome, run: await store.runs.findOne({ _id: claimed.run._id }) })
       }
       return out
     }

@@ -20,20 +20,28 @@ export class CursorTooLarge extends Error {
   }
 }
 
-/** A vendor session whose every method call is counted (budget vendorCalls) and checks the signal. */
+/**
+ * A vendor session whose every method call is counted (budget vendorCalls) and checks the signal.
+ * A session that counts each real HTTP call itself (countsOwnCalls: true, as the Slack, Google and
+ * GitHub sessions do, all under the same budget) is handed over as it is, so no call counts twice.
+ * The wrapper is a new object, never a Proxy: sessions are frozen, and a Proxy may not hand back a
+ * different function for a frozen property.
+ */
 export function budgeted(session, budget, signal) {
-  if (!session || typeof session !== 'object') return session
-  return new Proxy(session, {
-    get(target, key) {
-      const value = target[key]
-      if (typeof value !== 'function') return value && typeof value === 'object' && !Array.isArray(value) ? budgeted(value, budget, signal) : value
-      return (...args) => {
+  if (!session || typeof session !== 'object' || Array.isArray(session)) return session
+  if (session.countsOwnCalls) return session
+  const out = {}
+  for (const key of Object.keys(session)) {
+    const value = session[key]
+    if (typeof value === 'function') {
+      out[key] = (...args) => {
         if (signal?.aborted) throw Object.assign(new Error('The run stopped.'), { name: 'AbortError', code: 'timeout' })
         budget.spend('vendorCalls', 1)
-        return value.apply(target, args)
+        return value.apply(session, args)
       }
-    },
-  })
+    } else out[key] = value && typeof value === 'object' ? budgeted(value, budget, signal) : value
+  }
+  return Object.freeze(out)
 }
 
 /**
@@ -48,7 +56,7 @@ export function budgeted(session, budget, signal) {
  *   quarantine(value)   enterprise/server/results.mjs
  *   retentionDays
  */
-export function createRecipeContext({ instance, run, manifest, signal = null, clock = Date.now, budget, vendors = {}, ai, store, readSlate = async () => null, mermaid = async () => null, emit = () => {}, quarantine = (v) => v, retentionDays = 180 }) {
+export function createRecipeContext({ instance, run, manifest, signal = null, clock = Date.now, budget, vendors = {}, ai, store, readSlate = async () => null, mermaid = async () => null, project = null, emit = () => {}, quarantine = (v) => v, retentionDays = 180 }) {
   const log = []
   const emitted = []
   let cursor = structuredClone(instance.cursor || {})
@@ -91,6 +99,8 @@ export function createRecipeContext({ instance, run, manifest, signal = null, cl
     ai: Object.freeze({ json: (request) => ai.json(request) }),
     ledger: Object.freeze(ledger),
     slates: Object.freeze({ read: (role, key = '') => readSlate(role, key), mermaid: (slateId, options = { canonical: true }) => mermaid(slateId, options) }),
+    // The project the recipe keeps (names, ids and dates only): its slates and the recipes in it.
+    ...(project && { project: Object.freeze({ listSlates: (options) => project.listSlates(options), recipes: () => project.recipes() }) }),
     setCursor(patch) {
       const next = { ...cursor, ...patch }
       if (Buffer.byteLength(JSON.stringify(next)) > CURSOR_BYTES) throw new CursorTooLarge()

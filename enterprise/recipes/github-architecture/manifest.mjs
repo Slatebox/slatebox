@@ -28,7 +28,7 @@ export const manifest = Object.freeze({
     additionalProperties: false,
     required: ['repos'],
     properties: {
-      repos: { type: 'array', minItems: 1, maxItems: 10, uniqueItems: true, items: REPO, title: 'Repositories' },
+      repos: { type: 'array', minItems: 1, maxItems: 10, uniqueItems: true, items: REPO, title: 'Repositories', 'x-slatebox-picker': 'repos' },
       include: { ...GLOBS, title: 'Only these paths' },
       exclude: { ...GLOBS, title: 'Leave out these paths', description: 'Added to the defaults: node_modules, vendor, dist, build, tests and generated code.' },
       groupingDepth: { type: 'integer', minimum: 1, maximum: 4, default: 2, title: 'Module depth', description: 'Folder levels a module spans when the repository has no workspace packages.' },

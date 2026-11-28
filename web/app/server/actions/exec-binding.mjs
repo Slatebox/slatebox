@@ -29,7 +29,7 @@
 // wrote goes under a labelled field (details.content, with who wrote it); anything else is a
 // channel for injected instructions into the agent reading the error.
 
-export const NEVER_BOUND = Object.freeze([/^apiTokens\./, /^exec\.(run|get)$/, /^teamMove\./, /^slates\.addPhoto$/, /^audit\./, /^recipes\.(grant|revoke|decideWrite|admin\.)/])
+export const NEVER_BOUND = Object.freeze([/^apiTokens\./, /^exec\.(run|get)$/, /^teamMove\./, /^slates\.addPhoto$/, /^audit\./, /^recipes\.(grant|revoke|decideWrite|pauseMine|team\.set|admin\.)/])
 
 export const isNeverBound = (id) => NEVER_BOUND.some((rule) => rule.test(id))
 

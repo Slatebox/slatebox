@@ -324,6 +324,10 @@ export function createRunner(deps) {
         return id ? slates.read(id) : null
       },
       mermaid: (slateId, options) => slates.mermaid?.(slateId, options) ?? null,
+      project: {
+        listSlates: async ({ folders = true } = {}) => (await projects.listSlates(instance.projectId, { folders })).map(({ _id, shareId, name, lastSaved, projectId }) => ({ _id, shareId, name, lastSaved, projectId, url: `${origin()}/canvas/${shareId}` })),
+        recipes: async () => (await store.instances.find({ projectId: instance.projectId }, { limit: 100 }).toArray()).map((r) => ({ id: r._id, name: r.name, agentName: recipeOf(r.recipeId)?.manifest?.agentName || r.name, slateMap: r.slateMap || {} })),
+      },
     })
     let answer
     try {
@@ -362,6 +366,31 @@ export function createRunner(deps) {
       }
       finalize({})
       return { state: partial ? 'partial' : 'done', stats, preview, skippedReason: null }
+    }
+
+    // Links a recipe names as { url } or { slate: { role, key } } (one of its own slates) become the
+    // address a note carries. A slate made later in this run is linked on the next run.
+    const shareIdOf = new Map()
+    const linkOf = async (link) => {
+      if (!link || typeof link === 'string') return link || null
+      if (typeof link.url === 'string') return link.url
+      if (link.slate?.role) {
+        const slateId = instance.slateMap?.[link.slate.key ? `${link.slate.role}/${link.slate.key}` : link.slate.role]
+        if (!slateId) return null
+        if (!shareIdOf.has(slateId)) shareIdOf.set(slateId, (await slates.read(slateId))?.shareId || null)
+        return shareIdOf.get(slateId) ? `${origin()}/canvas/${shareIdOf.get(slateId)}` : null
+      }
+      return null
+    }
+    const withLinks = async (items) => Promise.all((items || []).map(async (item) => (item?.link !== undefined ? { ...item, link: await linkOf(item.link) } : item)))
+    desired = {
+      ...desired,
+      slates: await Promise.all(desired.slates.map(async (d) => ({
+        ...d,
+        ...(d.graph && { graph: { ...d.graph, nodes: await withLinks(d.graph.nodes) } }),
+        ...(d.notes && { notes: await withLinks(d.notes) }),
+        ...(d.boards && { boards: await Promise.all(d.boards.map(async (b) => ({ ...b, cards: await withLinks(b.cards) }))) }),
+      }))),
     }
 
     const revisionBySlate = { ...(instance.lastRun?.revisionBySlate || {}) }
@@ -468,6 +497,7 @@ function reasonText(reason) {
     sign_in: 'sign in to the integration again, then resume it.',
     failures: 'it failed 3 times in a row.',
     grant_revoked: 'a permission it used was taken back.',
+    admin: 'an administrator paused every recipe on this server.',
     unknown_recipe: 'this server does not carry that recipe.',
     uninstalled: 'the app was removed from the integration.',
     permissions_changed: 'the integration\'s permissions changed.',

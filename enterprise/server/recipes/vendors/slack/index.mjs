@@ -65,6 +65,23 @@ export function createVendor({ integrationOf, tokenFor, fetch, config, gates, st
 
     routes: () => [],
 
+    /** The workspace a new Slack recipe reads: the owner's connected one (setup never types it). */
+    async resolveMatch(match, ownerId) {
+      if (match?.slack?.teamId) return match
+      const row = await integrationOf(ownerId)
+      const teamId = row?.slackTeamId || row?.account?.teamId || null
+      if (!teamId) throw Object.assign(new Error('Connect Slack on the Integrations page first.'), { status: 409, code: 'slack_not_connected' })
+      return { ...match, slack: { ...match.slack, teamId } }
+    },
+
+    /** The channels the owner is in, for the setup picker: [{ value, label }]. */
+    async channelsFor(ownerId) {
+      const { row, teamId, token } = await signedIn({ ownerId, match: {} })
+      const cfg = config()
+      const session = createSlackRecipeSession({ token, teamId, slackUserId: row.slackUserId || null, account: row.account || {}, instanceId: 'picker', call: slackCall, gates, listed: cfg.listed, historyLimit: cfg.historyLimit, historyPerMinute: cfg.historyPerMinute, stores, budget: null, signal: null, now })
+      return (await session.channels()).map((c) => ({ value: c.id, label: `${c.private ? '' : '#'}${c.name}` }))
+    },
+
     /** The Slack events route's recipe hand-off (message, reaction_added, reaction_removed). */
     ingest,
 

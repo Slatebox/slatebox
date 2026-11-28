@@ -30,6 +30,8 @@ import { SlateEvents } from '/server/slate-save.js'
 import { slateBoards } from '/imports/api/common/slate-boards.mjs'
 import { firstNameOf } from '/imports/api/common/agent-label.mjs'
 import { Messages, Organizations, Slates } from '/imports/api/common/models'
+import AuthManager from '/imports/api/common/AuthManager'
+import CONSTANTS from '/imports/api/common/constants'
 import { createMcpFetch, checkMcpUrl } from '../mcp-fetch.mjs'
 import { connectorSettings } from '../connector-settings.mjs'
 import { quarantine } from '../results.mjs'
@@ -167,6 +169,9 @@ export function startRecipes({ via = null, isUnlocked = () => true, projects, re
     orgRecipesOff: async (orgId) => Boolean((await Organizations.findOneAsync({ _id: orgId }, { fields: { recipesOff: 1 } }))?.recipesOff),
     ownerPaused: async (userId) => Boolean((await Meteor.users.findOneAsync({ _id: userId }, { fields: { 'profile.recipesPaused': 1 } }))?.profile?.recipesPaused),
     isMember: async (userId, orgId) => (await Meteor.users.findOneAsync({ _id: userId }, { fields: { orgId: 1 } }))?.orgId === orgId,
+    isTeamAdmin: async (userId) => Boolean(await AuthManager.userHasClaim(userId, [CONSTANTS.claims.admin._id])),
+    setOwnerPaused: (userId, paused) => Meteor.users.updateAsync({ _id: userId }, { $set: { 'profile.recipesPaused': Boolean(paused) } }),
+    setOrgRecipesOff: (orgId, off) => Organizations.updateAsync({ _id: orgId }, { $set: { recipesOff: Boolean(off) } }),
   }
   const firstName = async (userId) => firstNameOf(await Meteor.users.findOneAsync(userId, { fields: { profile: 1, emails: 1 } }))
 
@@ -221,7 +226,10 @@ export function startRecipes({ via = null, isUnlocked = () => true, projects, re
     onRevoked: (instance) => runner.stopInstance(instance, 'paused', 'grant_revoked'),
   })
   for (const factory of vendorFactories) {
-    const vendor = factory({ store, clock, trigger, settings: Meteor.settings, log, permissions })
+    const vendor = factory({
+      store, clock, trigger, settings: Meteor.settings, log, permissions, master, origin: appOrigin, audit,
+      collection: (name) => MongoInternals.defaultRemoteCollectionDriver().mongo.db.collection(name),
+    })
     vendors.set(vendor.name, vendor)
   }
   runner = createRunner({
@@ -244,6 +252,16 @@ export function startRecipes({ via = null, isUnlocked = () => true, projects, re
     // whether the person connected the integration a recipe needs (their integrations, by address)
     connected: async (userId, integration) => Boolean(await MongoInternals.defaultRemoteCollectionDriver().mongo.db.collection('integrations').findOne({ ownerId: userId, address: { $regex: integration === 'google' ? 'google' : integration } }, { projection: { _id: 1 } })),
     firstName,
+    // a config picker's choices: the repositories the Slatebox GitHub App shows the person
+    pickerOptions: async (userId, manifest, picker) => {
+      if (picker === 'repos' && vendors.get('github')) {
+        const seen = await vendors.get('github').stores.installations.forUser(userId)
+        return seen.flatMap((i) => i.repos.map((repo) => ({ value: repo, label: i.account ? `${repo} (${i.account})` : repo })))
+      }
+      if (picker === 'channels' && vendors.get('slack')?.channelsFor) return vendors.get('slack').channelsFor(userId)
+      return []
+    },
+    resolveMatch: async (manifest, match, ownerId) => (vendors.get(manifest.integration)?.resolveMatch ? vendors.get(manifest.integration).resolveMatch(match, ownerId) : match),
     isServerAdmin: async (userId) => Boolean(await deps.aiControlAdmin?.(userId)),
     audit,
     notify,
@@ -300,5 +318,11 @@ export function startRecipes({ via = null, isUnlocked = () => true, projects, re
     return collections.recipeNotes.find({ slateId: opened.slateBase._id, owner: 'recipe', gone: false, pending: false }, { fields: { instanceId: 1, slateId: 1, noteId: 1, kind: 1 } })
   })
 
-  return { service, inbound, vendors, store, queue, runner, trigger }
+  // A vendor says its instances lost their sign-in or access (an uninstalled App, a removed repository).
+  const pause = async (selector, state = 'needs_sign_in') => {
+    const matched = await store.instances.find({ state: 'active', ...selector }, { limit: 200 }).toArray()
+    for (const instance of matched) await runner.stopInstance(instance, state, state === 'blocked_access' ? 'access' : 'sign_in')
+    return matched.length
+  }
+  return { service, inbound, vendors, store, queue, runner, trigger, pause }
 }

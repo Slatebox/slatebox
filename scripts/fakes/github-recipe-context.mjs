@@ -5,14 +5,17 @@
 // read calls only) over a fake GitHub (github-api.mjs).
 import { createGithubClient, createInstallationGate } from '../../enterprise/server/recipes/vendors/github/client.mjs'
 import { READ_CALLS } from '../../enterprise/server/recipes/vendors/github/index.mjs'
+import { OWN_EVENT_DATA } from '../../enterprise/common/recipes/events.mjs'
+import { validate } from '../../web/app/server/actions/schema.mjs'
 
 export function memoryLedger() {
   const rows = new Map()
   const tombs = new Set()
   return {
     rows,
+    // As the runtime's ledger (enterprise/server/recipes/context.mjs): a row's data, or null.
     async get(key) {
-      return rows.has(key) ? structuredClone(rows.get(key)) : null
+      return rows.has(key) ? structuredClone(rows.get(key).data ?? null) : null
     },
     async upsert(list) {
       for (const row of list) rows.set(row.key, structuredClone({ ...row, at: row.at ?? Date.now() }))
@@ -77,7 +80,10 @@ export function createTestContext({ github, installationId = '42', instance = {}
     log(level, code, msg) {
       log.push({ level, code, msg: `${msg}`.slice(0, 200) })
     },
+    // As the runtime checks a recipe's own events (context.mjs): flat data, names and numbers only.
     emit(event, data) {
+      const invalid = validate(OWN_EVENT_DATA, data)
+      if (invalid) throw new Error(`${event}: ${invalid.message}`)
       events.push({ event, data })
     },
     quarantine: (value) => value,

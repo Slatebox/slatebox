@@ -24,7 +24,7 @@ export const manifest = Object.freeze({
     additionalProperties: false,
     required: ['repos'],
     properties: {
-      repos: { type: 'array', minItems: 1, maxItems: 10, uniqueItems: true, items: REPO, title: 'Repositories' },
+      repos: { type: 'array', minItems: 1, maxItems: 10, uniqueItems: true, items: REPO, title: 'Repositories', 'x-slatebox-picker': 'repos' },
       mode: { type: 'string', enum: ['both', 'slate', 'comment'], default: 'both', title: 'Where the impact goes' },
       skipLabel: { type: 'string', maxLength: 50, default: 'no-slatebox', title: 'Skip pull requests with this label' },
       includeDrafts: { type: 'boolean', default: false, title: 'Draft pull requests too' },

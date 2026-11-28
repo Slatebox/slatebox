@@ -74,13 +74,16 @@ export function checkTriggers(manifest, triggers) {
  *   permissions, outbound, sealer { seal(hookId, plain), open(hookId, sealed) }, checkHookUrl(url) (throws),
  *   slateIdFor(principal, shareId) → { slateId, canRead } | null, undo(principal, slateId, operationRunId),
  *   connected(userId, integration) → bool, firstName(userId), orgOf(projectId) → orgId | null,
- *   isServerAdmin(userId), audit(entry), notify(userId, message), via ('cloud'|'self-host')
+ *   isServerAdmin(userId), audit(entry), notify(userId, message), via ('cloud'|'self-host'),
+ *   resolveMatch(manifest, match, ownerId) → match (a vendor fills in what config does not say, such
+ *     as the GitHub installation holding the picked repositories; refuses when there is none)
  * }
  */
 export function createRecipeService(deps) {
   const { store, queue, runner, clock = Date.now, recipeOf, catalog, projects, switches, permissions, outbound, sealer, checkHookUrl = () => {}, slateIdFor, undo, connected = async () => false, firstName = async () => null, isServerAdmin = async () => false, audit = async () => {}, notify = async () => {} } = deps
   const newId = deps.randomId || (() => Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10))
   const { instances, runs, hooks, deliveries, notes, grants, cards } = store
+  const resolveMatch = deps.resolveMatch || (async (_manifest, match) => match)
 
   async function requireOn(orgId = null) {
     if ((await switches.serverOff()) || !(await switches.installEnabled())) refuse(409, 'recipes_off', RECIPES_OFF)
@@ -177,7 +180,7 @@ export function createRecipeService(deps) {
         _id: newId(), recipeId, recipeVersion: manifest.version, projectId, ownerId: principal.userId, orgId: project?.orgId ?? null,
         name: String(name || defaultName(manifest, checked)).replace(/\s+/g, ' ').trim().slice(0, 120),
         config: checked, triggers: triggers ? checkTriggers(manifest, triggers) : defaultTriggers(manifest),
-        match: matchFor(manifest, checked), state: 'draft', pausedBy: null, pausedReason: null, applyMode: 'suggest', firstRunKept: false,
+        match: await resolveMatch(manifest, matchFor(manifest, checked), principal.userId), state: 'draft', pausedBy: null, pausedReason: null, applyMode: 'suggest', firstRunKept: false,
         nextDueAt: null, debounceUntil: null, pendingTrigger: null, lock: null, cursor: {}, slateMap: {}, failures: 0, lastRun: null,
         colorIndex: (await instances.countDocuments({ projectId })) % PALETTE, created: now, updated: now, rev: 0,
       }
@@ -193,7 +196,7 @@ export function createRecipeService(deps) {
       const set = {}
       if (config !== undefined) {
         set.config = checkConfig(manifest, config)
-        set.match = matchFor(manifest, set.config)
+        set.match = await resolveMatch(manifest, matchFor(manifest, set.config), instance.ownerId)
       }
       if (triggers !== undefined) set.triggers = checkTriggers(manifest, triggers)
       if (name !== undefined) set.name = String(name).replace(/\s+/g, ' ').trim().slice(0, 120) || instance.name
@@ -467,6 +470,63 @@ export function createRecipeService(deps) {
     async adminStatus(principal) {
       if (!(await isServerAdmin(principal.userId))) refuse(403, 'forbidden', 'Only an administrator of this server can see this.')
       return { enabled: Boolean(await switches.installEnabled()), serverOff: Boolean(await switches.serverOff()), counts: { active: await instances.countDocuments({ state: 'active' }), all: await instances.countDocuments({}), running: await runs.countDocuments({ state: 'running' }) }, limits: { ...RECIPE_LIMITS } }
+    },
+
+    // ---------- the wider switches (B.10): project, owner, team, server ----------
+    /** "Pause recipes in this project" (manager or above): no recipe there runs until it is resumed. */
+    async pauseProject(principal, projectId, paused) {
+      await needRole(principal, projectId, 'manager', 'pause its recipes')
+      await projects.setRecipesPaused(principal.userId, projectId, Boolean(paused))
+      const rows = await instances.find({ projectId }, { limit: 200 }).toArray()
+      for (const instance of rows) await outbound.emit({ type: paused ? 'recipe.paused' : 'recipe.resumed', instance, data: paused ? { reason: 'project', by: principal.userId } : {} }).catch(() => {})
+      return { projectId, paused: Boolean(paused) }
+    },
+
+    /** Whether the caller paused every recipe that runs for them (the profile switch). */
+    async mine(principal) {
+      return { paused: Boolean(await switches.ownerPaused(principal.userId)), count: await instances.countDocuments({ ownerId: principal.userId }) }
+    },
+
+    /** "Pause all my recipes": none that runs for the caller runs until they turn it back. */
+    async pauseMine(principal, paused) {
+      if (principal.kind !== 'person') refuse(403, 'forbidden', 'Only you can pause all your recipes, in your profile.')
+      await switches.setOwnerPaused(principal.userId, Boolean(paused))
+      const rows = await instances.find({ ownerId: principal.userId }, { limit: 200 }).toArray()
+      for (const instance of rows) {
+        await record(paused ? 'recipe.paused' : 'recipe.resumed', instance, paused ? { reason: 'owner' } : {})
+        await outbound.emit({ type: paused ? 'recipe.paused' : 'recipe.resumed', instance, data: paused ? { reason: 'owner', by: principal.userId } : {} }).catch(() => {})
+      }
+      return { paused: Boolean(paused) }
+    },
+
+    /** Whether a team allows recipes (Team settings). Any member may read it. */
+    async teamGet(principal, orgId) {
+      if (!(await switches.isMember(principal.userId, orgId))) refuse(404, 'not_found', 'That team is not yours.')
+      return { orgId, allowed: !(await switches.orgRecipesOff(orgId)) }
+    },
+
+    /** "Allow recipes for this team" (team admins): off, no recipe in the team's projects runs. */
+    async teamSet(principal, orgId, allowed) {
+      if (principal.kind !== 'person' || !(await switches.isMember(principal.userId, orgId)) || !(await switches.isTeamAdmin(principal.userId, orgId))) refuse(403, 'forbidden', 'Only an admin of this team can change this.')
+      await switches.setOrgRecipesOff(orgId, !allowed)
+      await audit({ action: allowed ? 'recipe.resumed' : 'recipe.paused', project: `team:${orgId}`, orgId, details: { reason: 'team', outcome: allowed ? 'allowed' : 'off' } })
+      return { orgId, allowed: Boolean(allowed) }
+    },
+
+    /** Every active recipe on this server paused at once (Admin › Recipes). */
+    async adminPauseAll(principal) {
+      if (principal.kind !== 'person' || !(await isServerAdmin(principal.userId))) refuse(403, 'forbidden', 'Only an administrator of this server can pause every recipe.')
+      const rows = await instances.find({ state: 'active' }, { limit: 5000 }).toArray()
+      for (const instance of rows) await runner.stopInstance(instance, 'paused', 'admin')
+      return { paused: rows.length }
+    },
+
+    /** The choices a config picker offers the caller: GitHub repositories the App sees, Slack channels. */
+    async pickerOptions(principal, recipeId, picker) {
+      const manifest = manifestOf(recipeId)
+      if (!manifest) refuse(404, 'unknown_recipe', 'There is no such recipe.')
+      const options = deps.pickerOptions ? await deps.pickerOptions(principal.userId, manifest, picker) : []
+      return { options: (options || []).slice(0, 500) }
     },
 
     /** Called when a person loses access to a project (removed from the team, unshared, account deleted). */

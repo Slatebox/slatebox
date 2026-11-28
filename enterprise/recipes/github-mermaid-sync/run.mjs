@@ -105,7 +105,7 @@ export default async function run(ctx) {
           }))
           if (conflicts.length) {
             allConflicts.push(...conflicts.map((c) => ({ file: path, kind: c.kind, id: c.id })))
-            ctx.emit('mermaid.sync.conflict', { file: path, elements: conflicts.map((c) => ({ kind: c.kind, id: c.id })) })
+            ctx.emit('mermaid.sync.conflict', { file: path, elements: conflicts.map((c) => `${c.kind}:${c.id}`) })
           }
           if (sync.plans.length || notes.length) slates.push({ role: 'mapped', key: map.shareId, slateId, expectedRevision: revision, plans: sync.plans, notes })
           entry.base = theirs

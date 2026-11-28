@@ -53,7 +53,7 @@ export default async function run(ctx) {
   for (const { repo, number } of pulls.slice(0, PER_RUN)) {
     const pr = await github.pull(repo, number)
     const key = `${repo}#${number}`
-    const kept = (await ctx.ledger.get(`pr:${key}`))?.data ?? null
+    const kept = (await ctx.ledger.get(`pr:${key}`)) ?? null
     const labels = (pr.labels || []).map((l) => l.name)
     if (config.skipLabel && labels.includes(config.skipLabel)) {
       ctx.log('info', 'skipped_label', `#${number} has the ${config.skipLabel} label`)
@@ -81,7 +81,7 @@ export default async function run(ctx) {
       ctx.log('info', 'skipped_small', `#${number} changes ${files.length} file${files.length === 1 ? '' : 's'}`)
       continue
     }
-    const stored = (await ctx.ledger.get(`facts:${repo}`))?.data ?? null
+    const stored = (await ctx.ledger.get(`facts:${repo}`)) ?? null
     const base = await factsAt(github, repo, pr.base.sha, { config, stored })
     await ctx.ledger.upsert([{ key: `facts:${repo}`, kind: 'facts', data: { sha: base.sha, configKey: base.configKey, facts: base.facts, context: base.context } }])
     const head = await headFacts(github, repo, base, files, pr.head.sha, { config })
@@ -123,7 +123,7 @@ export default async function run(ctx) {
       })
     }
     await ctx.ledger.upsert([{ key: `pr:${key}`, kind: 'pr', data: { headSha: pr.head.sha, state: 'open', render, slate } }])
-    ctx.emit('pr_impact.ready', { repo, number, headSha: pr.head.sha, counts: impact.counts })
+    ctx.emit('pr_impact.ready', { repo, number, headSha: pr.head.sha, ...impact.counts })
     for (const e of delta.added.moduleEdges.slice(0, 20)) ctx.emit('pr_impact.new_dependency', { repo, number, from: e.from, to: e.to })
     if (impact.counts.servicesChanged || files.some((f) => isInfra(f.path) && !contextPath(f.path)))
       ctx.emit('pr_impact.service_changed', { repo, number, added: impact.services.added.map((s) => s.key), removed: impact.services.removed.map((s) => s.key) })

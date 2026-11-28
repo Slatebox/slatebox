@@ -85,7 +85,7 @@ export default async function run(ctx) {
 
   for (const repo of touched) {
     const head = await github.head(repo)
-    const stored = (await ctx.ledger.get(`facts:${repo}`))?.data ?? null
+    const stored = (await ctx.ledger.get(`facts:${repo}`)) ?? null
     const scan = await factsAt(github, repo, head.sha, { config, stored })
     stats.repos += 1
     stats[scan.mode] += 1
@@ -94,7 +94,7 @@ export default async function run(ctx) {
       continue
     }
     const model = { ...buildModel({ repo, sha: head.sha, facts: scan.facts, context: scan.context, config }), branch: head.defaultBranch, at: now }
-    const before = (await ctx.ledger.get(`model:${repo}`))?.data ?? null
+    const before = (await ctx.ledger.get(`model:${repo}`)) ?? null
     const delta = diffModels(before, model)
     // A module renamed in code (the same files under a new folder): its note takes the person's
     // words and colors from the old one (reconcile reads carryFrom once).
@@ -122,8 +122,9 @@ export default async function run(ctx) {
         ctx.emit('architecture.updated', {
           repo,
           sha: head.sha,
-          added: { modules: delta.added.modules.length, edges: delta.added.moduleEdges.length, services: delta.added.services.length, endpoints: delta.added.endpoints.length },
-          removed: { modules: delta.removed.modules.length, edges: delta.removed.moduleEdges.length, services: delta.removed.services.length, endpoints: delta.removed.endpoints.length },
+          // flat: an event's data is names and numbers (enterprise/common/recipes/events.mjs)
+          modulesAdded: delta.added.modules.length, edgesAdded: delta.added.moduleEdges.length, servicesAdded: delta.added.services.length, endpointsAdded: delta.added.endpoints.length,
+          modulesRemoved: delta.removed.modules.length, edgesRemoved: delta.removed.moduleEdges.length, servicesRemoved: delta.removed.services.length, endpointsRemoved: delta.removed.endpoints.length,
         })
       if (config.checkRun && trigger.event === 'github.push') {
         const changedModules = delta.added.modules.length + delta.removed.modules.length
@@ -143,7 +144,7 @@ export default async function run(ctx) {
 
     // Names for modules whose files changed (or that have none yet).
     if (config.labels !== false && ctx.ai) {
-      const labelsNow = (await ctx.ledger.get(`labels:${repo}`))?.data ?? {}
+      const labelsNow = (await ctx.ledger.get(`labels:${repo}`)) ?? {}
       const changed = new Set([...delta.added.modules.map((m) => m.key), ...model.modules.filter((m) => !before || scan.changed.some((p) => m.files.includes(p))).map((m) => m.key)])
       const named = await nameModules(ctx, model, labelsNow, changed)
       if (named.partial) partial = 'ai_refused'
@@ -162,10 +163,10 @@ export default async function run(ctx) {
   const models = []
   const labels = {}
   for (const repo of config.repos) {
-    const m = (await ctx.ledger.get(`model:${repo}`))?.data
+    const m = await ctx.ledger.get(`model:${repo}`)
     if (!m) continue
     models.push(m)
-    Object.assign(labels, (await ctx.ledger.get(`labels:${repo}`))?.data ?? {})
+    Object.assign(labels, (await ctx.ledger.get(`labels:${repo}`)) ?? {})
   }
   const slates = []
   if (views.serviceMap) slates.push(serviceMap(models, { deploys: cursor.deploys, now }))

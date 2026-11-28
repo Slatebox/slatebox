@@ -59,11 +59,17 @@ test('the rule itself', () => {
   assert.equal(recipeMayImport(shared, '../../server/recipes/vendors/slack/session.mjs'), false)
 })
 
+// A fixture (a sample repository kept as a module, enterprise/recipes/*/fixtures/) holds source files
+// as template strings: their import lines are data, never run. Its own code is what is left once
+// those strings are blanked (newlines kept), and that is held to the same rule.
+const withoutTemplates = (text) => text.replace(/`(?:\\[\s\S]|[^`\\])*`/g, (m) => m.replace(/[^\n]/g, ' '))
 test('every built-in recipe imports only what it may', () => {
   const bad = []
   for (const file of files(join(root, 'enterprise/recipes'))) {
-    for (const specifier of importsOf(readFileSync(file, 'utf8'))) if (!recipeMayImport(file, specifier)) bad.push(`${relative(root, file)}: ${specifier}`)
-    if (/\bfetch\s*\(|globalThis\.fetch|process\.env/.test(readFileSync(file, 'utf8'))) bad.push(`${relative(root, file)}: calls fetch or reads the environment`)
+    const raw = readFileSync(file, 'utf8')
+    const text = file.includes('/fixtures/') ? withoutTemplates(raw) : raw
+    for (const specifier of importsOf(text)) if (!recipeMayImport(file, specifier)) bad.push(`${relative(root, file)}: ${specifier}`)
+    if (/\bfetch\s*\(|globalThis\.fetch|process\.env/.test(text)) bad.push(`${relative(root, file)}: calls fetch or reads the environment`)
   }
   assert.deepEqual(bad, [])
 })

@@ -20,7 +20,9 @@ const build = (service = () => ({})) => createAppRegistry({ extraActions: recipe
 test('every recipes action is accepted, with the scopes recipes add', () => {
   const registry = build()
   const ours = registry.list().filter((a) => a.id.startsWith('recipes.'))
-  assert.equal(ours.length, 27)
+  // 27 of the runtime, plus the switches the Recipes UI sets (project, owner, team, server) and its pickers
+  assert.equal(ours.length, 34)
+  for (const id of ['recipes.pauseProject', 'recipes.mine', 'recipes.pauseMine', 'recipes.team.get', 'recipes.team.set', 'recipes.pickerOptions', 'recipes.admin.pauseAll']) assert.ok(registry.get(id), id)
   const scopes = new Set(ours.map((a) => a.scope))
   for (const scope of ENTERPRISE_ONLY_SCOPES) assert.ok(scopes.has(scope), scope)
   assert.deepEqual(registry.neededScopes().filter((s) => s.startsWith('recipes:')), [...ENTERPRISE_ONLY_SCOPES])
@@ -28,7 +30,7 @@ test('every recipes action is accepted, with the scopes recipes add', () => {
 
 test('permissions outside Slatebox, approvals and the server switch: people only, in the app', () => {
   const registry = build()
-  for (const id of ['recipes.grant', 'recipes.revoke', 'recipes.decideWrite', 'recipes.admin.setEnabled', 'recipes.admin.status']) {
+  for (const id of ['recipes.grant', 'recipes.revoke', 'recipes.decideWrite', 'recipes.admin.setEnabled', 'recipes.admin.status', 'recipes.admin.pauseAll', 'recipes.pauseMine', 'recipes.team.set']) {
     const action = registry.get(id)
     assert.deepEqual(action.principals, ['person'], id)
     assert.equal(action.mounts.http, null, id)
@@ -43,6 +45,8 @@ test('literal routes come before /recipes/{instanceId}', () => {
   const paths = recipeActions(() => ({})).filter((a) => a.mounts.http).map((a) => `${a.mounts.http.method} ${a.mounts.http.path}`)
   assert.ok(paths.indexOf('GET /recipes/catalog') < paths.indexOf('GET /recipes/{instanceId}'))
   assert.ok(paths.indexOf('GET /recipes/hooks') < paths.indexOf('GET /recipes/{instanceId}'))
+  assert.ok(paths.indexOf('GET /recipes/mine') < paths.indexOf('GET /recipes/{instanceId}'))
+  assert.ok(paths.indexOf('GET /recipes/picker-options') < paths.indexOf('GET /recipes/{instanceId}'))
 })
 
 test('a token runs a recipe through the registry; refusals keep their codes; grant needs a person', async () => {

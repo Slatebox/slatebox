@@ -277,12 +277,13 @@ test('App credentials entered in Admin are sealed and never shown; the manifest 
 test('the GitHub App actions: one registry with the recipes scope, every write says what the log keeps, admins only', async () => {
   const { githubAppActions } = await import('../enterprise/server/recipes/vendors/github/actions.mjs')
   const { createAppRegistry } = await import('../web/app/server/actions/index.mjs')
-  const { API_TOKEN_SCOPES } = await import('../web/app/server/api-token-core.mjs')
+  const { API_TOKEN_SCOPES, ENTERPRISE_ONLY_SCOPES } = await import('../web/app/server/api-token-core.mjs')
   const { vendor } = vendorWorld()
   const list = githubAppActions(() => vendor)
-  // recipes:read is the runtime's scope (design B.13); without it the registry refuses the action.
-  assert.throws(() => createAppRegistry({ extraActions: list }), /unknown scope recipes:read/)
-  const registry = createAppRegistry({ extraActions: list, scopes: [...API_TOKEN_SCOPES, 'recipes:read'] })
+  // recipes:read is the runtime's scope (design B.13), one of the scopes only enterprise actions check.
+  assert.ok(API_TOKEN_SCOPES.includes('recipes:read') && ENTERPRISE_ONLY_SCOPES.includes('recipes:read'))
+  assert.throws(() => createAppRegistry({ extraActions: list, scopes: API_TOKEN_SCOPES.filter((s) => s !== 'recipes:read') }), /unknown scope recipes:read/)
+  const registry = createAppRegistry({ extraActions: list })
   const ours = registry.list().filter((a) => a.id.includes('githubApp') || a.id.startsWith('recipes.github'))
   assert.deepEqual(ours.map((a) => a.id).sort(), ['connectors.githubApp.clear', 'connectors.githubApp.get', 'connectors.githubApp.manifest', 'connectors.githubApp.set', 'recipes.github.installations'])
   for (const a of ours.filter((x) => x.kind === 'write')) {

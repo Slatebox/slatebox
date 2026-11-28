@@ -210,11 +210,17 @@ const humanize = (key) => {
  * `x-slatebox-picker` names a picker: 'repos' (GitHub repos the install sees), 'channels' (Slack
  * channels the person is in), 'files' (Google Picker), 'cron' (schedule presets), 'paths' (globs).
  */
+// The recipes' own picker names (x-picker in enterprise/recipes/*/manifest.mjs) as the form's.
+// 'server': Slatebox fills the value in from the person's connection (the Slack workspace), so the
+// form shows no field for it.
+const X_PICKERS = Object.freeze({ 'slack.channel': 'channels', 'google.doc': 'files', 'google.sheet': 'files', 'slack.workspace': 'server' })
+const pickerOf = (p) => p['x-slatebox-picker'] || X_PICKERS[p['x-picker']] || null
+
 export function configFields(schema) {
   const props = schema?.properties || {}
   const required = new Set(schema?.required || [])
-  return Object.entries(props).map(([key, p]) => {
-    const picker = p['x-slatebox-picker'] || null
+  return Object.entries(props).filter(([, p]) => pickerOf(p) !== 'server').map(([key, p]) => {
+    const picker = pickerOf(p)
     let kind = 'text'
     if (picker) kind = picker
     else if (Array.isArray(p.enum)) kind = 'select'
@@ -272,7 +278,7 @@ export function validateConfig(schema, value) {
     else if (Array.isArray(x) && p.minItems !== undefined && x.length < p.minItems) errors[key] = `Choose at least ${p.minItems}.`
     else if (Array.isArray(x) && p.maxItems !== undefined && x.length > p.maxItems) errors[key] = `Choose at most ${p.maxItems}.`
     else if (Array.isArray(x) && Array.isArray(p.items?.enum) && x.some((i) => !p.items.enum.includes(i))) errors[key] = 'Choose from the options.'
-    else if (p['x-slatebox-picker'] === 'cron') { const c = validateCron(x); if (!c.ok) errors[key] = c.error }
+    else if (pickerOf(p) === 'cron') { const c = validateCron(x); if (!c.ok) errors[key] = c.error }
   }
   if (schema?.additionalProperties === false) {
     for (const key of Object.keys(v)) if (!props[key]) errors[key] = 'This recipe has no such setting.'

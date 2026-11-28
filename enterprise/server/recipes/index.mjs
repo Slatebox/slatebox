@@ -23,16 +23,22 @@ import googleSheetBoard from '../../recipes/google-sheet-board/index.mjs'
 import googleDesignDoc from '../../recipes/google-design-doc/index.mjs'
 import webhookRender from '../../recipes/webhook-render/index.mjs'
 import projectIndex from '../../recipes/project-index/index.mjs'
+import githubArchitecture from '../../recipes/github-architecture/index.mjs'
+import githubPrImpact from '../../recipes/github-pr-impact/index.mjs'
 import { slackVendorFactory } from './vendors/slack/factory.mjs'
 import { googleVendorFactory } from './vendors/google/factory.mjs'
+import { githubVendorFactory } from './vendors/github/factory.mjs'
+import { githubAppActions } from './vendors/github/actions.mjs'
 
 export const RECIPE_MODULES = Object.freeze([
+  githubArchitecture, githubPrImpact, // GitHub (the Slatebox GitHub App)
   slackDecisionLog, slackTimeline, slackConcepts, slackDigest, // Slack (one channel ledger)
   googleSheetBoard, googleDesignDoc, // Google (drive.file)
   webhookRender, projectIndex, // any system; the project itself
 ])
 
 export const VENDOR_FACTORIES = Object.freeze([
+  githubVendorFactory,
   slackVendorFactory,
   googleVendorFactory,
 ])
@@ -67,13 +73,14 @@ const send = (res, status, body, headers = {}) => {
 }
 
 /** What an entry the runtime records becomes in the activity log (server/audit). */
-export function auditEntry({ action, instance = null, project = null, server = false, details = {} }) {
+export function auditEntry({ action, instance = null, project = null, orgId = null, server = false, details = {} }) {
   if (server) return { scope: 'server', action, target: { type: 'recipe', id: 'install', name: 'Recipes' }, details }
   return {
     action,
     ...(instance && { target: { type: 'recipe', id: instance._id, name: instance.name } }),
     ...(!instance && project && { target: { type: 'recipe', id: String(project), name: 'Project webhooks' } }),
     ...(instance?.orgId && { orgId: instance.orgId }),
+    ...(!instance && orgId && { orgId }),
     details: Object.fromEntries(Object.entries(details).filter(([, v]) => v !== undefined && v !== null).map(([k, v]) => [k, typeof v === 'string' ? v.slice(0, 120) : v])),
   }
 }
@@ -87,6 +94,8 @@ export function registerRecipes(api, context) {
     return started.service
   }
   api.addActions(recipeActions(running))
+  // Admin › Integration apps › GitHub App, and the installations a person may pick for a recipe.
+  api.addActions(githubAppActions(() => started?.vendors.get('github') || null))
   // A recipe's inbound webhook: its signed body, read raw (server/raw-body-paths.mjs).
   api.addRoute({
     method: 'POST',
@@ -116,7 +125,15 @@ export function registerRecipes(api, context) {
           const handler = vendor?.routes?.().find((r) => r.path === route.path && r.method === route.method)?.handler
           if (!handler) return send(res, 404, { error: { code: 'not_found', message: 'Not found.' } })
           const rawBody = route.raw ? await readRaw(req, 1024 * 1024) : undefined
-          return handler(req, res, { rawBody, trigger: started.trigger })
+          if (rawBody) req.rawBody = rawBody
+          // A vendor's event names what it is about ({ installationId, repo, ... }); the vendor says
+          // which instances that matches (matchInstances), and the runtime triggers or pauses them.
+          const selectorOf = (match) => (vendor.matchInstances ? vendor.matchInstances(match) : match)
+          return handler(req, res, {
+            rawBody,
+            trigger: (match, event) => started.trigger(selectorOf(match), event),
+            pause: (match, state) => started.pause(selectorOf(match), state),
+          })
         },
       })
     }
