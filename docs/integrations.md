@@ -195,6 +195,7 @@ administrator does, for their own install. Each one needs:
 | Provider (`oauthApps.<provider>`) | Cards | Where to register | Scopes Slatebox asks for |
 | --- | --- | --- | --- |
 | `slack` | Slack | api.slack.com/apps › Create New App › From a manifest: paste the manifest Admin › Integration apps › Slack shows (this server's address is already in it), install it to your workspace, then enter its client id, client secret and **signing secret** (settings: `oauthApps.slack.signingSecret`). A workspace admin may need to approve it | user: `search:read channels:read groups:read channels:history groups:history im:history mpim:history users:read chat:write reactions:write`; bot: `links:read links:write commands` |
+| `linear` | Linear for recipes (not the Linear gallery card, which is Linear's MCP server) | linear.app › Settings › API › OAuth applications › New: set the redirect URL above, make it public if people outside your own workspace will connect, turn on **Webhooks** with the URL `<your Slatebox address>/integrations/linear/events` and the events *Issues*, *Projects*, *Project updates*, *Cycles* and *Initiatives*, then enter its client id, client secret and webhook **signing secret** (settings: `oauthApps.linear.signingSecret`) | `read`, `issues:create`, `comments:create` (as the person: `actor=user`) |
 | `asana` | Asana | Asana developer console: an app for MCP V2 (confidential client) | what the server names (`default`) |
 | `hubspot` | HubSpot | HubSpot: Development › MCP Auth Apps | what the server names |
 | `box` | Box | Box Developer Console: an OAuth 2.0 app with the *Manage AI Requests* scope (or the admin's predefined *Box MCP Server* integration) | what the server names |
@@ -454,6 +455,19 @@ Slatebox may already open (ones it made, or ones picked before).
 5. `SLATEBOX_KEY_ENCRYPTION_KEY` must be set (the same key that seals agents' sign-ins).
 
 /admin/ai › Gallery shows each of these as set or missing, and turns Google on or off.
+
+## Self-hosting: setting up Linear for recipes
+
+1. In Linear, open **Settings › API › OAuth applications** and create an application. Its callback
+   URL is `<your Slatebox address>/connectors/oauth/callback`.
+2. Turn on **Webhooks** for the application with the URL `<your Slatebox address>/integrations/linear/events`
+   and the events *Issues*, *Projects*, *Project updates*, *Cycles* and *Initiatives*. Linear then
+   sends events for every workspace that authorizes the application. This server must be reachable
+   from the internet over https for them; without it the recipes still run nightly and on Run now.
+3. In Admin › AI control › Integration apps › Linear, enter the application's **client id**,
+   **client secret** and webhook **signing secret**, and save.
+4. `SLATEBOX_KEY_ENCRYPTION_KEY` must be set (it seals the secrets and every Linear sign-in).
+5. Turn recipes on in Admin › Recipes. People then connect Linear from Add a recipe.
 
 ## Self-hosting: setting up Slack
 

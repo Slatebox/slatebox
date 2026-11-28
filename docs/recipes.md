@@ -12,7 +12,7 @@ install). Projects, which recipes run in, are MIT core: see [projects.md](projec
 |---|---|
 | `enterprise/common/recipes/` | The manifest rules (`defineRecipe`), cron, events, UI words, the catalog |
 | `enterprise/server/recipes/` | The runtime: store, scheduler, queue, runner, reconcile, ownership, permissions, budgets, webhooks, actions |
-| `enterprise/server/recipes/vendors/<name>/` | GitHub, Slack and Google: sessions, routes, writes outside Slatebox |
+| `enterprise/server/recipes/vendors/<name>/` | GitHub, Slack, Google and Linear: sessions, routes, writes outside Slatebox |
 | `enterprise/recipes/<id>/` | One folder per built-in recipe: `manifest.mjs`, `run.mjs`, `render.mjs`, fixtures |
 | `enterprise/client/recipes/` | The Recipes tab, Add recipe, runs, webhooks, permissions, switches |
 
@@ -23,6 +23,9 @@ install). Projects, which recipes run in, are MIT core: see [projects.md](projec
 | Living architecture (`github-architecture`) | GitHub architect | every push to the default branch (2-minute quiet time), 03:00 daily, Run now, inbound data | A service map, a module graph and an API surface per repository, a "What changed" board. Extracts compose, k8s, Helm, Terraform, serverless, JS/TS, Python, Go, Java, Rust, Ruby, OpenAPI, GraphQL, proto, routes, CODEOWNERS and cycles. |
 | Diagrams as code (`github-mermaid-sync`) | Diagram keeper | someone edits a synced slate (10 minutes after that slate's last edit), Living architecture changing a synced slate, a push to the default branch that touches a synced file, Run now, Save to repo now | The slates you map, kept in step with Mermaid files in the repository: canvas changes go to one pull request on `slatebox/architecture`, merged file edits update the slates in place. |
 | Pull request impact (`github-pr-impact`) | PR reviewer | pull requests opened, updated, reopened, ready, closed | One slate per pull request in the Pull requests folder: what it adds, removes and touches. Can keep one diagram comment on the pull request (with your permission). |
+| Live roadmap from Linear (`linear-roadmap`) | Roadmap keeper | a Linear project, project update or initiative changes (2-minute quiet time), 03:00 daily, Run now; optionally issue changes | A Roadmap board per team (or initiative, or lead) with each open project in its target-date lane, a Dependencies map of which projects block which, and each project's latest health post. |
+| Cycle board from Linear (`linear-cycle-board`) | Cycle keeper | a Linear issue or cycle changes, 03:30 daily, Run now | One slate per team cycle in the Cycles folder: a board of its issues by status, what is blocked and by whom, and how its scope moved. |
+| Release map from Linear and GitHub (`linear-release-map`) | Release mapper | a GitHub release is published, 04:15 daily, Run now; optionally Linear issue changes | A frame per release with the Linear issues its commits name and each project's progress, and a board of what shipped but is still open in Linear. |
 | Decision log (`slack-decision-log`) | Decision keeper | new messages in your channels (folded every 30 minutes), 18:00 daily | A board of Decided, Revisited, Reversed and Maybe, each card linked to its thread. |
 | Project timeline (`slack-timeline`) | Timeline keeper | new messages | A launch plan with owners and dates, and a board of every commitment. A moved date shows the slip. |
 | Concept map (`slack-concepts`) | Glossary keeper | Mondays 08:00, new messages | The channels' vocabulary as a mind map, each term linked to where it was defined. |
@@ -61,6 +64,76 @@ Under the hood: the app tells recipes of every slate save (`web/app/server/recip
 `slateSaved`); `enterprise/server/recipes/slate-saves.mjs` keeps that cheap (a slate no recipe
 watches is one cached lookup; a watched one is folded per slate into the instance's due time), and
 the scheduler turns quiet slates into one `slate_saved` run. A recipe's own saves never count.
+
+### The Linear recipes
+
+**Connect Linear** once, from Add a recipe: Slatebox opens Linear's own page, you choose
+**Authorize**, and it is connected. Slatebox reads Linear as you, with your access there, and asks
+for `read`, `issues:create` (to change an issue's status, only when you allow it per recipe) and
+`comments:create`. Your sign-in is kept encrypted for you alone and renewed by itself (Linear's
+sign-ins last a day and renew for 30 days; each recipe's nightly run keeps it from lapsing). This is
+not the Linear card in the agent gallery: that one is Linear's own MCP server, for asking Linear
+from a slate. Recipes run with nobody there, so they use Linear's API.
+
+**Live roadmap** (`linear-roadmap`). Pick the teams. You get three slates:
+
+- **Roadmap**: a board per team (or per initiative, or per project lead), with lanes *Overdue*,
+  *This quarter*, *Next quarter*, *Later* and *No target date*. Each open project is a card in the
+  lane its target date puts it: "Checkout v2 · Dec 19 · at risk · slipped +9d". A board holds 24
+  cards, so a bigger team gets more boards (8 a slate, then a second slate).
+- **Dependencies**: each open project as a note colored by its health (green on track, amber at
+  risk, red off track), inside a frame for its team, and a line from a project to each project it
+  blocks, labeled with how many open issues block it. A dashed line marked *late* means the blocker
+  is due after what it blocks.
+- **Project health**: each project's latest update, worst health first, with how long ago it was
+  posted; *Stale update* after 14 days (you choose). Turn on the weekly summary for three sentences
+  by the agent from the week's updates (one call a week, at most 6,000 tokens in); off, the recipe
+  uses no tokens.
+
+When a target date moves in Linear, that project's card changes and says by how much it slipped;
+nothing else on the board does. Move a card yourself to plan on the slate and it stays there until
+Linear changes that project again; then it follows Linear. Your own notes and stickies stay.
+Grouping by initiative needs a Linear admin to have installed Slatebox for the workspace; otherwise
+the recipe groups by team and says so. The roadmap never changes anything in Linear.
+
+**Cycle board** (`linear-cycle-board`). Pick up to five teams. Each team's current cycle is a slate
+in the Cycles folder, "ENG cycle 48 (Nov 24 – Dec 7)":
+
+- a board with lanes *To do*, *In progress*, *Done* and *Canceled* and a card per issue ("ENG-212
+  Fix refunds · Ana · 3 pts · blocked"); past 24 issues the boards are split by assignee, each
+  person's issues on one board;
+- each blocked issue as an amber note with a line from each issue blocking it; another team's
+  issues in a frame for that team; a blocker already done is grey;
+- a scope note: how many issues were planned at the start, added after it started, and removed.
+
+A status change in Linear moves that one card. When you move a card to another lane, the recipe
+proposes moving the issue in Linear to the first status of that lane: with the permission
+*Move Linear issues to another status* it does so; without it, the move waits as an approval card
+on the recipe's status slate. When the next cycle starts it gets its own slate, and the last one
+stays as it was.
+
+**Release map** (`linear-release-map`). Pick the repositories (the Slatebox GitHub App must be
+installed on them) and the Linear teams whose issue ids to look for. Each published GitHub release
+becomes a frame on the Releases slate, oldest to newest, holding the Linear issues its commits name
+(an id such as ENG-123 in a commit message, or in the branch a merged pull request came from), grey
+when done and orange when still open in Linear, and a note per project with its progress at that
+release against the release before ("Fraud rules: 40% → 55% done"). The board *Shipped but not
+closed in Linear* lists what is still open; it empties as Linear catches up. A release is read once
+(one compare against the release before it); later runs only check whether its open issues have
+closed. It never changes anything in Linear or GitHub.
+
+**What it costs Linear.** A roadmap run makes 2 to 10 calls, a cycle run 1 per 100 issues, a
+release map 2 plus 1 per new release and 1 per 50 open issues. Linear's limits are per person (5,000
+calls an hour), so this stays far below them. Every call counts against the run's own budget.
+
+**Linear's events.** Linear calls `/integrations/linear/events` for every workspace that authorized
+Slatebox (one address for all of them). Each call is checked first: the `Linear-Signature` header
+must be the HMAC-SHA256 of the exact body under the app's signing secret, and its
+`webhookTimestamp` within a minute, else it gets a 401 and nothing runs. Each delivery is handled
+once and becomes a trigger after a short quiet time, never a run inline. When a workspace removes
+Slatebox's access in Linear, its people's Linear sign-ins end here and their Linear recipes stop as
+*Needs you to sign in again*. Linear gives up on a call after three tries, which is why each recipe
+also runs nightly.
 
 ## How a run works
 
@@ -115,6 +188,7 @@ and where:
 | `github.pr_comment` | Keep one diagram comment on pull requests in acme/api | One comment, edited in place |
 | `github.pull_request` | Open pull requests on `slatebox/…` branches changing only `docs/architecture/*.mmd` | Never the default or a protected branch; never merge, delete or force |
 | `slack.post` | Post the digest to #team-platform | Only the granted channels |
+| `linear.update_item` | Move an issue's status when its card moves on the cycle board, for the ENG team | Only an issue's status, never another field; only the granted and picked teams; never create, delete or archive |
 
 Without a permission, the change becomes an approval card on the recipe's status slate; approving it
 runs it once. Every change made is recorded as `recipe.outside_write`. Taking a permission back stops
@@ -162,7 +236,7 @@ The `recipes.*` actions are on `/api/v1` and over DDP (scopes `recipes:read`, `r
 | `recipes.undoRun` | `POST /recipe-runs/{runId}/undo` |
 | `recipes.hooks.*` | `/recipes/hooks…` (see [webhooks.md](webhooks.md)) |
 | `recipes.pauseProject` | `POST /projects/{projectId}/recipes/pause` |
-| `recipes.pickerOptions` | `GET /recipes/picker-options` (GitHub repos, Slack channels) |
+| `recipes.pickerOptions` | `GET /recipes/picker-options` (GitHub repos, Slack channels, Linear teams) |
 
 ```sh
 curl -X POST "$SLATEBOX/api/v1/recipes/$INSTANCE/run" \
@@ -203,6 +277,7 @@ Add it to `RECIPE_MODULES` in `enterprise/server/recipes/index.mjs` and to `CATA
 npm run test:recipes                # the runtime: queue, scheduler, reconcile, webhooks, actions
 npm run test:recipes-github         # GitHub vendor, G1–G3, Mermaid, and G1 end to end through the runtime
 npm run test:recipes:slack-google   # Slack, Google and webhook recipes, end to end through the runtime
+npm run test:recipes-linear         # Linear connect, vendor (signed events, GraphQL, writes) and the three Linear recipes, end to end
 npm run test:projects               # projects: roles, doors, actions
 ```
 
