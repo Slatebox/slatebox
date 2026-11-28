@@ -23,6 +23,10 @@
 // deletion, and dropped when Slack says they were revoked or the app was removed.
 export const SLACK_USER_SCOPES = Object.freeze(['search:read', 'channels:read', 'groups:read', 'channels:history', 'groups:history', 'im:history', 'mpim:history', 'users:read', 'chat:write', 'reactions:write'])
 export const SLACK_BOT_SCOPES = Object.freeze(['links:read', 'links:write', 'commands'])
+// Events sent for the people who connected (their user token's channels:history and groups:history):
+// new messages in the channels they are in, which recipes fold into a channel's ledger
+// (enterprise/server/recipes/vendors/slack/ingest.mjs). Not limited like conversations.history.
+export const SLACK_USER_EVENTS = Object.freeze(['message.channels', 'message.groups'])
 export const SLACK_PATHS = Object.freeze({ events: '/integrations/slack/events', interactive: '/integrations/slack/interactive', commands: '/integrations/slack/commands' })
 export const SLACK_CALLBACKS = Object.freeze({ sendToSlate: 'send_to_slate' })
 
@@ -62,7 +66,7 @@ export function slackManifest({ origin, name = 'Slatebox', command = '/slatebox'
       pkce_enabled: false,
     },
     settings: {
-      event_subscriptions: { request_url: base + SLACK_PATHS.events, bot_events: ['link_shared', 'app_uninstalled', 'tokens_revoked'] },
+      event_subscriptions: { request_url: base + SLACK_PATHS.events, bot_events: ['link_shared', 'app_uninstalled', 'tokens_revoked'], user_events: [...SLACK_USER_EVENTS] },
       interactivity: { is_enabled: true, request_url: base + SLACK_PATHS.interactive },
       org_deploy_enabled: false,
       socket_mode_enabled: false,

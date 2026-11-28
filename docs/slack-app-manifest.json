@@ -68,6 +68,10 @@
         "link_shared",
         "app_uninstalled",
         "tokens_revoked"
+      ],
+      "user_events": [
+        "message.channels",
+        "message.groups"
       ]
     },
     "interactivity": {

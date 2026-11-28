@@ -20,6 +20,7 @@ import { integrationAppActions } from './integration-apps.mjs'
 import { googleActions } from './google/actions.mjs'
 import { slackActions } from './slack/actions.mjs'
 import { slackRoutes } from './slack/routes.mjs'
+import { slackRecipeIngest } from './recipes/vendors/slack/hand-off.mjs'
 import { signInRoutes } from './routes.mjs'
 import { registerTeamAddresses } from '../team-addresses/index.mjs'
 import { registerRecipes } from './recipes/index.mjs'
@@ -88,6 +89,8 @@ export function register(api, context) {
       return started.slack
     },
     events: { claim: (id, expiresAt) => (started ? started.slackEvents.claim(id, expiresAt) : Promise.resolve(false)) },
+    // Recipes' message and reaction events (set by the recipe runtime once it starts; none while recipes are off).
+    recipes: slackRecipeIngest,
     log: (entry) => console.log('[slack]', JSON.stringify(entry)),
   })) api.addRoute(route)
   api.onStartup(async () => {

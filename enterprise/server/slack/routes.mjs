@@ -3,7 +3,9 @@
 //
 // The three addresses Slack calls (registered through api.addRoute; the manifest names them):
 //   POST /integrations/slack/events       url_verification, link_shared (a slate's preview),
-//                                         app_uninstalled, tokens_revoked
+//                                         app_uninstalled, tokens_revoked, and for recipes (when
+//                                         they are on): message, reaction_added, reaction_removed in
+//                                         the channels a recipe watches (recipes/vendors/slack/ingest.mjs)
 //   POST /integrations/slack/interactive  the "Send to slate" message shortcut and its modal
 //   POST /integrations/slack/commands     /slatebox [words]
 // Every request is checked first (verify.mjs: the signing secret over the raw body, signed in the
@@ -18,10 +20,11 @@ const hashOf = (text) => createHash('sha256').update(String(text)).digest('hex')
 
 /**
  * slack(): the running Slack service (slack.mjs); events: { claim(id, expiresAt) -> bool } (first
- * time only); later(fn): runs fn after the answer is sent; log(entry): metadata only.
+ * time only); recipes(): the recipe runtime's Slack ingest ({ handles(type), handle(body) }) or null
+ * when recipes are off; later(fn): runs fn after the answer is sent; log(entry): metadata only.
  * → [{ method, path, handler }] for api.addRoute.
  */
-export function slackRoutes({ slack, events, later = (fn) => setImmediate(fn), log = () => {}, now = Date.now }) {
+export function slackRoutes({ slack, events, recipes = () => null, later = (fn) => setImmediate(fn), log = () => {}, now = Date.now }) {
   const after = (kind, fn) => later(() => Promise.resolve().then(fn).catch((error) => log({ kind: 'slack_failed', what: kind, error: String(error?.message || error).slice(0, 120) })))
 
   // The request, verified. → its raw body, or null once it has answered (401, 413, 503).
@@ -79,6 +82,10 @@ export function slackRoutes({ slack, events, later = (fn) => setImmediate(fn), l
         if (type === 'link_shared') after(type, () => got.service.linkShared(body))
         else if (type === 'app_uninstalled') after(type, () => got.service.uninstalled(body.team_id))
         else if (type === 'tokens_revoked') after(type, () => got.service.tokensRevoked(body.team_id, body.event?.tokens || {}))
+        else {
+          const ingest = recipes()
+          if (ingest?.handles(type)) after(type, () => ingest.handle(body))
+        }
       },
     },
     {
