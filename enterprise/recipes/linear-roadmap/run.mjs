@@ -87,7 +87,7 @@ export default async function run(ctx) {
     }
   }
   if (!config.summary) summary = null
-  const health = healthSlate({ org, projects, today, now, staleDays: config.staleDays, summary })
+  const health = healthSlate({ org, projects, today, staleDays: config.staleDays, summary })
 
   // Events: slips, stale updates (once per project until it posts again), new blocking edges.
   for (const s of slipped.slice(0, 20)) ctx.emit('roadmap.slipped', s)

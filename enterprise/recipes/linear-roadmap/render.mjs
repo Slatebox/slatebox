@@ -101,7 +101,7 @@ export function dependencySlate({ org, projects, blockers, now }) {
 }
 
 /** The project health cards, worst health first; stale updates flagged. → { slate, stale: [{ id, days }] } */
-export function healthSlate({ org, projects, today, now, staleDays = 14, summary = null }) {
+export function healthSlate({ org, projects, today, staleDays = 14, summary = null }) {
   const open = projects.filter((p) => !isClosedProject(p))
   const stale = []
   const nodes = open
