@@ -178,3 +178,19 @@ test('the sample monorepo model, and a diff with no change is empty', () => {
   assert.equal(diffModels(m, model(FILES)).empty, true)
   assert.equal(REPO, 'acme/platform')
 })
+
+test('modules named alike are told apart by their folders', () => {
+  const files = { 'src/workshops/a.ts': 'export const a = 1\n', 'workshops/b.ts': 'export const b = 1\n', 'src/core/c.ts': 'export const c = 1\n' }
+  const { facts, context } = scanFiles(Object.entries(files), {})
+  const names = buildModel({ repo: 'o/r', facts, context }).modules.map((m) => m.name).sort()
+  assert.deepEqual(names, ['core', 'src/workshops', 'workshops'])
+})
+
+test('a folder holding most of the code is split one level deeper, so the graph says something', () => {
+  const files = { 'tools/x.ts': 'export const x = 1\n' }
+  for (let i = 0; i < 100; i++) files[`web/app/server/s${i}.ts`] = 'export const s = 1\n'
+  for (let i = 0; i < 100; i++) files[`web/app/client/c${i}.ts`] = 'export const c = 1\n'
+  const { facts, context } = scanFiles(Object.entries(files), {})
+  const paths = buildModel({ repo: 'o/r', facts, context }).modules.map((m) => m.path).sort()
+  assert.deepEqual(paths, ['tools', 'web/app/client', 'web/app/server'])
+})

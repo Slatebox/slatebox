@@ -41,7 +41,7 @@ export const DEFAULT_EXCLUDES = Object.freeze([
   '**/generated/**', '**/gen/**', '**/*.generated.*', '**/*.pb.go', '**/*.min.js', '**/*.d.ts',
 ])
 
-export const MODEL_LIMITS = Object.freeze({ modules: 60, drillNotes: 80, drillFiles: 8, externals: 10, fileBytes: 1024 * 1024 })
+export const MODEL_LIMITS = Object.freeze({ modules: 60, drillNotes: 80, drillFiles: 8, externals: 10, fileBytes: 1024 * 1024, splitFiles: 150 })
 
 /** Whether a scan reads this path: a context file, or a file some extractor reads and the config does not exclude. */
 export function wantedPath(path, config = {}) {
@@ -89,6 +89,8 @@ export function scanFiles(files, config = {}) {
   return { facts, context: readContext(contextFiles) }
 }
 
+const isPackageDir = (context, dir) => [...(context.packages || []), ...(context.crates || [])].some((p) => p.dir === dir)
+
 function moduleOf(path, context, depth) {
   const pkg = [...(context.packages || []), ...(context.crates || [])]
     .filter((p) => p.dir && (path === p.dir || path.startsWith(`${p.dir}/`)))
@@ -132,12 +134,33 @@ export function buildModel({ repo, sha = null, facts, context, config = {} }) {
     if (count <= MODEL_LIMITS.modules || depth === 1) break
     depth -= 1
   }
+  // One folder that holds most of the code (an app beside a few small packages) says nothing as a
+  // single note: its files go one level deeper, while the graph stays within the cap.
+  for (let pass = 0; pass < 2; pass++) {
+    const sizes = new Map()
+    for (const m of assign.values()) sizes.set(m.path, (sizes.get(m.path) || 0) + 1)
+    const big = [...sizes].filter(([path, n]) => n >= MODEL_LIMITS.splitFiles && n > codeFiles.length * 0.4 && !isPackageDir(context, path))
+    if (!big.length) break
+    const next = new Map(assign)
+    for (const [file, m] of assign) {
+      if (!big.some(([path]) => path === m.path)) continue
+      const level = (m.path ? m.path.split('/').length : 0) + 1
+      if (level > 4) continue
+      next.set(file, moduleOf(file, context, level))
+    }
+    if (new Set([...next.values()].map((m) => m.path)).size > MODEL_LIMITS.modules) break
+    assign = next
+  }
   const modules = new Map()
   for (const [file, m] of assign) {
     const key = `mod:${repo}:${m.path || '(root)'}`
     if (!modules.has(key)) modules.set(key, { key, path: m.path, name: m.name, files: [] })
     modules.get(key).files.push(file)
   }
+  // Two modules named alike (src/workshops and workshops) are told apart by their folders.
+  const named = new Map()
+  for (const m of modules.values()) named.set(m.name, (named.get(m.name) || 0) + 1)
+  for (const m of modules.values()) if (named.get(m.name) > 1 && m.path) m.name = m.path
   if (modules.size > MODEL_LIMITS.modules) {
     const ranked = [...modules.values()].sort((a, b) => b.files.length - a.files.length || (a.key < b.key ? -1 : 1))
     const other = { key: `mod:${repo}:(other)`, path: '(other)', name: 'Other modules', files: [] }
