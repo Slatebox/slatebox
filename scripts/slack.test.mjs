@@ -26,7 +26,7 @@ import { normalizeTools } from '../enterprise/server/tools.mjs'
 import { itemsFromLayout } from '../enterprise/server/translate.mjs'
 import { loadMasterKey } from '../web/app/server/metering/vault.mjs'
 import { sanitizeClientName } from '../web/app/imports/api/common/agent-label.mjs'
-import { isSlackPath } from '../web/app/server/raw-body-paths.mjs'
+import { isRawBodyPath, isSlackPath } from '../web/app/server/raw-body-paths.mjs'
 import { connectorSuggestions } from './connector-suggestions-world.mjs'
 
 let slack
@@ -520,8 +520,9 @@ test('the raw body: Slack\'s paths skip express.json, so the signature is checke
   assert.equal(isSlackPath('/integrations/slack/events'), true)
   assert.equal(isSlackPath('/integrations/slack/interactive'), true)
   assert.equal(isSlackPath('/connectors/oauth/start'), false)
+  assert.ok(isRawBodyPath('/integrations/slack/events') && isRawBodyPath('/integrations/slack/commands'), 'Slack\'s paths are raw-body paths')
   const app = readFileSync(new URL('../web/app/server/expressApp.js', import.meta.url), 'utf8')
-  assert.match(app, /isApiPath\(req\.path\)( \|\| \w+\(req\.path\))* \|\| isSlackPath\(req\.path\)( \|\| \w+\(req\.path\))* \? next\(\) : json\(req, res, next\)/)
+  assert.match(app, /isApiPath\(req\.path\)( \|\| \w+\(req\.path\))* \|\| isRawBodyPath\(req\.path\)( \|\| \w+\(req\.path\))* \? next\(\) : json\(req, res, next\)/)
 })
 
 test('events: a retried event_id is handled once; the answer comes before the work', async () => {
