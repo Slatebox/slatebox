@@ -1373,11 +1373,13 @@ export default function Canvas() {
   // A phone keeps the view to the slate itself: no call controls either.
   const showHuddle = Boolean(boardLoaded && !phoneView && getHuddleType !== 'disabled')
   // The menu's Rename, Settings, Style, History, Export, Embed and Delete, and leading a presentation, follow
-  // the phone turning or a window resizing as well as the sharing (set first when the slate loads).
+  // the phone turning or a window resizing as well as the sharing (set first when the slate loads), and a
+  // workshop board's access: it is read-only on the render that first draws the board (its publication only
+  // starts then) and turns editable when the board arrives (scripts/slate-menu-manage.test.mjs).
   React.useEffect(() => {
     if (!boardLoaded) return
     setCanManageSlate(Boolean(Meteor.userId() && !viewOnly && !accessLevel.current.isCommentOnly))
-  }, [phoneView, boardLoaded])
+  }, [phoneView, boardLoaded, viewOnly, commentOnly])
   // Turning to the phone view mid-selection: the selection's handles go with it.
   React.useEffect(() => { if (phoneView) slate.current?.v2?.clearSelection?.() }, [phoneView])
   // Controls fixed to the canvas's corner (quick add) keep clear of the panel and the bar.
