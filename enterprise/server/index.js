@@ -19,6 +19,7 @@ import { galleryActions } from './gallery-admin.mjs'
 import { integrationAppActions } from './integration-apps.mjs'
 import { googleActions } from './google/actions.mjs'
 import { slackActions } from './slack/actions.mjs'
+import { linearActions } from './linear/actions.mjs'
 import { slackRoutes } from './slack/routes.mjs'
 import { slackRecipeIngest } from './recipes/vendors/slack/hand-off.mjs'
 import { signInRoutes } from './routes.mjs'
@@ -58,6 +59,11 @@ export function register(api, context) {
   api.addActions(slackActions(() => {
     if (!started) throw starting()
     return started.slack
+  }))
+  // Linear, for recipes (its API with a refreshable grant): linear.connect, linear.status, linear.disconnect.
+  api.addActions(linearActions(() => {
+    if (!started) throw starting()
+    return started.linear
   }))
   // /admin/ai › Gallery: the invite gallery's cards, order and recipes (aiAgents, audited), the
   // Community cards (suggested integrations approved in the library's review queue) among them.

@@ -9,7 +9,7 @@
 // or Google is told to sign in again, never handed a token from anywhere else.
 let current = null
 
-/** deps: { vault, integrations, slack: { fetch, config, gates }, google: { fetch, config } } */
+/** deps: { vault, integrations, slack: { fetch, config, gates }, google: { fetch, config }, linear: { fetch, accounts, service } } */
 export function setRecipeConnectors(deps) {
   current = deps && deps.vault && deps.integrations ? deps : null
 }

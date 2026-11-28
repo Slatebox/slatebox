@@ -48,6 +48,7 @@ import { itemsFromLayout } from './translate.mjs'
 import { createGoogleService, googleConfiguration, googleSettings, GOOGLE_ADDRESS } from './google/google.mjs'
 import { createSlackService, slackOnlyFetch, slackSettings, SLACK_ADDRESS } from './slack/slack.mjs'
 import { setRecipeConnectors } from './recipes/vendors/connectors-hand-off.mjs'
+import { createLinearService, linearOnlyFetch } from './linear/linear.mjs'
 import { INVITE_CARDS, NATIVE_CARDS } from '../common/gallery.mjs'
 import { randomBytes } from 'node:crypto'
 import sharp from 'sharp'
@@ -80,6 +81,7 @@ const ConnectorOAuthApps = new Mongo.Collection('connectorOAuthApps')
 const SlackWorkspaces = new Mongo.Collection('slackWorkspaces')
 const SlackEvents = new Mongo.Collection('slackEvents')
 const SlackReadGates = new Mongo.Collection('slackReadGates')
+const LinearAccounts = new Mongo.Collection('linearAccounts')
 const oauthAppRows = {
   get: (provider) => ConnectorOAuthApps.findOneAsync({ _id: provider }),
   all: () => ConnectorOAuthApps.find({}).fetchAsync(),
@@ -230,6 +232,14 @@ const gatesStore = {
   },
   get: (id) => SlackReadGates.findOneAsync({ _id: id }),
   hold: (id, until) => SlackReadGates.rawCollection().updateOne({ _id: id }, { $max: { nextAt: until } }, { upsert: true }),
+}
+
+// Who each person is in Linear (their workspace and Linear user id: never a token, which is in the vault).
+const linearAccountsStore = {
+  get: (userId) => LinearAccounts.findOneAsync({ _id: userId }),
+  put: ({ _id, ...doc }) => LinearAccounts.upsertAsync({ _id }, { $set: doc }),
+  remove: (userId) => LinearAccounts.removeAsync({ _id: userId }),
+  inOrganization: (organizationId) => LinearAccounts.find({ organizationId }, { limit: 5000 }).fetchAsync(),
 }
 
 const slackEventsStore = {
@@ -425,6 +435,17 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     audit: (entry) => console.log('[slack]', JSON.stringify({ ...entry, at: new Date().toISOString() })),
   })
   natives.slack = (flow, code) => slackService.finishInstall(flow, code)
+  // Linear, for recipes (its API, not its MCP server): Linear's own hosts only, no redirects.
+  const linearFetch = linearOnlyFetch(createMcpFetch({ devOrigins: settings.devOrigins, userAgent: settings.userAgent, methods: ['POST'], maxRedirects: 0, maxBytes: 4 * 1024 * 1024, timeoutMs: 20000 }), { devOrigins: settings.devOrigins })
+  const linearService = createLinearService({
+    vault,
+    accounts: linearAccountsStore,
+    signIn,
+    fetch: linearFetch,
+    apps: () => integrationApps.apps(),
+    audit: (entry) => console.log('[linear]', JSON.stringify({ ...entry, at: new Date().toISOString() })),
+  })
+  natives.linear = (flow, code) => linearService.finishInstall(flow, code)
   // The Drive and Slack agents are native sessions beside the MCP one: the same service asks them all.
   const nativeSession = (address) => (address === GOOGLE_ADDRESS ? googleService.driveSession : address === SLACK_ADDRESS ? slackService.slackSession : null)
   const session = {
@@ -517,7 +538,10 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
   setAccountIntegrations({
     forgetPerson: (userId) => service.forgetPerson(userId, {
       credentialRows: (id) => McpCredentials.find({ ownerId: id }, { fields: { ownerId: 1, address: 1 } }).fetchAsync(),
-      natives: (id) => slackService.forgetPerson(id),
+      natives: async (id) => {
+        await slackService.forgetPerson(id)
+        await linearService.forgetPerson(id)
+      },
     }),
   })
   Meteor.startup(async () => {
@@ -596,8 +620,8 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     ...(cloud && { cloudLibrary: await cloud.catalog.status() }),
   })
   // Recipes read Slack and Google as the person who set them up, through the same vault, fetches and read gate.
-  setRecipeConnectors({ vault, integrations: integrationsStore, slack: { fetch: slackFetch, config: slackConfig, gates: gatesStore }, google: { fetch: googleFetch, config: google } })
-  return { service, google: googleService, slack: slackService, slackEvents: slackEventsStore, signIn, origin: appOrigin, userFor, findGallery, configured, community: () => communitySource(), integrationApps }
+  setRecipeConnectors({ vault, integrations: integrationsStore, slack: { fetch: slackFetch, config: slackConfig, gates: gatesStore }, google: { fetch: googleFetch, config: google }, linear: { fetch: linearFetch, accounts: linearAccountsStore, service: linearService } })
+  return { service, google: googleService, slack: slackService, linear: linearService, slackEvents: slackEventsStore, signIn, origin: appOrigin, userFor, findGallery, configured, community: () => communitySource(), integrationApps }
 }
 
 // Slatebox Cloud's Community cards on a self-hosted install: pulled at start and every few hours by one

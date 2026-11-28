@@ -57,7 +57,7 @@ test('a secret is sealed and never returned: list and set show a fingerprint, th
   assert.ok(!JSON.stringify(audited).includes(SECRET), 'nor does the audit trail')
   assert.equal(listed.redirectUrl, 'https://slate.example.com/connectors/oauth/callback')
   assert.equal(listed.secretsAvailable, true)
-  assert.deepEqual(listed.apps.map((a) => a.provider), [...Object.keys(KNOWN_PROVIDERS), 'slack'], 'one row per known provider, then the native apps (Slack)')
+  assert.deepEqual(listed.apps.map((a) => a.provider), [...Object.keys(KNOWN_PROVIDERS), 'slack', 'linear'], 'one row per known provider, then the native apps (Slack, Linear)')
   assert.deepEqual(APP_PROVIDERS, listed.apps.map((a) => a.provider))
   assert.equal(listed.apps.find((a) => a.provider === 'google').editable, false, 'Google is shown read-only')
   for (const app of listed.apps) assert.ok(app.console?.url?.startsWith('https://'), `${app.provider} links to its vendor console`)

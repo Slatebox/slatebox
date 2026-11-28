@@ -44,6 +44,7 @@ export const NO_MASTER = 'Set SLATEBOX_KEY_ENCRYPTION_KEY on this server to stor
 export const VENDOR_CONSOLES = Object.freeze({
   github: { label: 'GitHub › Developer settings › OAuth Apps', url: 'https://github.com/settings/developers' },
   slack: { label: 'Slack › Your apps', url: 'https://api.slack.com/apps' },
+  linear: { label: 'Linear › Settings › API › OAuth applications', url: 'https://linear.app/settings/api/applications/new' },
   asana: { label: 'Asana › My apps', url: 'https://app.asana.com/0/my-apps' },
   hubspot: { label: 'HubSpot developer portal', url: 'https://developers.hubspot.com' },
   box: { label: 'Box Developer Console', url: 'https://app.box.com/developers/console' },
@@ -292,7 +293,7 @@ const ROW_OUT = {
   type: 'object',
   description: 'One provider: provider, name, editable (false for Google: settings only), source (admin, settings or none: where the client id in use comes from), clientId (public), settingsClientId, hasSecret, secretSource (admin or settings), secretFingerprint (sha256:12345678…WXYZ, never the secret), secretUnreadable (saved under another key-encryption key: enter it again), adminSaved, updatedAt, updatedBy, console { label, url } (where the vendor\'s apps are registered), and for Slack signing { hasSecret, secretSource, secretFingerprint } (its signing secret, never the value).',
 }
-const PROVIDER_IN = { type: 'string', pattern: '^[a-z][a-z0-9-]{1,30}$', description: 'The provider, as connectors.apps.list gives it (asana, hubspot, box, zoom, pitch, salesforce, microsoft, github, slack).' }
+const PROVIDER_IN = { type: 'string', pattern: '^[a-z][a-z0-9-]{1,30}$', description: 'The provider, as connectors.apps.list gives it (asana, hubspot, box, zoom, pitch, salesforce, microsoft, github, slack, linear).' }
 const TEXT_IN = (what) => ({ type: 'string', minLength: 1, maxLength: 600, description: `The ${what}, one line.` })
 const personOnly = () => 'Only a person enters or clears an integration app.'
 
@@ -330,7 +331,7 @@ export function integrationAppActions(store) {
       idempotency: 'optional',
       replay: 'rerun',
       successStatus: 200,
-      input: { type: 'object', properties: { provider: PROVIDER_IN, clientId: TEXT_IN('client id'), clientSecret: TEXT_IN('client secret'), signingSecret: { ...TEXT_IN('signing secret (Slack only)'), writeOnly: true } }, required: ['provider'], additionalProperties: false },
+      input: { type: 'object', properties: { provider: PROVIDER_IN, clientId: TEXT_IN('client id'), clientSecret: TEXT_IN('client secret'), signingSecret: { ...TEXT_IN('signing secret (Slack and Linear only)'), writeOnly: true } }, required: ['provider'], additionalProperties: false },
       output: ROW_OUT,
       handler: async (principal, input, { deps }) => {
         const actor = await guardControlWrite(principal, deps, { action: 'connectors.apps.set', target: { kind: 'integration-app', id: input.provider }, doing: 'change integration apps', refusal: personOnly })
