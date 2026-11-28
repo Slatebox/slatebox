@@ -32,6 +32,11 @@ const LAYOUT = {
   LibraryItem: ['pages/LibraryItem.jsx'],
   Integrations: ['pages/Integrations.jsx'],
   NotFound: ['pages/NotFound.jsx'],
+  // a project's slates tab is DisplaySlates' AppPage (fill); its Recipes tab, the loading and the
+  // not-found states are Project.jsx's own AppPage. ProjectHeader draws the title row inside it.
+  Projects: ['pages/Projects.jsx'],
+  Project: ['pages/Project.jsx', 'components/DisplaySlates.jsx'],
+  ProjectLink: ['pages/ProjectLink.jsx'],
   // outside the app's frame (client/main.jsx): pads 24px as the main area does, then AppPage
   TeamMoveJoin: ['pages/TeamMoveJoin.jsx'],
 }
