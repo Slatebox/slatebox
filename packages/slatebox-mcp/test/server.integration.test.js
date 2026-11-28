@@ -116,7 +116,7 @@ test("describe lists every method with rules and recipes, and slices declaration
   assert.match(sliced.types, /interface CanvasPlan \{/, "named types the method uses come with it");
   assert.match(sliced.types, /declare class SlateboxError/);
   const found = (await client.callTool({ name: "describe", arguments: { query: "INVITATION" } })).structuredContent;
-  assert.deepEqual(found.methods.map((m) => m.name).sort(), ["slates.issueInvite", "slates.revokeInvite"]);
+  assert.deepEqual(found.methods.map((m) => m.name).sort(), ["projects.access", "slates.issueInvite", "slates.revokeInvite"]);
   const tokens = (await client.callTool({ name: "describe", arguments: { methods: ["apiTokens.create"] } })).structuredContent;
   assert.deepEqual(tokens.methods, [], "token management is not part of the client");
   const bad = await client.callTool({ name: "describe", arguments: { methods: "slates.get" } });

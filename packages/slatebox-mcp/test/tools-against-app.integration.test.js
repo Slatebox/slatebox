@@ -46,6 +46,9 @@ const { createAgentPresence } = await import(new URL("server/presence/agentPrese
 const { deckRecord } = await import(new URL("imports/ui/components/presentations/presentationCompose.mjs", app));
 // The shared library over in-memory stores (scripts/library-test-stores.mjs), its built-ins seeded.
 const { makeLibrary } = await import(new URL("../../scripts/library-test-stores.mjs", app));
+// Projects: the real projects core over in-memory stores (scripts/project-test-stores.mjs), with the
+// probe's owner as one more person in it.
+const { projectWorld } = await import(new URL("../../scripts/project-test-stores.mjs", app));
 
 const at = (doc, path) => path.split(".").reduce((value, key) => value?.[key], doc);
 function put(doc, path, value) {
@@ -177,7 +180,11 @@ async function instance(t) {
   // tests (scripts/agent-parity.test.mjs). Here: the routes and the calls, on the same store.
   const comments = [];
   const deletedSlates = [];
+  // Projects (drives of slates): the core's rules have their own tests (scripts/project-core.test.mjs,
+  // project-actions-contract.test.mjs). Here: the routes and the calls, on the core's own stores.
+  const projectsWorld = projectWorld({ users: [{ _id: "owner", profile: { firstName: "Owner" }, emails: [{ address: "owner@example.test", verified: true }] }] });
   const registry = createAppRegistry({ deps: {
+    projects: projectsWorld.core,
     library: library.library,
     listSlates: async ({ userId, limit }) => slates.rows.filter((row) => row.userId === userId).slice(0, limit),
     deleteSlate: async (slate) => { deletedSlates.push(slate.shareId); return { deleted: true }; },
@@ -278,7 +285,7 @@ async function instance(t) {
   mountHttp(server, gatedRegistry(registry, gate), {
     express,
     authenticate: async (req) => (req.get("authorization") === "Bearer probe-token"
-      ? { kind: "agent", tokenId: "token", userId: "owner", scopes: ["slates:read", "slates:write", "slates:share", "slates:delete", "ai:settings", "team:export", "team:import", "library:review"] } : null),
+      ? { kind: "agent", tokenId: "token", userId: "owner", scopes: ["slates:read", "slates:write", "slates:share", "slates:delete", "ai:settings", "team:export", "team:import", "library:review", "projects:read", "projects:write", "projects:share"] } : null),
   });
   const listener = server.listen(0, "127.0.0.1");
   await new Promise((resolve) => listener.once("listening", resolve));
@@ -318,7 +325,7 @@ async function instance(t) {
   };
   const stored = async (shareId) => slates.findOne({ shareId });
   const texts = async () => (await stored("canvas")).nodes.map((n) => n.options.text);
-  return { client, exec, ok, confirmed, called, stored, texts, invites, transfers, deckRow, restyles, planned, comments, deletedSlates, handedOff };
+  return { client, exec, ok, confirmed, called, stored, texts, invites, transfers, deckRow, restyles, planned, comments, deletedSlates, handedOff, projectsWorld };
 }
 
 // Every canvas edit names the revision it was made on (required since release/agentic): the
@@ -370,7 +377,7 @@ test("canvas edits change exactly the notes they name, and only when saved", asy
 });
 
 test("every client method succeeds against the app, and refusals keep status, code and details", async (t) => {
-  const { ok, exec, confirmed, called, stored, texts, invites, transfers, deckRow, restyles, planned, comments, deletedSlates, handedOff } = await instance(t);
+  const { ok, exec, confirmed, called, stored, texts, invites, transfers, deckRow, restyles, planned, comments, deletedSlates, handedOff, projectsWorld } = await instance(t);
 
   const created = await ok(`return slatebox.slates.create({ brief: "Request -> Review", kind: "diagram" })`);
   assert.equal(created.shareId, "created");
@@ -675,6 +682,31 @@ return slatebox.library.saveDraft({ shareId, title: "Probe triage", summary: "So
     assert.equal(refused.error?.code, "insufficient_scope", call);
     assert.match(String(refused.error?.details?.requiredScope), /^profile:(read|write)$/, call);
   }
+
+  // Projects: make a drive and a folder in it, rename it, move a slate in (held: who can open the
+  // slate changes), list its slates, share it (held: it widens access), read who can open it, take the
+  // slate out again (held too: a move either way changes who can open it), and delete the drive
+  // (held: it cannot be undone).
+  const drive = await ok(`return slatebox.projects.create({ name: "Probe drive" })`);
+  assert.equal(drive.mode, "save");
+  const P = (code) => code.replaceAll("DRIVE", JSON.stringify(drive.projectId));
+  const folder = await ok(P(`return slatebox.projects.create({ name: "Probe folder", parentId: DRIVE })`));
+  assert.equal(folder.kind, "folder");
+  assert.deepEqual((await ok(`return slatebox.projects.list({})`)).projects.map((p) => p.name), ["Probe drive"]);
+  assert.equal((await ok(P(`return slatebox.projects.update({ projectId: DRIVE, name: "Probe plans" })`))).name, "Probe plans");
+  assert.deepEqual((await ok(`return slatebox.projects.get({ projectId: ${JSON.stringify(folder.projectId)} })`)).path.map((p) => p.name), ["Probe plans"]);
+  await projectsWorld.slate("m1", "owner");
+  const movedIn = await confirmed(P(`return slatebox.projects.moveSlate({ shareId: "s-m1", projectId: DRIVE })`), ["widens_access"]);
+  assert.deepEqual([movedIn.projectId, movedIn.moved], [drive.projectId, true]);
+  assert.deepEqual((await ok(P(`return slatebox.projects.slates({ projectId: DRIVE })`))).slates.map((s) => s.shareId), ["s-m1"]);
+  const sharedDrive = await confirmed(P(`return slatebox.projects.share({ projectId: DRIVE, userId: "ben", role: "viewer" })`), ["widens_access"]);
+  assert.deepEqual(sharedDrive.grants.map((g) => [g.userId, g.role]), [["ben", "viewer"]]);
+  assert.equal((await ok(P(`return slatebox.projects.access({ projectId: DRIVE })`))).owner.userId, "owner");
+  assert.equal((await confirmed(`return slatebox.projects.moveSlate({ shareId: "s-m1", projectId: null })`, ["widens_access"])).projectId, null);
+  const unknownDrive = await exec(`return slatebox.projects.get({ projectId: "nope" })`);
+  assert.equal(unknownDrive.error?.status, 404);
+  const removedDrive = await confirmed(P(`return slatebox.projects.delete({ projectId: DRIVE })`), ["removes"]);
+  assert.deepEqual([removedDrive.deleted, removedDrive.deletedSlates], [true, 0]);
 
   assert.deepEqual([...called].sort(), [...defaultGenerated().methods.keys()].sort(), "every client method was called");
 });
