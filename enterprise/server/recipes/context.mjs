@@ -52,11 +52,12 @@ export function budgeted(session, budget, signal) {
  *   store       for the ledger (store.ledger)
  *   readSlate(role, key) → { slate, revision } | null   one of the recipe's own slates
  *   mermaid(slateId, { canonical }) → string
+ *   boardState(role, key) → the recipe's boards on that slate, as they stand (runner.mjs boardStateOf)
  *   emit(type, data)    queued for after the run (validated now)
  *   quarantine(value)   enterprise/server/results.mjs
  *   retentionDays
  */
-export function createRecipeContext({ instance, run, manifest, signal = null, clock = Date.now, budget, vendors = {}, ai, store, readSlate = async () => null, mermaid = async () => null, project = null, emit = () => {}, quarantine = (v) => v, retentionDays = 180 }) {
+export function createRecipeContext({ instance, run, manifest, signal = null, clock = Date.now, budget, vendors = {}, ai, store, readSlate = async () => null, mermaid = async () => null, boardState = null, project = null, emit = () => {}, quarantine = (v) => v, retentionDays = 180 }) {
   const log = []
   const emitted = []
   let cursor = structuredClone(instance.cursor || {})
@@ -98,7 +99,7 @@ export function createRecipeContext({ instance, run, manifest, signal = null, cl
     vendor: Object.freeze(Object.fromEntries(Object.entries(vendors).map(([name, session]) => [name, budgeted(session, budget, signal)]))),
     ai: Object.freeze({ json: (request) => ai.json(request) }),
     ledger: Object.freeze(ledger),
-    slates: Object.freeze({ read: (role, key = '') => readSlate(role, key), mermaid: (slateId, options = { canonical: true }) => mermaid(slateId, options) }),
+    slates: Object.freeze({ read: (role, key = '') => readSlate(role, key), mermaid: (slateId, options = { canonical: true }) => mermaid(slateId, options), ...(boardState && { boardState: (role, key = '') => boardState(role, key) }) }),
     // The project the recipe keeps (names, ids and dates only): its slates and the recipes in it.
     ...(project && { project: Object.freeze({ listSlates: (options) => project.listSlates(options), recipes: () => project.recipes() }) }),
     setCursor(patch) {

@@ -390,12 +390,18 @@ const planMessage = (stats, name) => {
 
 /**
  * A board's edits (workshop_edits) toward the cards a run wants.
- *   desired   { key, component, title, lanes: [{ key, label }], cards: [{ key, label, lane }] }
- *   current   { lanes: [{ id, label }], cards: [{ id, label, laneId }] } as the board stands, or null
+ *   desired   { key, component, title, lanes: [{ key, label }], cards: [{ key, label, lane, reclaim? }], keepRules? }
+ *   current   { lanes: [{ id, label }], cards: [{ id, label, laneId }], rules?: [{ id, kind }] } as the board stands, or null
  *   owned     Map<cardId, RecipeNote> (kind card/lane), keyed by the board item id
  *   touched   Map<itemId, Set<prop>> (a person moved, renamed or removed a card)
  * Cards are found by their recipe key through owned (row.key); new cards are matched back to keys
  * after they are made (the runner reads the board again: matchNewCards).
+ * A board the recipe just added drops its component's own working rules (a team board's three-card
+ * limit on Doing, its no-skipping path), unless desired.keepRules: the board follows a source outside
+ * Slatebox, whose items are where they are; a rule a person adds later is theirs and stays.
+ * A card a person only moved (lane, nothing else) is theirs until the source changes that item
+ * again: card.reclaim says it did, and the card follows the source once more (the sheet's and
+ * Linear's "the source wins" rule).
  * → { edits, lanesToAdd, stats, ownedUpdates, ownedRemovals }
  */
 export function reconcileBoard({ desired, current, owned = new Map(), touched = new Map(), instanceId, slateId, now = new Date() }) {
@@ -413,20 +419,21 @@ export function reconcileBoard({ desired, current, owned = new Map(), touched = 
   // recipe's, and any left over removed. Only while the board is untouched: no cards, and no lane
   // the recipe already keeps (after that, a lane someone adds is theirs).
   const fresh = cur.cards.length === 0 && ![...owned.values()].some((r) => r.kind === 'lane')
-  const wantedLabels = new Set((desired.lanes || []).map((l) => l.label.trim().toLowerCase()))
-  const spare = fresh ? cur.lanes.filter((l) => !wantedLabels.has(l.label.trim().toLowerCase())) : []
-  const laneEdits = []
+  // On a fresh board the component's lanes are taken in their order (renamed where the words differ),
+  // so the board's lanes stand in the recipe's order.
+  const spare = fresh ? [...cur.lanes] : []
+  const laneEdits = fresh && !desired.keepRules ? (cur.rules || []).filter((r) => typeof r?.id === 'string').map((r) => ({ kind: 'remove_rule', rule: r.id, key: `rule:${r.id}` })) : []
   for (const lane of desired.lanes || []) {
     const rowFor = byKey.get(`lane:${lane.key}`)
     const there = rowFor && cur.lanes.find((l) => l.id === rowFor.noteId)
     const byLabel = cur.lanes.find((l) => l.label.trim().toLowerCase() === lane.label.trim().toLowerCase())
-    const found = there || byLabel
+    const found = there || (!fresh && byLabel)
     if (found) {
       laneId.set(lane.key, found.id)
       if (!rowFor) ownedUpdates.push({ _id: `${instanceId}:${slateId}:${found.id}`, instanceId, slateId, noteId: found.id, key: `lane:${lane.key}`, kind: 'lane', owner: byLabel && !there ? 'person' : 'recipe', personProps: [], hash: contentHash(lane.label), gone: false, updated: now })
     } else if (spare.length) {
       const reuse = spare.shift()
-      laneEdits.push({ kind: 'rename_lane', lane: reuse.id, label: lane.label.slice(0, 80), key: `lane:${lane.key}` })
+      if (reuse.label !== lane.label.slice(0, 80)) laneEdits.push({ kind: 'rename_lane', lane: reuse.id, label: lane.label.slice(0, 80), key: `lane:${lane.key}` })
       laneId.set(lane.key, reuse.id)
       ownedUpdates.push({ _id: `${instanceId}:${slateId}:${reuse.id}`, instanceId, slateId, noteId: reuse.id, key: `lane:${lane.key}`, kind: 'lane', owner: 'recipe', personProps: [], hash: contentHash(lane.label), gone: false, updated: now })
     } else {
@@ -440,11 +447,18 @@ export function reconcileBoard({ desired, current, owned = new Map(), touched = 
   for (const card of desired.cards || []) {
     const key = `card:${card.key}`
     wanted.add(key)
-    const mine = byKey.get(key)
+    let mine = byKey.get(key)
     const lane = laneId.get(card.lane) || card.lane
     if (mine?.owner === 'person') {
-      stats.keptByPerson += 1
-      continue
+      const onlyMoved = (mine.personProps || []).length > 0 && mine.personProps.every((p) => p === 'lane' || p === 'laneId')
+      if (!card.reclaim || !onlyMoved) {
+        stats.keptByPerson += 1
+        continue
+      }
+      // the source changed this item again: the card is the recipe's once more, and follows it
+      mine = { ...mine, owner: 'recipe', personProps: [], hash: null, updated: now }
+      byKey.set(key, mine)
+      ownedUpdates.push(mine)
     }
     const there = mine && cur.cards.find((c) => c.id === mine.noteId)
     if (!there) {

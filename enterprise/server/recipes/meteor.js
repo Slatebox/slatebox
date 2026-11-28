@@ -109,7 +109,7 @@ function slatesAdapter() {
       const board = slate && slateBoards(slate).find((b) => b.id === row.noteId)
       if (!board) return null
       const w = board.model.workshop
-      return { boardId: board.id, lanes: (w.lanes || []).map((l) => ({ id: l.id, label: String(l.label || '') })), cards: (w.cards || []).map((c) => ({ id: c.id, label: String(c.label || c.title || ''), laneId: c.laneId })) }
+      return { boardId: board.id, lanes: (w.lanes || []).map((l) => ({ id: l.id, label: String(l.label || '') })), cards: (w.cards || []).map((c) => ({ id: c.id, label: String(c.label || c.title || ''), laneId: c.laneId })), rules: (w.behaviour?.rules || []).map((r) => ({ id: r.id, kind: r.kind })) }
     },
     async addBoard(principal, slateId, { key, component, title, instanceId }) {
       const read = await slateRow(slateId)

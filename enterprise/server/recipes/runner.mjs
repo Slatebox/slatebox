@@ -306,6 +306,31 @@ export function createRunner(deps) {
     return null
   }
 
+  /**
+   * The recipe's own boards on one of its slates, as they stand: [{ key, cards: [{ key, lane, owner,
+   * label }] }] by the recipe's keys (a card a person moved is owner 'person', in the lane they put it).
+   * Cards and lanes the recipe does not keep are left out. null when the slate is not made yet.
+   */
+  async function boardStateOf(instance, role, key = '') {
+    const slateId = instance.slateMap?.[key ? `${role}/${key}` : role]
+    if (!slateId || !slates.board) return null
+    const rows = await store.notes.find({ instanceId: instance._id, slateId, kind: { $in: ['board', 'card', 'lane'] } }).toArray()
+    const out = []
+    for (const row of rows.filter((r) => r.kind === 'board')) {
+      const current = await slates.board(slateId, row.key, instance._id)
+      if (!current) continue
+      const mineOn = (kind, id) => rows.find((r) => r.kind === kind && r.noteId === id && r.boardKey === row.key)
+      const laneKeyOf = (id) => mineOn('lane', id)?.key?.replace(/^lane:/, '') ?? null
+      const cards = []
+      for (const card of current.cards || []) {
+        const mine = mineOn('card', card.id)
+        if (mine && !mine.gone) cards.push({ key: mine.key.replace(/^card:/, ''), lane: laneKeyOf(card.laneId), owner: mine.owner, label: card.label })
+      }
+      out.push({ key: row.key.replace(/^board:/, ''), cards })
+    }
+    return out
+  }
+
   async function applyBoard({ instance, principal, slateId, board, log }) {
     const boardKey = `board:${board.key}`
     let current = await slates.board(slateId, boardKey, instance._id)
@@ -427,6 +452,7 @@ export function createRunner(deps) {
         return id ? slates.read(id) : null
       },
       mermaid: (slateId, options) => slates.mermaid?.(slateId, options) ?? null,
+      boardState: (role, key = '') => boardStateOf(instance, role, key),
       project: {
         listSlates: async ({ folders = true } = {}) => (await projects.listSlates(instance.projectId, { folders })).map(({ _id, shareId, name, lastSaved, projectId }) => ({ _id, shareId, name, lastSaved, projectId, url: `${origin()}/canvas/${shareId}` })),
         recipes: async () => (await store.instances.find({ projectId: instance.projectId }, { limit: 100 }).toArray()).map((r) => ({ id: r._id, name: r.name, agentName: recipeOf(r.recipeId)?.manifest?.agentName || r.name, slateMap: r.slateMap || {} })),
