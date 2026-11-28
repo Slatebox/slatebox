@@ -10,12 +10,26 @@ import AgentsOnSlate, { InvitedAgentControls } from './AgentsOnSlate'
 import IntegrationsPage from './IntegrationsPage'
 import { GoogleExport, GoogleImport } from './GoogleIntegration'
 import TeamAddressesAdmin from './TeamAddressesAdmin'
+import ProjectRecipes, { AddRecipeButton, RecipesTab } from './recipes/ProjectRecipes'
+import RecipesAdmin from './recipes/RecipesAdmin'
+import TeamRecipes from './recipes/TeamRecipes'
+import ProfileRecipes from './recipes/ProfileRecipes'
+import MaintainedNotes from './recipes/MaintainedNotes'
 
 export const manifest = Object.freeze({ name: 'slatebox-enterprise', features: ['agents.invite'] })
 
 export function register(api, context) {
   // Admin tools › Team addresses: Slatebox Cloud only (the server refuses everywhere else too).
   if (context?.via === 'cloud') api.fill('admin.teamAddresses', TeamAddressesAdmin)
+  // Recipes: agents that keep a project's slates up to date. Each piece shows only where the server
+  // says recipes are on (a server admin sees the one switch where they are off).
+  api.fill('project.recipesTab', RecipesTab)
+  api.fill('project.recipes', ProjectRecipes)
+  api.fill('project.addRecipe', AddRecipeButton)
+  api.fill('canvas.recipes', MaintainedNotes)
+  api.fill('admin.recipes', RecipesAdmin)
+  api.fill('team.recipes', TeamRecipes)
+  api.fill('profile.recipes', ProfileRecipes)
   if (!context?.agentInvite) return
   // The slate's invited agents: each one chip on the app's roster, "+ Invite agent" and the walkthrough.
   api.fill('canvas.agents', AgentsOnSlate)

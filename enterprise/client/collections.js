@@ -6,3 +6,8 @@
 import { Mongo } from 'meteor/mongo'
 
 export const McpConnections = new Mongo.Collection('mcpConnections')
+
+// Recipes (enterprise/server/recipes/meteor.js): recipes.forProject(projectId) publishes a project's
+// recipe instances; recipes.runsFor(instanceId, limit) its latest runs, with their log lines.
+export const RecipeInstances = new Mongo.Collection('recipeInstances')
+export const RecipeRuns = new Mongo.Collection('recipeRuns')
