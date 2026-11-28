@@ -9,7 +9,7 @@ import { isValidCron, shortestGapMinutes } from './cron.mjs'
 import { COMMON_EVENT_NAMES, EVENT_NAME } from './events.mjs'
 
 export const RECIPE_ID = /^[a-z][a-z0-9-]{2,40}$/
-export const INTEGRATIONS = Object.freeze(['github', 'slack', 'google'])
+export const INTEGRATIONS = Object.freeze(['github', 'slack', 'google', 'linear'])
 // slate_saved: a person saved a slate in the recipe's sync map (config.maps), debounced per slate
 // from that slate's last save. recipe_event: another recipe in the project sent `event` after a run
 // that changed a slate in the sync map. Both need a sync map (the instance's watchSlates).
@@ -17,7 +17,7 @@ export const TRIGGER_KINDS = Object.freeze(['vendor', 'schedule', 'manual', 'inb
 export const OUTPUT_KINDS = Object.freeze(['diagram', 'board', 'index', 'presentation'])
 // Changes outside Slatebox a recipe may propose. Each needs a standing permission per recipe
 // (enterprise/server/recipes/permissions.mjs) or a person's approval on an action card.
-export const WRITE_KINDS = Object.freeze(['github.check_run', 'github.pr_comment', 'github.pull_request', 'slack.post', 'google.write_sheet'])
+export const WRITE_KINDS = Object.freeze(['github.check_run', 'github.pr_comment', 'github.pull_request', 'slack.post', 'google.write_sheet', 'linear.update_item', 'linear.comment'])
 export const INTERCEPT_POINTS = Object.freeze(['graph.ready', 'output.ready', 'writeback.proposed'])
 export const COST_CLASSES = Object.freeze(['low', 'medium', 'high'])
 export const MIN_SCHEDULE_MINUTES = 15
@@ -33,7 +33,7 @@ export class ManifestError extends Error {
 const isText = (value, max = 120) => typeof value === 'string' && value.trim().length > 0 && value.length <= max
 const isRange = (value) => Array.isArray(value) && value.length === 2 && value.every((n) => Number.isInteger(n) && n >= 0) && value[0] <= value[1]
 const isObjectSchema = (schema) => schema && typeof schema === 'object' && schema.type === 'object' && typeof schema.properties === 'object' && schema.additionalProperties === false
-const sentenceCase = (text) => /^[A-Z0-9]/.test(text) && !/\s[A-Z][a-z]+\s[A-Z][a-z]+/.test(text.replace(/GitHub|Slack|Google|Slatebox|Mermaid|Drive|Sheets|Docs|API|PR/g, 'x'))
+const sentenceCase = (text) => /^[A-Z0-9]/.test(text) && !/\s[A-Z][a-z]+\s[A-Z][a-z]+/.test(text.replace(/GitHub|Slack|Google|Slatebox|Mermaid|Drive|Sheets|Docs|API|PR|Linear/g, 'x'))
 
 /** The manifest's first problem as a sentence, or null. */
 export function validateManifest(m) {
@@ -57,7 +57,9 @@ export function validateManifest(m) {
     if (!TRIGGER_KINDS.includes(t?.kind)) return `triggers[${k}].kind is one of ${TRIGGER_KINDS.join(', ')}`
     if (t.kind === 'vendor') {
       if (!m.integration) return `triggers[${k}] is a vendor event, but the recipe has no integration`
-      if (typeof t.event !== 'string' || !t.event.startsWith(m.integration + '.')) return `triggers[${k}].event starts with ${m.integration}.`
+      // its own integration's events, or those of another it needs (a release map reads GitHub too)
+      const from = [m.integration, ...Object.keys(m.needs || {})]
+      if (typeof t.event !== 'string' || !from.some((v) => t.event.startsWith(v + '.'))) return `triggers[${k}].event starts with ${m.integration}.`
     }
     if (t.kind === 'recipe_event' && (typeof t.event !== 'string' || !EVENT_NAME.test(t.event) || COMMON_EVENT_NAMES.includes(t.event))) return `triggers[${k}].event names another recipe's own event`
     if (t.kind === 'schedule') {

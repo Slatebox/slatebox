@@ -47,6 +47,7 @@ const BOUNDS = [
   ['repos', (t) => (t.repo ? [t.repo] : [])],
   ['channels', (t) => (t.channel ? [t.channel] : [])],
   ['fileIds', (t) => (t.fileId ? [t.fileId] : [])],
+  ['teams', (t) => (t.teamId ? [t.teamId] : [])],
 ]
 
 /** Whether a grant's scope covers a write's target. Paths are globs (docs/architecture/*.mmd). */
@@ -269,5 +270,6 @@ export function targetLine(target = {}) {
   if (target.repo) return String(target.repo)
   if (target.channel) return `channel ${target.channel}`
   if (target.fileId) return `file ${target.fileId}`
+  if (target.identifier) return String(target.identifier)
   return 'outside Slatebox'
 }

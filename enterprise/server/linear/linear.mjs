@@ -210,5 +210,5 @@ export function createLinearService({ vault, accounts, signIn, fetch, apps, enab
     return rows.length
   }
 
-  return { status, connect, finishInstall, disconnect, forgetPerson, revokedFor, signingSecret: async () => (await appOf())?.signingSecret || null }
+  return { status, connect, finishInstall, disconnect, forgetPerson, revokedFor, signingSecret: async () => (await appOf())?.signingSecret || null, clientId: async () => (await appOf())?.clientId || null }
 }

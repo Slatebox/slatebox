@@ -48,6 +48,8 @@ export const WRITE_WORDS = Object.freeze({
   'github.pull_request': 'Open pull requests on slatebox/ branches',
   'slack.post': 'Post in Slack channels',
   'google.write_sheet': 'Write to Google Sheets',
+  'linear.update_item': 'Move Linear issues to another status',
+  'linear.comment': 'Comment on Linear issues',
 })
 
 export const PAUSE_REASON_WORDS = Object.freeze({

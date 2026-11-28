@@ -265,9 +265,12 @@ export function startRecipes({ via = null, isUnlocked = () => true, projects, re
     },
     // whether the person connected the integration a recipe needs (their integrations, by address)
     // GitHub: an installation of the Slatebox GitHub App the person's own GitHub sign-in sees.
+    // (Linear for recipes is its own sign-in, not the Linear MCP card: its account row, active)
     connected: async (userId, integration) => {
       if (integration === 'github' && vendors.get('github')) return (await vendors.get('github').stores.installations.forUser(userId)).length > 0
-      return Boolean(await MongoInternals.defaultRemoteCollectionDriver().mongo.db.collection('integrations').findOne({ ownerId: userId, address: { $regex: integration === 'google' ? 'google' : integration } }, { projection: { _id: 1 } }))
+      const db = MongoInternals.defaultRemoteCollectionDriver().mongo.db
+      if (integration === 'linear') return Boolean(await db.collection('linearAccounts').findOne({ _id: userId, status: 'active' }, { projection: { _id: 1 } }))
+      return Boolean(await db.collection('integrations').findOne({ ownerId: userId, address: { $regex: integration === 'google' ? 'google' : integration } }, { projection: { _id: 1 } }))
     },
     // where Connect goes: GitHub's install screen for the Slatebox GitHub App (null until an admin makes the App)
     connectUrl: async (userId, integration) => (integration === 'github' && vendors.get('github') ? vendors.get('github').installUrl(userId).catch(() => null) : null),
@@ -279,9 +282,17 @@ export function startRecipes({ via = null, isUnlocked = () => true, projects, re
         return seen.flatMap((i) => i.repos.map((repo) => ({ value: repo, label: i.account ? `${repo} (${i.account})` : repo })))
       }
       if (picker === 'channels' && vendors.get('slack')?.channelsFor) return vendors.get('slack').channelsFor(userId)
+      if (picker === 'linear-teams' && vendors.get('linear')?.teamsFor) return vendors.get('linear').teamsFor(userId)
       return []
     },
-    resolveMatch: async (manifest, match, ownerId) => (vendors.get(manifest.integration)?.resolveMatch ? vendors.get(manifest.integration).resolveMatch(match, ownerId) : match),
+    // each vendor the recipe reads fills in its part (a release map: Linear's workspace, then GitHub's installation)
+    resolveMatch: async (manifest, match, ownerId) => {
+      let out = match
+      for (const name of [...new Set([manifest.integration, ...Object.keys(manifest.needs || {})].filter(Boolean))]) {
+        if (out?.[name] && vendors.get(name)?.resolveMatch) out = await vendors.get(name).resolveMatch(out, ownerId)
+      }
+      return out
+    },
     isServerAdmin: async (userId) => Boolean(await deps.aiControlAdmin?.(userId)),
     audit,
     notify,

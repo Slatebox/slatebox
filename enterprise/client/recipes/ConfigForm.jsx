@@ -27,7 +27,7 @@ import { CRON_PRESETS, configFields, validateCron } from './recipesModel.mjs'
 function usePickerOptions(recipeId, picker, projectId = null) {
   const [options, setOptions] = useState(null)
   useEffect(() => {
-    if (!['repos', 'channels', 'slates'].includes(picker)) return undefined
+    if (!['repos', 'channels', 'slates', 'linear-teams'].includes(picker)) return undefined
     let live = true
     Meteor.callAsync('recipes.pickerOptions', { recipeId, picker, ...(picker === 'slates' && projectId && { projectId }) })
       .then((a) => { if (live) setOptions(Array.isArray(a?.options) ? a.options : []) }, () => { if (live) setOptions([]) })
@@ -78,7 +78,7 @@ function PickerField({ field, recipeId, value, onChange, error }) {
       getOptionLabel={(o) => o.label || o.value} isOptionEqualToValue={(a, b) => a.value === b.value}
       onChange={(e, next) => onChange(field.multiple ? next.map((o) => o.value) : next?.value ?? null)}
       renderInput={(params) => <TextField {...params} label={field.label} required={field.required} error={Boolean(error)}
-        helperText={error || field.help || (options?.length === 0 ? (field.kind === 'repos' ? 'No repos yet: add some to the Slatebox app on GitHub.' : 'No channels yet: invite Slatebox to a channel first.') : '')} />} />
+        helperText={error || field.help || (options?.length === 0 ? (field.kind === 'repos' ? 'No repos yet: add some to the Slatebox app on GitHub.' : field.kind === 'linear-teams' ? 'No teams yet: connect Linear first.' : 'No channels yet: invite Slatebox to a channel first.') : '')} />} />
   )
 }
 
@@ -140,7 +140,7 @@ export default function ConfigForm({ schema, recipeId, projectId = null, value, 
       {fields.map((f) => {
         const v = value?.[f.key]
         const error = errors[f.key]
-        if (f.kind === 'repos' || f.kind === 'channels') return <PickerField key={f.key} field={f} recipeId={recipeId} value={v} onChange={(x) => set(f.key, x)} error={error} />
+        if (f.kind === 'repos' || f.kind === 'channels' || f.kind === 'linear-teams') return <PickerField key={f.key} field={f} recipeId={recipeId} value={v} onChange={(x) => set(f.key, x)} error={error} />
         if (f.kind === 'slatemaps') return <SlateMapsField key={f.key} field={f} recipeId={recipeId} projectId={projectId} value={v} onChange={(x) => set(f.key, x)} error={error} />
         if (f.kind === 'files') return <FilesField key={f.key} field={f} value={v} onChange={(x) => set(f.key, x)} error={error} />
         if (f.kind === 'cron') return <CronField key={f.key} field={f} value={v} onChange={(x) => set(f.key, x)} error={error} />

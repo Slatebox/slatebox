@@ -735,5 +735,11 @@ export function matchFor(manifest, config) {
   }
   if (manifest.integration === 'slack') return { slack: { teamId: config.teamId ?? null, channels: [...new Set([config.channel, ...(config.channels || [])].filter(Boolean))] } }
   if (manifest.integration === 'google') return { google: { fileIds: [...new Set([config.fileId, ...(config.fileIds || [])].filter(Boolean))] } }
+  if (manifest.integration === 'linear') {
+    // Linear's events name the workspace and the team; a release map also reads GitHub repositories.
+    const linear = { linear: { organizationId: null, teams: [...new Set(config.teams || [])] } }
+    const repos = [...new Set(config.repos || [])]
+    return manifest.needs?.github && repos.length ? { ...linear, github: { installationId: config.installationId ?? null, repos } } : linear
+  }
   return {}
 }

@@ -10,9 +10,9 @@
 export const RECIPES_OFF_COPY = 'An admin turns recipes on in Admin › Recipes.'
 
 export const INTEGRATION_WORDS = Object.freeze({
-  github: 'GitHub', slack: 'Slack', google: 'Google Drive', null: 'Webhooks and schedules',
+  github: 'GitHub', linear: 'Linear', slack: 'Slack', google: 'Google Drive', null: 'Webhooks and schedules',
 })
-const INTEGRATION_ORDER = ['github', 'slack', 'google', null]
+const INTEGRATION_ORDER = ['github', 'linear', 'slack', 'google', null]
 
 export const STATE_WORDS = Object.freeze({
   draft: { label: 'Draft', color: 'default', help: 'Not turned on yet.' },

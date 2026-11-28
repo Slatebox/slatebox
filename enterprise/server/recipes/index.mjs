@@ -30,6 +30,7 @@ import { slackVendorFactory } from './vendors/slack/factory.mjs'
 import { googleVendorFactory } from './vendors/google/factory.mjs'
 import { githubVendorFactory } from './vendors/github/factory.mjs'
 import { githubAppActions } from './vendors/github/actions.mjs'
+import { linearVendorFactory } from './vendors/linear/factory.mjs'
 
 export const RECIPE_MODULES = Object.freeze([
   githubArchitecture, githubPrImpact, githubMermaidSync, // GitHub (the Slatebox GitHub App)
@@ -42,6 +43,7 @@ export const VENDOR_FACTORIES = Object.freeze([
   githubVendorFactory,
   slackVendorFactory,
   googleVendorFactory,
+  linearVendorFactory,
 ])
 
 const byId = new Map(RECIPE_MODULES.map((m) => [m.manifest.id, m]))
