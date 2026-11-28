@@ -6,7 +6,8 @@
 //   connectors.githubApp.get       Admin › Integration apps › GitHub App: ids and fingerprints, never secrets
 //   connectors.githubApp.set       an administrator enters the App's credentials (secrets sealed). A person only.
 //   connectors.githubApp.clear     forgets them (the settings file's App, if any, serves again). A person only.
-//   connectors.githubApp.manifest  the form a self-hosted admin's browser posts to GitHub to make the App in one click
+//   connectors.githubApp.manifest  the form an admin's browser posts to GitHub to make the App in one click
+//                                  (Cloud: the one public App, in the Slatebox organization; self-host: a private App)
 //   recipes.github.installations   the GitHub installations and repositories a person may pick for a recipe,
 //                                  and where "Install Slatebox on GitHub" goes
 // The admin writes keep their own audit (as integration apps do); they are off the team activity log.
@@ -16,11 +17,13 @@ import { guardControlWrite } from '/server/actions/ai-providers.mjs'
 
 const VIEW = {
   type: 'object',
-  description: 'appId, slug, clientId, apiUrl (public); ready (every credential set); fingerprints { clientSecret, privateKey, webhookSecret } (sha256:…, never the secret); source (admin, settings or none); installUrl; secretsAvailable; updatedAt; updatedBy.',
+  description: 'appId, slug, clientId, apiUrl (public); ready (every credential set); fingerprints { clientSecret, privateKey, webhookSecret } (sha256:…, never the secret); source (admin, settings or none); appUrl (the App on GitHub); installUrl (its install screen); makes { name, public, defaultOrg } (what Create the GitHub App makes on this server); secretsAvailable; updatedAt; updatedBy.',
   properties: {
     appId: { type: ['string', 'null'] }, slug: { type: ['string', 'null'] }, clientId: { type: ['string', 'null'] }, apiUrl: { type: ['string', 'null'] },
     ready: { type: 'boolean' }, fingerprints: { type: 'object' }, source: { type: 'string', enum: ['admin', 'settings', 'none'] },
-    installUrl: { type: ['string', 'null'] }, secretsAvailable: { type: 'boolean' }, updatedAt: { type: ['string', 'null'] }, updatedBy: { type: ['string', 'null'] },
+    appUrl: { type: ['string', 'null'] }, installUrl: { type: ['string', 'null'] },
+    makes: { type: 'object', properties: { name: { type: 'string' }, public: { type: 'boolean' }, defaultOrg: { type: ['string', 'null'] } } },
+    secretsAvailable: { type: 'boolean' }, updatedAt: { type: ['string', 'null'] }, updatedBy: { type: ['string', 'null'] },
   },
 }
 const LINE = (what, max = 200) => ({ type: 'string', minLength: 1, maxLength: max, description: `The App's ${what}.` })
@@ -108,7 +111,7 @@ export function githubAppActions(getVendor) {
     defineAction({
       id: 'connectors.githubApp.manifest',
       title: 'Make a GitHub App',
-      description: 'The form that makes this server\'s own GitHub App in one click (GitHub\'s App manifest flow): post `manifest` to `action` from the browser; GitHub returns to Slatebox, which stores the new App\'s credentials sealed. org: make it in that GitHub organization. The link lasts ten minutes and works once. A person only. Administrators only.',
+      description: 'The form that makes this server\'s GitHub App in one click (GitHub\'s App manifest flow): post `manifest` to `action` from the browser; GitHub returns to Slatebox, which stores the new App\'s credentials sealed. On Slatebox Cloud it is the one public App every account installs, in the Slatebox organization unless org names another; on a self-hosted install it is a private App, in org if given, else the admin\'s own account. The link lasts ten minutes and works once. A person only. Administrators only.',
       toolset: 'admin',
       kind: 'write',
       scope: 'ai:admin',
@@ -119,7 +122,7 @@ export function githubAppActions(getVendor) {
       replay: 'rerun',
       audit: OFF,
       input: { type: 'object', properties: { org: { type: 'string', pattern: '^[A-Za-z0-9-]{1,39}$' } }, additionalProperties: false },
-      output: { type: 'object', properties: { action: { type: 'string' }, manifest: { type: 'string' }, state: { type: 'string' } } },
+      output: { type: 'object', properties: { action: { type: 'string' }, manifest: { type: 'string' }, state: { type: 'string' }, org: { type: ['string', 'null'] } } },
       handler: async (principal, input, { deps }) => {
         const actor = await guardControlWrite(principal, deps, { action: 'connectors.githubApp.manifest', target: { kind: 'integration-app', id: 'github-app' }, doing: 'set up the GitHub App', refusal: personOnly })
         return { status: 200, body: await vendor().appSettings.manifestFor({ actor, org: input.org ?? null }) }

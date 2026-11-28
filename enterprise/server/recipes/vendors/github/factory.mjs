@@ -10,6 +10,7 @@
 import { createVendor } from './index.mjs'
 import { GITHUB_PATHS } from './routes.mjs'
 import { MANIFEST_CALLBACK_PATH } from './app-settings.mjs'
+import { isCloudEdition } from '/imports/api/common/edition.mjs'
 
 export const GITHUB_COLLECTIONS = Object.freeze({
   installations: 'githubInstallations',
@@ -30,6 +31,8 @@ export function githubVendorFactory({ collection, master = null, settings = {}, 
     log: (entry) => log({ vendor: 'github', ...entry }),
     origin,
     audit,
+    // Cloud makes one public App (named for the test server there); a self-hosted install its own private one.
+    edition: () => ({ cloud: isCloudEdition(settings), test: settings.public?.env === 'test' }),
   })
 }
 // Registered before the server starts; the handlers are the started vendor's (index.mjs).

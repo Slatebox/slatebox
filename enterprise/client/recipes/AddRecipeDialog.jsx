@@ -55,17 +55,27 @@ function RecipeChoice({ manifest, onPick }) {
   )
 }
 
-function ConnectStep({ manifest }) {
+function ConnectStep({ manifest, projectId }) {
   const [note, setNote] = useState('')
   const name = INTEGRATION_WORDS[manifest.integration]
-  function connect() {
+  async function connect() {
     setNote('')
     const win = openSignInWindow()
     if (!win) { setNote('Your browser blocked the window. Allow pop-ups for Slatebox, then try again.'); return }
-    win.location.href = manifest.connectUrl
-    const timer = setInterval(() => {
-      if (win.closed) { clearInterval(timer); refreshCatalog() }
-    }, 800)
+    let url = manifest.connectUrl
+    // GitHub: the Slatebox GitHub App's install screen, which comes back to this project.
+    if (manifest.integration === 'github') url = (await recipesApi.githubInstallations(projectId ? { projectId } : {}).catch(() => null))?.installUrl || url
+    win.location.href = url
+    // Watch for the connection while the window is open: once the catalog says connected, the
+    // window has done its job (GitHub sent it back to Slatebox), so close it and move on.
+    let ticks = 0
+    const timer = setInterval(async () => {
+      ticks += 1
+      if (win.closed || ticks > 600) { clearInterval(timer); refreshCatalog(); return }
+      if (ticks % 3) return
+      const got = await refreshCatalog()
+      if (got?.answer?.recipes?.find((r) => r.id === manifest.id)?.connected) { clearInterval(timer); try { win.close() } catch {} }
+    }, 1000)
   }
   const label = manifest.integration === 'github' ? 'Install Slatebox on GitHub' : `Connect ${name}`
   return (
@@ -174,7 +184,7 @@ export default function AddRecipeDialog({ open, projectId, draft = null, onClose
               </Box>
             </Box>
           )))}
-        {step === 'connect' && current && <ConnectStep manifest={current} />}
+        {step === 'connect' && current && <ConnectStep manifest={current} projectId={projectId} />}
         {step === 'configure' && current && (
           <Box sx={{ display: 'grid', gap: 2 }}>
             <TextField label="Name" value={name} placeholder={instanceName(current, config)} onChange={(e) => setName(e.target.value)} helperText="Shown on the project page and in the run history." />

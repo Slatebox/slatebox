@@ -58,6 +58,8 @@ const recipesApi = {
   pauseMine: (input) => call('recipes.pauseMine', input),
   /** @returns {Promise<{paused: boolean}>} */
   mine: () => call('recipes.mine', {}),
+  /** @param {{projectId?: string}} input @returns {Promise<{installUrl: string|null, installations: object[]}>} the Slatebox GitHub App's install screen (back to this project after) */
+  githubInstallations: (input) => call('recipes.github.installations', input),
   team: {
     /** @param {{orgId: string}} input @returns {Promise<{allowed: boolean}>} */
     get: (input) => call('recipes.team.get', input),

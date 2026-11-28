@@ -17,13 +17,16 @@
 //
 // deps: { collections: { installations, deliveries, appSettings, flows } (Mongo driver collections),
 //         master (vault key or null), settings() → settings.connectors.githubApp, fetch?, now?, log?,
-//         later?, origin() → this Slatebox's address, audit?(entry) }
+//         later?, origin() → this Slatebox's address, audit?(entry), edition?() → { cloud, test } (app-settings.mjs) }
 import { createInstallationTokens, GITHUB_API } from './app.mjs'
 import { createGithubAppSettings, appOAuth, MANIFEST_CALLBACK_PATH } from './app-settings.mjs'
 import { createGithubClient, createInstallationGate, GithubError } from './client.mjs'
 import { checkHardLimits, performWrite } from './perform.mjs'
 import { githubRoutes, signState } from './routes.mjs'
 import { createGithubStores } from './store.mjs'
+
+// Back to Admin › AI control › Integration apps (the tab by ?tab=), saying how it went.
+export const ADMIN_BACK = (status) => `/admin/ai?tab=integration-apps&github=${status}`
 
 export const READ_CALLS = Object.freeze(['head', 'repo', 'branch', 'compare', 'contents', 'tarball', 'pull', 'pullFiles', 'issueComments', 'ref', 'commit'])
 
@@ -54,7 +57,7 @@ export function createVendor(deps) {
   const { collections, now = () => Date.now(), log = () => {}, later, fetch = globalThis.fetch } = deps
   const stores = createGithubStores({ installations: collections.installations, deliveries: collections.deliveries, now })
   const appSettings = createGithubAppSettings({
-    rows: docRows(collections.appSettings), master: deps.master ?? null, settings: deps.settings, flows: flowRows(collections.flows, now), fetch, audit: deps.audit, now, origin: deps.origin,
+    rows: docRows(collections.appSettings), master: deps.master ?? null, settings: deps.settings, flows: flowRows(collections.flows, now), fetch, audit: deps.audit, now, origin: deps.origin, edition: deps.edition,
   })
   const apiBase = async () => (await appSettings.credentials()).apiUrl || GITHUB_API
   const tokens = createInstallationTokens({
@@ -140,10 +143,10 @@ export function createVendor(deps) {
           try {
             await appSettings.finishManifest({ code: q.code, state: q.state })
             log({ kind: 'github_app_created' })
-            return res.redirect(302, '/admin/ai/integration-apps?github=ready')
+            return res.redirect(302, ADMIN_BACK('ready'))
           } catch (error) {
             log({ kind: 'github_app_failed', code: error?.code ?? null })
-            return res.redirect(302, '/admin/ai/integration-apps?github=failed')
+            return res.redirect(302, ADMIN_BACK('failed'))
           }
         },
       })

@@ -260,7 +260,13 @@ export function startRecipes({ via = null, isUnlocked = () => true, projects, re
       return { revision: body?.revision ?? null }
     },
     // whether the person connected the integration a recipe needs (their integrations, by address)
-    connected: async (userId, integration) => Boolean(await MongoInternals.defaultRemoteCollectionDriver().mongo.db.collection('integrations').findOne({ ownerId: userId, address: { $regex: integration === 'google' ? 'google' : integration } }, { projection: { _id: 1 } })),
+    // GitHub: an installation of the Slatebox GitHub App the person's own GitHub sign-in sees.
+    connected: async (userId, integration) => {
+      if (integration === 'github' && vendors.get('github')) return (await vendors.get('github').stores.installations.forUser(userId)).length > 0
+      return Boolean(await MongoInternals.defaultRemoteCollectionDriver().mongo.db.collection('integrations').findOne({ ownerId: userId, address: { $regex: integration === 'google' ? 'google' : integration } }, { projection: { _id: 1 } }))
+    },
+    // where Connect goes: GitHub's install screen for the Slatebox GitHub App (null until an admin makes the App)
+    connectUrl: async (userId, integration) => (integration === 'github' && vendors.get('github') ? vendors.get('github').installUrl(userId).catch(() => null) : null),
     firstName,
     // a config picker's choices: the repositories the Slatebox GitHub App shows the person
     pickerOptions: async (userId, manifest, picker) => {

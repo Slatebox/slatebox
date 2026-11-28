@@ -7,11 +7,16 @@
 // githubAppSettings _id 'app'; the secret parts sealed with the vault, bound to this use; never
 // returned, only fingerprints). The document wins over the settings file.
 //
-// Slatebox Cloud registers one public App (the owner, once). A self-hosted install makes its own in
-// one click with GitHub's App manifest flow: manifestFor() gives the form the admin's browser posts
-// to GitHub (github.com/settings/apps/new, or an organization's), GitHub sends the browser back to
-// /integrations/github/manifest/callback with a code, and finishManifest() exchanges it once for the
-// new App's id, key and secrets, stored sealed. The flow's state is single use, ten minutes.
+// Both editions make their App in one click with GitHub's App manifest flow: manifestFor() gives the
+// form the admin's browser posts to GitHub (github.com/settings/apps/new, or an organization's),
+// GitHub sends the browser back to /integrations/github/manifest/callback with a code, and
+// finishManifest() exchanges it once for the new App's id, key and secrets, stored sealed. The
+// flow's state is single use, ten minutes.
+// - Slatebox Cloud (edition 'cloud'): ONE public App any GitHub account can install in one click,
+//   named "Slatebox" ("Slatebox (test)" on the test server, settings.public.env 'test'), owned by
+//   the Slatebox organization (org defaults to CLOUD_ORG), homepage https://slatebox.com.
+// - A self-hosted install: its own private App, named "Slatebox", homepage this server.
+// The permissions are the same least set on both (appManifest).
 import { randomBytes } from 'node:crypto'
 import { open as openSecret, seal } from '/server/metering/vault.mjs'
 import { keyFingerprint } from '/server/ai-control/keys.mjs'
@@ -26,19 +31,36 @@ const refuse = (status, code, message) => Object.assign(new Error(message), { st
 const TEXT = /^[\x21-\x7e]{1,200}$/
 const PEM = /^-----BEGIN (RSA )?PRIVATE KEY-----[\s\S]{100,8000}-----END (RSA )?PRIVATE KEY-----\s*$/
 
+export const CLOUD_ORG = 'Slatebox'
+export const CLOUD_HOMEPAGE = 'https://slatebox.com'
+// What GitHub shows on the App's page and install screen: only what the code does (perform.mjs).
+export const APP_DESCRIPTION = 'Slatebox recipes keep diagrams of your code up to date on a shared Slatebox canvas. '
+  + 'The app reads only the repositories you pick. It writes only what you allow for each recipe: '
+  + 'a pull request from a slatebox/ branch, one comment on a pull request, and a check result. '
+  + 'It never merges, deletes a branch, or writes to your default branch.'
+
+/** Which App this server makes: { cloud, test } from the settings (edition and public.env). */
+export function appIdentity({ cloud = false, test = false } = {}) {
+  if (!cloud) return { public: false, name: 'Slatebox', defaultOrg: null, homepage: null }
+  return { public: true, name: test ? 'Slatebox (test)' : 'Slatebox', defaultOrg: CLOUD_ORG, homepage: CLOUD_HOMEPAGE }
+}
+
 /** The App's manifest for this Slatebox address (the permissions and events the recipes need). */
-export function appManifest(origin, { name = 'Slatebox' } = {}) {
+export function appManifest(origin, { cloud = false, test = false, name = null } = {}) {
   const at = (path) => new URL(path, origin).href
+  const who = appIdentity({ cloud, test })
   return {
-    name: `${name}`.slice(0, 34),
-    url: origin,
+    name: `${name || who.name}`.slice(0, 34),
+    description: APP_DESCRIPTION,
+    url: who.homepage || origin,
     hook_attributes: { url: at('/integrations/github/events'), active: true },
     redirect_url: at(MANIFEST_CALLBACK_PATH),
     callback_urls: [at('/integrations/github/installed')],
     setup_url: at('/integrations/github/installed'),
     setup_on_update: true,
     request_oauth_on_install: true,
-    public: false,
+    // Cloud: one App every account installs; a self-hosted install's App is its own.
+    public: who.public,
     // contents:write is used only for diagram pull requests a person allows per recipe (the standing permission).
     default_permissions: { metadata: 'read', contents: 'write', pull_requests: 'write', checks: 'write' },
     default_events: ['push', 'pull_request'],
@@ -47,9 +69,10 @@ export function appManifest(origin, { name = 'Slatebox' } = {}) {
 
 /**
  * deps: { rows: { get(), put(doc), remove() }, master (vault key or null), settings() → settings.connectors.githubApp,
- *         flows: { put(state, value, expiresAt), take(state) → value|null }, fetch, audit?(entry), now?, origin() }
+ *         flows: { put(state, value, expiresAt), take(state) → value|null }, fetch, audit?(entry), now?, origin(),
+ *         edition?() → { cloud, test } (which App the manifest flow makes: appIdentity) }
  */
-export function createGithubAppSettings({ rows, master, settings = () => ({}), flows, fetch = globalThis.fetch, audit = null, now = () => Date.now(), origin = () => '' }) {
+export function createGithubAppSettings({ rows, master, settings = () => ({}), flows, fetch = globalThis.fetch, audit = null, now = () => Date.now(), origin = () => '', edition = () => ({}) }) {
   const unseal = (doc, field) => {
     if (!doc?.[field] || !master) return null
     try {
@@ -80,12 +103,17 @@ export function createGithubAppSettings({ rows, master, settings = () => ({}), f
   async function view() {
     const c = await credentials()
     const doc = await rows.get()
+    const who = appIdentity(edition())
+    const appUrl = c.slug ? `${c.webUrl}/apps/${encodeURIComponent(c.slug)}` : null
     return {
       appId: c.appId ?? null, slug: c.slug ?? null, clientId: c.clientId ?? null, apiUrl: c.apiUrl,
       ready: Boolean(c.appId && c.privateKey && c.webhookSecret && c.clientId && c.clientSecret && c.slug),
       fingerprints: Object.fromEntries(SECRET_FIELDS.map((f) => [f, c[f] ? keyFingerprint(c[f]) : null])),
       source: doc ? 'admin' : c.appId ? 'settings' : 'none',
-      installUrl: c.slug ? `${c.webUrl}/apps/${encodeURIComponent(c.slug)}/installations/new` : null,
+      appUrl,
+      installUrl: appUrl ? `${appUrl}/installations/new` : null,
+      // what Create the GitHub App makes here: public on Cloud (one App for everyone), private on a self-hosted install
+      makes: { name: who.name, public: who.public, defaultOrg: who.defaultOrg },
       secretsAvailable: Boolean(master),
       updatedAt: doc?.updatedAt ?? null,
       updatedBy: doc?.updatedBy ?? null,
@@ -125,11 +153,14 @@ export function createGithubAppSettings({ rows, master, settings = () => ({}), f
 
   /** The manifest form for the admin's browser: { action, manifest (JSON text), state }. */
   async function manifestFor({ actor, org = null }) {
+    const which = edition() || {}
+    // Cloud's App belongs to the Slatebox organization unless the admin names another.
+    const owner = (typeof org === 'string' && org.trim()) || appIdentity(which).defaultOrg
     const state = randomBytes(24).toString('base64url')
     await flows.put(state, { userId: actor?.userId ?? null }, new Date(now() + 10 * 60 * 1000))
     const c = await credentials()
-    const base = org ? `${c.webUrl}/organizations/${encodeURIComponent(org)}/settings/apps/new` : `${c.webUrl}/settings/apps/new`
-    return { action: `${base}?state=${state}`, manifest: JSON.stringify(appManifest(origin())), state }
+    const base = owner ? `${c.webUrl}/organizations/${encodeURIComponent(owner)}/settings/apps/new` : `${c.webUrl}/settings/apps/new`
+    return { action: `${base}?state=${state}`, manifest: JSON.stringify(appManifest(origin(), which)), state, org: owner || null }
   }
 
   /** GitHub's code back, exchanged once for the new App's credentials (stored sealed). */

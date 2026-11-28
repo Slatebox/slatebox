@@ -73,14 +73,15 @@ export function checkTriggers(manifest, triggers) {
  *   projects (A.6), switches { serverOff, installEnabled, setInstallEnabled, orgRecipesOff, ownerPaused, isMember },
  *   permissions, outbound, sealer { seal(hookId, plain), open(hookId, sealed) }, checkHookUrl(url) (throws),
  *   slateIdFor(principal, shareId) → { slateId, canRead } | null, undo(principal, slateId, operationRunId),
- *   connected(userId, integration) → bool, firstName(userId), orgOf(projectId) → orgId | null,
+ *   connected(userId, integration) → bool, connectUrl(userId, integration) → where Connect goes (or null),
+ *   firstName(userId), orgOf(projectId) → orgId | null,
  *   isServerAdmin(userId), audit(entry), notify(userId, message), via ('cloud'|'self-host'),
  *   resolveMatch(manifest, match, ownerId) → match (a vendor fills in what config does not say, such
  *     as the GitHub installation holding the picked repositories; refuses when there is none)
  * }
  */
 export function createRecipeService(deps) {
-  const { store, queue, runner, clock = Date.now, recipeOf, catalog, projects, switches, permissions, outbound, sealer, checkHookUrl = () => {}, slateIdFor, undo, connected = async () => false, firstName = async () => null, isServerAdmin = async () => false, audit = async () => {}, notify = async () => {} } = deps
+  const { store, queue, runner, clock = Date.now, recipeOf, catalog, projects, switches, permissions, outbound, sealer, checkHookUrl = () => {}, slateIdFor, undo, connected = async () => false, connectUrl = async () => null, firstName = async () => null, isServerAdmin = async () => false, audit = async () => {}, notify = async () => {} } = deps
   const newId = deps.randomId || (() => Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10))
   const { instances, runs, hooks, deliveries, notes, grants, cards } = store
   const resolveMatch = deps.resolveMatch || (async (_manifest, match) => match)
@@ -141,7 +142,12 @@ export function createRecipeService(deps) {
   return {
     async catalog(principal) {
       const out = []
-      for (const m of catalog()) out.push({ ...publicManifest(m), connected: m.integration ? Boolean(await connected(principal.userId, m.integration)) : true })
+      for (const m of catalog()) {
+        const isConnected = m.integration ? Boolean(await connected(principal.userId, m.integration)) : true
+        // Connect in one click: where the button goes (GitHub: the App's install screen), when not connected yet.
+        const url = m.integration && !isConnected ? await Promise.resolve(connectUrl(principal.userId, m.integration)).catch(() => null) : null
+        out.push({ ...publicManifest(m), connected: isConnected, ...(url && { connectUrl: url }) })
+      }
       return { recipes: out, on: !(await switches.serverOff()) && Boolean(await switches.installEnabled()) }
     },
 

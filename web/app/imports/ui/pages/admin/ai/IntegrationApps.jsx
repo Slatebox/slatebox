@@ -8,6 +8,7 @@ import Link from '@mui/material/Link'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { ReasonDialog } from './ReasonDialog'
+import GithubAppCard from './GithubAppCard'
 
 // Admin › AI control › Integration apps: the OAuth app this server signs people in to outside tools
 // with, for each vendor that offers no automatic registration (Slack, Asana, HubSpot, ...). An
@@ -19,6 +20,7 @@ import { ReasonDialog } from './ReasonDialog'
 // app (its Web API): it also takes the signing secret Slack signs its requests with (shown, like the
 // client secret, only as a fingerprint), and offers its app manifest with this server's addresses
 // filled in (connectors.apps.slackManifest): paste it at api.slack.com/apps, install, enter three values.
+// First, where recipes run: the GitHub App recipes read GitHub through, made in one click (GithubAppCard).
 const mono = { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.75rem' }
 const failure = (err, fallback) => err?.reason || err?.message || fallback
 const SOURCE = { admin: 'Set here', settings: 'From the settings file', none: 'Not set up' }
@@ -198,6 +200,7 @@ export default function IntegrationApps() {
   if (!data) return <Typography variant="body2">Reading the integration apps…</Typography>
   return (
     <Box data-integration-apps="">
+      <GithubAppCard />
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         These tools have no automatic sign-up, so people sign in to them through one app you register with each vendor.
         Register the app in the vendor&apos;s console, give it the redirect URL below, then paste its client id and client secret here.

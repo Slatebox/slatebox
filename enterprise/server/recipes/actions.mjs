@@ -25,7 +25,7 @@ export function recipeActions(service) {
       ...recipesBase,
       id: 'recipes.catalog',
       title: 'Recipe catalog',
-      description: 'The recipes this server offers: what each keeps up to date in a project (its slates and boards), when it runs, what it may propose to change outside Slatebox, the webhooks it sends, its cost class, and whether you have connected the integration it needs. on is false while recipes are turned off here.',
+      description: 'The recipes this server offers: what each keeps up to date in a project (its slates and boards), when it runs, what it may propose to change outside Slatebox, the webhooks it sends, its cost class, whether you have connected the integration it needs and, when not, connectUrl (where Connect goes: for GitHub, the install screen of the Slatebox GitHub App). on is false while recipes are turned off here.',
       kind: 'read',
       scope: 'recipes:read',
       mounts: { ddp: true, http: { method: 'GET', path: '/recipes/catalog', operationId: 'recipeCatalog' } },

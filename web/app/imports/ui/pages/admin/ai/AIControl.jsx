@@ -36,7 +36,11 @@ const TABS = [
 ]
 
 export default function AIControl() {
-  const [tab, setTab] = useState('overview')
+  // ?tab= opens a section (GitHub sends an admin back to Integration apps after making the App).
+  const [tab, setTab] = useState(() => {
+    const asked = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('tab')
+    return TABS.some((t) => t.id === asked) ? asked : 'overview'
+  })
   const { Panel } = TABS.find((t) => t.id === tab) || TABS[0]
   return (
     <AppPage title="AI control"
