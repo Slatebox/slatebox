@@ -200,7 +200,7 @@ and `selfHosted.workshopAI`. Files the app stores (uploads, AI images,
 presentation images) go to the database's `files` GridFS bucket and are served
 by the app at `/files/`, so a backup carries them; only an `aws.imageBucket`
 in `SLATEBOX_SETTINGS` sends them to S3 instead. With `public.env = selfhost` the app also leaves
-out Heap analytics and every screen that belongs to the hosted service; the
+out every screen that belongs to the hosted service; the
 interface fonts are the app's own, served at `/fonts/`, so a page view sends
 nothing to a font host. The relay gets `API_KEYS` and
 `API_GEN_KEY`; MongoDB has three accounts (root, app, relay).

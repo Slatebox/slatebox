@@ -76,7 +76,6 @@ import AuthManager from '../api/common/AuthManager'
 
 import MessagesMenu from './components/MessagesMenu'
 import getUserDisplayName from '../api/common/getUserName'
-import LoadHeap from './components/LoadHeap'
 import { rememberSignedIn } from './common/accountCopy.mjs'
 import { enterpriseState } from '../api/common/edition.mjs'
 import MoveToCloudButton from './components/selfhost/MoveToCloudButton'
@@ -533,7 +532,6 @@ export default function Main() {
       }}
     >
       <CssBaseline />
-      <LoadHeap />
       <ChatWootConfig />
       <ThemeProvider theme={sbTheme} defaultMode="light">
         {!isOnPresentPage && <ConnectionStatus />}

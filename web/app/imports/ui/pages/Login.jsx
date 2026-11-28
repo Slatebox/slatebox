@@ -182,9 +182,9 @@ export default function Login() {
         <Box sx={{ pt: 4, textAlign: 'center' }}>
           <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.6 }}>
             By signing in or creating an account, you agree to the{' '}
-            <Link href="./slatebox_terms_of_use.pdf" target="_blank" sx={{ color: 'text.primary' }}>Terms of Service</Link>
+            <Link href="https://slatebox.com/terms/" target="_blank" rel="noopener" sx={{ color: 'text.primary' }}>Terms of Service</Link>
             {' '}and{' '}
-            <Link href="./slatebox_privacy_policy.pdf" target="_blank" sx={{ color: 'text.primary' }}>Privacy Policy</Link>.
+            <Link href="https://slatebox.com/privacy/" target="_blank" rel="noopener" sx={{ color: 'text.primary' }}>Privacy Policy</Link>.
           </Typography>
         </Box>
       </Container>

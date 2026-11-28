@@ -63,7 +63,7 @@
     "test:projects": "node --test scripts/project-role.test.mjs scripts/project-core.test.mjs scripts/project-entry-points.test.mjs scripts/project-actions-contract.test.mjs scripts/slate-copy-project.test.mjs",
     "test:engine-imports": "node --test scripts/engine-imports.test.mjs",
     "test:groups": "node --test scripts/test-groups.test.mjs",
-    "test:growth": "node --test scripts/growth-funnel.test.mjs",
+    "test:growth": "node --test scripts/growth-funnel.test.mjs scripts/no-third-party-analytics.test.mjs",
     "test:self-host-image": "node --test --test-concurrency=1 self-host/tests/backup.test.mjs self-host/tests/browser.test.mjs self-host/tests/configure.test.mjs self-host/tests/image.test.mjs self-host/tests/lifecycle.test.mjs self-host/tests/log-content.test.mjs self-host/tests/options.test.mjs self-host/tests/tunnel.test.mjs self-host/tests/uploads.test.mjs self-host/tests/setup.test.mjs self-host/tests/sso.test.mjs"
   },
   "devDependencies": {
