@@ -36,6 +36,10 @@ export const RECIPE_LIMITS = Object.freeze({
 export const RUN_STATES = Object.freeze(['queued', 'running', 'done', 'partial', 'failed', 'skipped', 'cancelled'])
 export const FINAL_STATES = Object.freeze(['done', 'partial', 'failed', 'skipped', 'cancelled'])
 const LIVE_INSTANCE = 'active'
+// Saves on a synced slate (slateSaved): the longest a slate under constant edits waits, and how close
+// two slates' due times are for one run to take both.
+export const SAVE_MAX_WAIT_MS = 3600e3
+export const SAVE_COALESCE_MS = 120e3
 
 const asDate = (ms) => new Date(ms)
 
@@ -145,12 +149,19 @@ export function createRecipeQueue({ store, clock = Date.now, worker = 'w', limit
    * A person saved a slate in the instance's sync map: that slate's run is due debounceMs after its
    * last save. One compare-and-set on the instance; false when it is not on.
    */
-  async function slateSaved(instanceId, shareId, { debounceMs = 0 } = {}) {
+  async function slateSaved(instanceId, shareId, { debounceMs = 0, onlyIfMissing = false } = {}) {
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const instance = await instances.findOne({ _id: instanceId })
       if (!instance || instance.state !== LIVE_INSTANCE) return false
-      const until = clock() + debounceMs
-      const saves = [...(instance.slateSaves || []).filter((s) => s.shareId !== shareId), { shareId, until: asDate(until), count: ((instance.slateSaves || []).find((s) => s.shareId === shareId)?.count || 0) + 1 }].slice(-100)
+      const known = (instance.slateSaves || []).find((s) => s.shareId === shareId)
+      // a throttled save only makes sure the slate has a due time (one taken by a tick a moment ago)
+      if (onlyIfMissing && known) return false
+      const now = clock()
+      // A slate people never stop editing still goes out: at most SAVE_MAX_WAIT_MS after its first
+      // waiting save (one commit an hour, not none all day).
+      const first = known?.first ? new Date(known.first).getTime() : now
+      const until = Math.min(now + debounceMs, first + Math.max(debounceMs, SAVE_MAX_WAIT_MS))
+      const saves = [...(instance.slateSaves || []).filter((s) => s.shareId !== shareId), { shareId, until: asDate(until), first: asDate(first), count: (known?.count || 0) + 1 }].slice(-100)
       const changed = await instances.updateOne(
         { _id: instanceId, rev: instance.rev ?? 0 },
         { $set: { slateSaves: saves, savesDueAt: asDate(Math.min(...saves.map((s) => new Date(s.until).getTime()))) }, $inc: { rev: 1 } }
@@ -338,9 +349,10 @@ export function createScheduler({ store, clock = Date.now, queue, limits = RECIP
     // Slates in a sync map that went quiet: one run for all of them, the rest keep waiting.
     const saved = await instances.find({ state: LIVE_INSTANCE, savesDueAt: { $lte: asDate(now) } }, { sort: { savesDueAt: 1 }, limit: limits.tickBatch }).toArray()
     for (const instance of saved) {
+      // the slates due within SAVE_COALESCE_MS go with them: one run and one commit, not several
       const saves = instance.slateSaves || []
-      const due = saves.filter((s) => new Date(s.until).getTime() <= now)
-      const rest = saves.filter((s) => new Date(s.until).getTime() > now)
+      const due = saves.filter((s) => new Date(s.until).getTime() <= now + SAVE_COALESCE_MS)
+      const rest = saves.filter((s) => new Date(s.until).getTime() > now + SAVE_COALESCE_MS)
       const won = await instances.updateOne(
         { _id: instance._id, rev: instance.rev ?? 0 },
         { $set: { slateSaves: rest, savesDueAt: rest.length ? asDate(Math.min(...rest.map((s) => new Date(s.until).getTime()))) : null }, $inc: { rev: 1 } }

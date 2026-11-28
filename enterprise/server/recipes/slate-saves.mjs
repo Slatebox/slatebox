@@ -7,7 +7,8 @@
 //   - a recipe's own saves are not edits to export (recipe → recipe goes through recipe_event)
 //   - a slate no recipe watches is remembered as such for cacheMs (one indexed query, then none)
 //   - a watched slate's saves are folded per slate: at most one write per throttleMs, which only
-//     pushes that slate's due time out (queue.slateSaved, debounced per slate)
+//     pushes that slate's due time out (queue.slateSaved, debounced per slate); a save inside the
+//     throttle reads the instance and writes only when the slate has no due time left
 // Each server keeps its own memory; service.mjs forgets a slate here when a sync map changes on
 // this server (forget), and other servers catch up within cacheMs.
 
@@ -22,17 +23,28 @@ export function createSlateSaveListener({ store, queue, clock = Date.now, limits
     map.set(key, value)
   }
 
+  const reading = new Map() // shareId → the lookup under way (saves arriving together share one query)
+
   async function watchers(shareId) {
     const now = clock()
     const known = watchedBy.get(shareId)
     if (known && now - known.at < limits.cacheMs) return known.instances
-    const rows = await store.instances.find({ state: 'active', watchSlates: shareId }, { limit: 50, projection: { _id: 1, triggers: 1 } }).toArray()
-    const instances = rows
-      .map((row) => ({ _id: row._id, spec: (row.triggers || []).find((t) => t.kind === 'slate_saved') }))
-      .filter((row) => row.spec)
-      .map((row) => ({ _id: row._id, debounceMs: row.spec.debounceMs ?? 0 }))
-    remember(watchedBy, shareId, { at: now, instances })
-    return instances
+    if (reading.has(shareId)) return reading.get(shareId)
+    const lookup = (async () => {
+      const rows = await store.instances.find({ state: 'active', watchSlates: shareId }, { limit: 50, projection: { _id: 1, triggers: 1 } }).toArray()
+      const instances = rows
+        .map((row) => ({ _id: row._id, spec: (row.triggers || []).find((t) => t.kind === 'slate_saved') }))
+        .filter((row) => row.spec)
+        .map((row) => ({ _id: row._id, debounceMs: row.spec.debounceMs ?? 0 }))
+      remember(watchedBy, shareId, { at: now, instances })
+      return instances
+    })()
+    reading.set(shareId, lookup)
+    try {
+      return await lookup
+    } finally {
+      reading.delete(shareId)
+    }
   }
 
   /** A slate was saved. → how many recipes it pushed out (0 for nearly every save). */
@@ -43,9 +55,11 @@ export function createSlateSaveListener({ store, queue, clock = Date.now, limits
     let n = 0
     for (const instance of await watchers(shareId)) {
       const key = `${instance._id}:${shareId}`
-      if (now - (pushed.get(key) ?? -Infinity) < limits.throttleMs) continue
-      remember(pushed, key, now)
-      if (await queue.slateSaved(instance._id, shareId, { debounceMs: instance.debounceMs })) n += 1
+      // Inside the throttle a save only checks that the slate still has a due time: a tick may have
+      // just taken it, and this save must not be left out of every export.
+      const throttled = now - (pushed.get(key) ?? -Infinity) < limits.throttleMs
+      if (!throttled) remember(pushed, key, now)
+      if (await queue.slateSaved(instance._id, shareId, { debounceMs: instance.debounceMs, onlyIfMissing: throttled })) n += 1
     }
     return n
   }

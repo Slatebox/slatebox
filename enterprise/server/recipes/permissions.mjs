@@ -186,7 +186,8 @@ export function createPermissions({ store, clock = Date.now, audit = async () =>
     if (own && manifest?.events?.includes(own)) {
       await emit({ type: own, instance, run, manifest, data: { repo: String(write.target?.repo || '').slice(0, 200), number: Number.parseInt(ref, 10) || 0, files: (answer.files || []).map((f) => String(f).slice(0, 300)).slice(0, 40), ...(answer.commit && { commit: String(answer.commit).slice(0, 40) }) } }).catch(() => {})
     }
-    return { ref, ...(answer.commit && { commit: String(answer.commit).slice(0, 40) }) }
+    const held = Array.isArray(answer.held) && answer.held.length ? answer.held.map((p) => String(p).slice(0, 300)).slice(0, 40) : null
+    return { ref, ...(answer.commit && { commit: String(answer.commit).slice(0, 40) }), ...(held && { held }) }
   }
 
   /** One proposed write, decided and done. → the run's writes[] entry. */
@@ -213,12 +214,13 @@ export function createPermissions({ store, clock = Date.now, audit = async () =>
       }
     }
     if (decision === 'allow') {
-      const { ref, refused, commit } = await make(instance, { ...write, body }, { grant: decided.grant, run, signal })
+      const { ref, refused, commit, held } = await make(instance, { ...write, body }, { grant: decided.grant, run, signal })
       if (refused) return { kind: write.kind, target: targetLine(write.target), state: 'refused' }
       // A card still waiting for the same change (proposed before the permission was given) is done
       // with: this write carries the newer body.
       if (write.key) await cards.updateMany({ instanceId: instance._id, key: write.key, state: 'waiting' }, { $set: { state: 'superseded', updated: new Date(clock()), runId: run?._id ?? null } })
-      return { kind: write.kind, target: targetLine(write.target), state: 'done', ...(ref && { ref }), ...(commit && { commit }) }
+      // held: files a person changed on the branch, left as they are (the vendor never writes over them)
+      return { kind: write.kind, target: targetLine(write.target), state: 'done', ...(ref && { ref }), ...(commit && { commit }), ...(held && { held }) }
     }
     const card = await propose(instance, { ...write, body }, run)
     if (card.state === 'waiting') await emit({ type: 'approval.needed', instance, run, data: { cardId: card._id, kind: write.kind, target: targetLine(write.target) } }).catch(() => {})

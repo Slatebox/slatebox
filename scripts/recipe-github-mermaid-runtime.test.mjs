@@ -334,13 +334,16 @@ test('the save listener: a slate no recipe watches costs one lookup, then none; 
     find: (query) => ({ toArray: async () => { lookups.push(query.watchSlates); return query.watchSlates === 'watched' ? [{ _id: 'i1', triggers: [{ kind: 'slate_saved', debounceMs: 600000 }] }] : [] } }),
   }
   const pushed = []
+  const checked = []
   let at = 0
-  const listener = createSlateSaveListener({ store: { instances }, queue: { slateSaved: async (id, shareId, o) => { pushed.push([id, shareId, o.debounceMs]); return true } }, clock: () => at })
+  // the queue's slateSaved: a push moves the due time out; onlyIfMissing only checks there is one
+  const listener = createSlateSaveListener({ store: { instances }, queue: { slateSaved: async (id, shareId, o) => { if (o.onlyIfMissing) { checked.push(shareId); return false } pushed.push([id, shareId, o.debounceMs]); return true } }, clock: () => at })
   for (let k = 0; k < 20; k += 1) { assert.equal(await listener.slateSaved({ shareId: 'plain', actor: { kind: 'person' } }), 0); at += 1000 }
   assert.equal(lookups.filter((x) => x === 'plain').length, 1, 'cached: one query for twenty saves')
   at = 0
   for (let k = 0; k < 20; k += 1) { await listener.slateSaved({ shareId: 'watched', actor: { kind: 'person' } }); at += 1000 }
   assert.deepEqual(pushed, [['i1', 'watched', 600000], ['i1', 'watched', 600000]], 'twenty saves in twenty seconds: two pushes (15 s throttle)')
+  assert.equal(checked.length, 18, 'a save inside the throttle only checks the slate still has a due time')
   assert.equal(await listener.slateSaved({ shareId: 'watched', actor: { kind: 'agent', tokenId: 'recipe:i1' } }), 0, 'a recipe\'s own save never counts')
   listener.forget(['plain'])
   await listener.slateSaved({ shareId: 'plain' })
@@ -431,4 +434,198 @@ test('the UI: Save to repo now on the card and on the synced slate, approvals wi
     assert.doesNotMatch(src, /colour|organis|behaviour|licence|favourite/i, f)
   }
   assert.match(read('web/app/server/slate-save.js'), /recipeHooks\.slateSaved\(\{ shareId: change\.slate\.shareId, actor: change\.actor \|\| null \}\)/)
+})
+
+// ---- Adversarial: storms, people's commits, revocation, scope, files ----
+
+/** A recipe with the permission, on, its first export made (one commit, one pull request). */
+async function synced(env, { maps, debounceMs = QUIET, grant = true } = {}) {
+  const { w, gh } = env
+  const ana = w.person('ana')
+  const drive = w.projects.addDrive({ ownerId: 'ana', name: 'Payments' })
+  await gh.vendor.stores.installations.upsert('42', { account: 'acme', repos: [REPO], allRepos: false, suspended: false })
+  await gh.vendor.stores.installations.linkUser('42', 'ana')
+  const slate = await personSlate(w, drive)
+  const triggers = TRIGGERS.map((t) => (t.kind === 'slate_saved' ? { ...t, debounceMs } : t))
+  const { recipe } = await w.service.create(ana, drive, { recipeId: 'github-mermaid-sync', config: { repo: REPO, maps: maps ? await maps(drive, slate) : [{ shareId: slate.shareId, file: FILE }] }, triggers })
+  const grantId = grant ? (await w.service.grant(ana, recipe.instanceId, { kind: 'github.pull_request', scope: SCOPE })).grantId : null
+  await w.service.activate(ana, recipe.instanceId)
+  const [first] = await w.drain()
+  assert.equal(first.state, 'done', why(first))
+  await w.slates.settle()
+  return { ana, drive, slate, id: recipe.instanceId, grantId, first }
+}
+
+test('a person\'s commit on the pull request\'s branch is never written over; once merged, their edit reaches the slate and the canvas goes out on top', async () => {
+  const env = setup()
+  const { w, gh, tick, branchFile, mainFile, repo, push } = env
+  const { slate, id } = await synced(env)
+  assert.equal(repo().pulls.size, 1)
+  // A reviewer fixes a label on the branch, in the pull request.
+  const theirs = branchFile().replace('"Payments"', '"Payments service"')
+  gh.github.commit(REPO, { branch: BRANCH, changes: { [FILE]: theirs }, message: 'Name the payments service' })
+  // Someone edits the slate: the export after the quiet time leaves the reviewer's file alone.
+  w.slates.personEdit(slate.slateId, [{ kind: 'add_nodes', count: 1, ids: ['fraud'], shape: 'rectangle', text: 'Fraud check', x: 0, y: 600 }], 'ana')
+  await w.slates.settle()
+  tick(QUIET + 1)
+  await w.scheduler.tick()
+  const [held] = await w.drain()
+  assert.equal(held.state, 'done', why(held))
+  assert.deepEqual(held.run.writes, [], 'nothing is written over the person\'s commit')
+  assert.ok(held.run.log.some((l) => l.code === 'held_by_person'))
+  assert.equal(branchFile(), theirs, 'the reviewer\'s file is as they left it')
+  assert.ok(w.slates.notesOf(slate.slateId).some((n) => /^Someone changed docs\/architecture\/checkout\.mmd on slatebox\/architecture\./.test(n.text)), 'the slate says why it waits')
+  // Save to repo now does not write over it either: the GitHub side holds the file.
+  const writes = gh.github.writes().filter((c) => /\/git\/(commits|refs)/.test(c.path)).length
+  await w.service.saveNow(w.person('ana'), id, { shareId: slate.shareId })
+  const [now] = await w.drain()
+  assert.equal(now.state, 'done', why(now))
+  assert.deepEqual(now.run.writes.map((x) => [x.state, x.held]), [['done', [FILE]]])
+  assert.equal(gh.github.writes().filter((c) => /\/git\/(commits|refs)/.test(c.path)).length, writes, 'no commit, no ref moved')
+  assert.equal(branchFile(), theirs)
+  assert.match([...repo().pulls.values()][0].body, /Not written, because a person changed it on this branch[\s\S]*checkout\.mmd/)
+
+  // The pull request is merged with their edit: the slate takes it (nothing they changed is lost), the
+  // canvas note goes out on top of it, and the note about waiting is gone.
+  await push({ [FILE]: branchFile() }, `Merge pull request #1 from acme/${BRANCH}`)
+  gh.github.closePull(REPO, 1, true)
+  tick(121_000)
+  await w.scheduler.tick()
+  const [merged] = await w.drain()
+  assert.equal(merged.state, 'done', why(merged))
+  assert.equal(w.slates.notesOf(slate.slateId).find((n) => n.id === 'pay').text, 'Payments service', 'their label is on the slate')
+  assert.ok(w.slates.notesOf(slate.slateId).some((n) => n.id === 'fraud'), 'the canvas note stays')
+  assert.ok(!w.slates.notesOf(slate.slateId).some((n) => /^Someone changed/.test(n.text)))
+  assert.deepEqual(merged.run.writes.map((x) => x.state), ['done'])
+  assert.match(branchFile(), /pay\(\["Payments service"\]\)/)
+  assert.match(branchFile(), /fraud\["Fraud check"\]/)
+  assert.ok(mainFile().includes('Payments service'))
+})
+
+test('commit storms: a slate people never stop editing still goes out within the hour; slates due together are one run', async () => {
+  const db = createMemoryDb()
+  const store = createRecipeStore((name) => db[name])
+  const t0 = Date.UTC(2026, 10, 27, 12)
+  let at = t0
+  const queue = createRecipeQueue({ store, clock: () => at, randomId: (() => { let n = 0; return () => `r${++n}` })() })
+  const scheduler = createScheduler({ store, clock: () => at, queue })
+  await store.instances.insertOne({ _id: 'i1', ownerId: 'ana', projectId: 'p1', recipeId: 'github-mermaid-sync', state: 'active', rev: 0, watchSlates: ['a', 'b', 'c'], slateSaves: [], savesDueAt: null })
+  // a workshop: a save every 30 s for two hours and five minutes
+  for (let k = 0; k < 250; k += 1) {
+    await queue.slateSaved('i1', 'a', { debounceMs: 600000 })
+    await scheduler.tick()
+    at += 30000
+  }
+  const runs = await store.runs.find({}).toArray()
+  assert.equal(runs.length, 2, 'one export an hour while edits never stop')
+  assert.ok(new Date(runs[0].created).getTime() - t0 <= 3600e3)
+  assert.ok(new Date(runs[1].created).getTime() - new Date(runs[0].created).getTime() <= 3600e3 + 30000)
+  // two slates going quiet a minute apart: one run, one commit
+  at += 3 * 3600e3
+  await scheduler.tick() // the workshop's last edits
+  await queue.slateSaved('i1', 'b', { debounceMs: 600000 })
+  at += 60000
+  await queue.slateSaved('i1', 'c', { debounceMs: 600000 })
+  at += 540001
+  await scheduler.tick()
+  const last = (await store.runs.find({}).toArray()).at(-1)
+  assert.deepEqual(last.trigger.shareIds.sort(), ['b', 'c'])
+  // a save the throttle skipped still gets a due time when a tick has just taken the last one
+  at += 3600e3
+  await queue.slateSaved('i1', 'a', { debounceMs: 600000 })
+  at += 600001
+  await scheduler.tick()
+  assert.equal(await queue.slateSaved('i1', 'a', { debounceMs: 600000, onlyIfMissing: true }), true, 'taken by the tick: the save makes a new due time')
+  assert.equal(await queue.slateSaved('i1', 'a', { debounceMs: 600000, onlyIfMissing: true }), false, 'still waiting: nothing written')
+})
+
+test('a person\'s edits export only their slate: another slate still being edited waits for its own quiet time', async () => {
+  const env = setup()
+  const { w, tick, branchFile } = env
+  const OTHER = 'docs/architecture/other.mmd'
+  const LONG = 600_000
+  let second
+  const { slate } = await synced(env, {
+    debounceMs: LONG,
+    maps: async (drive, first) => {
+      second = await w.projects.api.createSlate('ana', drive, { name: 'Other flow' })
+      w.slates.personEdit(second.slateId, [{ kind: 'add_nodes', count: 1, ids: ['solo'], shape: 'rectangle', text: 'Solo', x: 0, y: 0 }], 'ana')
+      await w.slates.settle()
+      return [{ shareId: first.shareId, file: FILE }, { shareId: second.shareId, file: OTHER }]
+    },
+  })
+  assert.ok(branchFile(OTHER))
+  w.slates.personEdit(slate.slateId, [{ kind: 'add_nodes', count: 1, ids: ['fraud'], shape: 'rectangle', text: 'Fraud check', x: 0, y: 600 }], 'ana')
+  await w.slates.settle()
+  tick(300_000)
+  w.slates.personEdit(second.slateId, [{ kind: 'add_nodes', count: 1, ids: ['half'], shape: 'rectangle', text: 'Half done', x: 0, y: 300 }], 'ana')
+  await w.slates.settle()
+  tick(300_001)
+  await w.scheduler.tick()
+  const [one] = await w.drain()
+  assert.deepEqual(one.run.trigger.shareIds, [slate.shareId])
+  assert.match(branchFile(), /Fraud check/)
+  assert.doesNotMatch(branchFile(OTHER), /Half done/, 'the other slate is not exported mid-edit')
+  tick(300_000)
+  await w.scheduler.tick()
+  const [two] = await w.drain()
+  assert.deepEqual(two.run.trigger.shareIds, [second.shareId])
+  assert.match(branchFile(OTHER), /Half done/)
+})
+
+test('the permission revoked while an edit waits: nothing is written, the waiting export is dropped', async () => {
+  const env = setup()
+  const { w, gh, tick } = env
+  const { slate, id, grantId, ana } = await synced(env)
+  w.slates.personEdit(slate.slateId, [{ kind: 'add_nodes', count: 1, ids: ['fraud'], shape: 'rectangle', text: 'Fraud check', x: 0, y: 600 }], 'ana')
+  await w.slates.settle()
+  assert.equal((await instanceOf(w, id)).slateSaves.length, 1)
+  tick(QUIET / 2)
+  const before = gh.github.writes().length
+  await w.service.revoke(ana, grantId)
+  const stopped = await instanceOf(w, id)
+  assert.equal(stopped.state, 'paused')
+  assert.deepEqual(stopped.slateSaves, [])
+  w.slates.personEdit(slate.slateId, [{ kind: 'update_nodes', target: { ids: ['fraud'] }, changes: { text: 'Fraud checks' } }], 'ana')
+  await w.slates.settle()
+  tick(QUIET * 2)
+  await w.scheduler.tick()
+  assert.deepEqual(await w.drain(), [])
+  await assert.rejects(w.service.saveNow(ana, id, { shareId: slate.shareId }), { code: 'recipe_not_on' })
+  assert.equal(gh.github.writes().length, before, 'no write to GitHub after the permission is gone')
+})
+
+test('files: a Markdown file keeps its prose, two slates of one name get two files, a file outside the permission waits for approval', async () => {
+  const env = setup()
+  const { w, gh, branchFile, push } = env
+  const DOC = 'docs/architecture/overview.md'
+  const prose = '# Overview\n\nHow checkout works, written by people.\n\n```mermaid\nflowchart LR\n  old["Old"]\n```\n\n## Notes\n\nKeep this paragraph.\n'
+  await push({ [DOC]: prose }, 'Add the overview')
+  let twin
+  const { first } = await synced(env, {
+    maps: async (drive, one) => {
+      twin = await w.projects.api.createSlate('ana', drive, { name: 'Checkout flow' })
+      w.slates.personEdit(twin.slateId, [{ kind: 'add_nodes', count: 1, ids: ['solo'], shape: 'rectangle', text: 'Solo', x: 0, y: 0 }], 'ana')
+      await w.slates.settle()
+      const notes = await w.projects.api.createSlate('ana', drive, { name: 'Elsewhere' })
+      w.slates.personEdit(notes.slateId, [{ kind: 'add_nodes', count: 1, ids: ['x'], shape: 'rectangle', text: 'X', x: 0, y: 0 }], 'ana')
+      await w.slates.settle()
+      return [{ shareId: one.shareId, file: DOC }, { shareId: twin.shareId }, { shareId: one.shareId, file: FILE }]
+    },
+  })
+  const doc = branchFile(DOC)
+  assert.ok(doc.startsWith('# Overview\n\nHow checkout works, written by people.\n\n```mermaid\n%% slatebox:'), doc)
+  assert.match(doc, /\n```\n\n## Notes\n\nKeep this paragraph\.\n$/)
+  assert.doesNotMatch(doc, /Old/)
+  assert.match(branchFile('docs/architecture/checkout-flow.mmd'), /Solo/, 'the twin gets the plain name')
+  assert.equal(branchFile(FILE), null, 'a slate is kept as one file: the second mapping of it is skipped')
+  assert.deepEqual(first.run.writes.map((x) => x.state), ['done'])
+
+  // A file outside what the permission names is an approval card, never a write.
+  const writes = gh.github.writes().length
+  await w.service.update(w.person('ana'), first.run.instanceId, { config: { repo: REPO, maps: [{ shareId: twin.shareId, file: 'README.md' }] } })
+  await w.service.runNow(w.person('ana'), first.run.instanceId)
+  const [outside] = await w.drain()
+  assert.deepEqual(outside.run.writes.map((x) => x.state), ['card'], why(outside))
+  assert.equal(gh.github.writes().length, writes)
 })

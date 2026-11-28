@@ -17,7 +17,8 @@ import { matchAny } from '../../../../recipes/_github-code/glob.mjs'
 export const GITHUB_WRITE_KINDS = Object.freeze(['github.check_run', 'github.pr_comment', 'github.pull_request'])
 export const BRANCH_PREFIX = 'slatebox/'
 export const COMMENT_MARKER = (marker) => `<!-- slatebox:${`${marker}`.replace(/[^\w:.#/-]/g, '')} -->`
-const LIMITS = Object.freeze({ files: 40, fileBytes: 512 * 1024, commentChars: 60000, titleChars: 200, bodyChars: 60000 })
+const TRAILER_KEY = 'Slatebox-Recipe-Run'
+const LIMITS = Object.freeze({ peopleCommits: 10, files: 40, fileBytes: 512 * 1024, commentChars: 60000, titleChars: 200, bodyChars: 60000 })
 
 const refused = (reason) => ({ decision: 'refused', reason })
 const branchOf = (ref) => `${ref ?? ''}`.replace(/^refs\/heads\//, '')
@@ -89,12 +90,22 @@ async function pullRequest(client, write) {
     const base = await client.branch(repo, info.default_branch)
     parent = base.commit.sha
   }
+  const owner = repo.split('/')[0]
+  const open = await client.openPulls(repo, owner, branch)
+  const isOpen = Array.isArray(open) && open.length > 0
   // Only files whose text differs from the branch head go in the commit.
-  const changed = []
+  const differ = []
   for (const f of write.body.files) {
     const now = await client.contents(repo, f.path, parent)
-    if (now !== f.content) changed.push(f)
+    if (now !== f.content) differ.push(f)
   }
+  // A person's commit on the open pull request's branch is never written over: a file they changed
+  // there is held (left as they made it) until that pull request is merged or closed. The merge
+  // brings their edit back to the slate (the recipe's three-way merge), and the next export carries
+  // the canvas on top of it.
+  const touched = existing && isOpen && differ.length ? await peopleTouched(client, repo, info.default_branch, branch) : new Set()
+  const held = differ.filter((f) => touched.has(f.path) || touched.has('*')).map((f) => f.path)
+  const changed = differ.filter((f) => !held.includes(f.path))
   const trailer = write.body.trailer ? `\n\n${clip(write.body.trailer, 200)}` : ''
   let commitSha = parent
   if (changed.length) {
@@ -105,13 +116,12 @@ async function pullRequest(client, write) {
     if (existing) await client.updateRef(repo, branch, commitSha)
     else await client.createRef(repo, branch, commitSha)
   }
-  const owner = repo.split('/')[0]
-  const open = await client.openPulls(repo, owner, branch)
   const title = clip(write.body.title || 'Update architecture diagrams', LIMITS.titleChars)
-  const body = clip(write.body.body || '', LIMITS.bodyChars)
+  const heldNote = held.length ? `\n\nNot written, because a person changed ${held.length === 1 ? 'it' : 'them'} on this branch (Slatebox never writes over a person's commit; merge or close this pull request and the slate follows):\n${held.map((p) => `- \`${p}\``).join('\n')}` : ''
+  const body = clip(`${write.body.body || ''}${heldNote}`, LIMITS.bodyChars)
   let number
   let opened = false
-  if (Array.isArray(open) && open.length) {
+  if (isOpen) {
     number = open[0].number
     if (open[0].title !== title || open[0].body !== body) await client.updatePull(repo, number, { title, body })
   } else if (changed.length) {
@@ -122,7 +132,26 @@ async function pullRequest(client, write) {
     const reviewers = (write.body.reviewers || []).filter((r) => /^[\w-]{1,39}$/.test(r)).slice(0, 10)
     if (reviewers.length) await client.requestReviewers(repo, number, reviewers)
   }
-  return { ref: number ? String(number) : null, commit: changed.length ? commitSha : null, files: changed.map((f) => f.path), opened, unchanged: !changed.length }
+  return { ref: number ? String(number) : null, commit: changed.length ? commitSha : null, files: changed.map((f) => f.path), opened, unchanged: !changed.length, ...(held.length && { held }) }
+}
+
+/** The paths people's commits changed on a branch since it left the default branch (commits without
+ * the recipe trailer). '*' when there are too many of them to read one by one (everything held). */
+async function peopleTouched(client, repo, defaultBranch, branch) {
+  const ahead = await client.compare(repo, defaultBranch, branch)
+  const people = (ahead.commits || []).filter((c) => !new RegExp(`^${TRAILER_KEY}: \\S+$`, 'm').test(`${c.message}`))
+  if (!people.length) return new Set()
+  if (people.length > LIMITS.peopleCommits) return new Set(['*'])
+  const paths = new Set()
+  for (const c of people) {
+    if (!c.parent) return new Set(['*'])
+    const one = await client.compare(repo, c.parent, c.sha)
+    for (const f of one.files || []) {
+      paths.add(f.path)
+      if (f.previous) paths.add(f.previous)
+    }
+  }
+  return paths
 }
 
 /**

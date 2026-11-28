@@ -133,7 +133,7 @@ export function createGithubClient({ fetch = globalThis.fetch, apiBase = GITHUB_
         status: data.status,
         truncated: (data.files || []).length >= GITHUB_LIMITS.compareFiles,
         files: (data.files || []).map((f) => ({ path: f.filename, status: f.status, previous: f.previous_filename ?? null })),
-        commits: (data.commits || []).map((c) => ({ sha: c.sha, message: `${c.commit?.message ?? ''}`.slice(0, 2000), parents: (c.parents || []).length })),
+        commits: (data.commits || []).map((c) => ({ sha: c.sha, message: `${c.commit?.message ?? ''}`.slice(0, 2000), parents: (c.parents || []).length, parent: c.parents?.[0]?.sha ?? null })),
       }
     },
     /** A file's text at a ref, or null when it is not there (or is not a file). */

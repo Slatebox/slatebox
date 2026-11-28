@@ -66,9 +66,12 @@ export function createFakeGithub({ now = () => Date.parse('2026-11-27T12:00:00Z'
     for (const path of a.keys()) if (!b.has(path)) files.push({ filename: path, status: 'removed' })
     return files.sort((x, y) => (x.filename < y.filename ? -1 : 1))
   }
+  // base...head as GitHub answers it: the commits on head since the merge base (not since base itself)
   function between(repo, base, head) {
+    const behind = new Set()
+    for (let at = base; at; at = repo.commits.get(at)?.parents[0]) behind.add(at)
     const out = []
-    for (let at = head; at && at !== base; at = repo.commits.get(at)?.parents[0]) out.unshift(repo.commits.get(at))
+    for (let at = head; at && !behind.has(at); at = repo.commits.get(at)?.parents[0]) out.unshift(repo.commits.get(at))
     return out
   }
   const resolveRef = (repo, ref) => (repo.commits.has(ref) ? ref : repo.branches.get(ref) ?? null)
