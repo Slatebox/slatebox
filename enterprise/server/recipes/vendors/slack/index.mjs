@@ -79,7 +79,9 @@ export function createVendor({ integrationOf, tokenFor, fetch, config, gates, st
     async perform(write, { instance, grant = null, signal = null } = {}) {
       if (checkSlackHardLimits(write, grant)) throw Object.assign(new Error('refused by a hard limit'), { code: 'refused' })
       const { token } = await signedIn(instance)
-      const text = write.body.text
+      // The slate to link (body.slateRef { role, key }) is the runtime's to resolve once the slate exists: body.slateUrl.
+      const slateUrl = typeof write.body.slateUrl === 'string' && /^https:\/\//.test(write.body.slateUrl) ? write.body.slateUrl : null
+      const text = slateUrl ? `${write.body.text}\n${slateUrl}` : write.body.text
       const posted = await slackCall(token, 'chat.postMessage', { channel: write.target.channel, text, unfurl_links: true, ...(write.body.thread_ts && { thread_ts: write.body.thread_ts }) }, { signal })
       const link = await slackCall(token, 'chat.getPermalink', { channel: write.target.channel, message_ts: posted.ts }, { signal }).catch(() => null)
       return { ref: typeof link?.permalink === 'string' && link.permalink.startsWith('https://') ? link.permalink : posted.ts }

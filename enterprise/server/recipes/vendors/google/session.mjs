@@ -11,6 +11,8 @@
 //   documents.get             Docs, the body's paragraphs and tables only (300 reads a minute a project)
 // All three APIs take drive.file for a picked file.
 
+import { spendVendorCall } from '../spend.mjs'
+
 export const GOOGLE_BASES = Object.freeze({ drive: 'https://www.googleapis.com', sheets: 'https://sheets.googleapis.com', docs: 'https://docs.googleapis.com' })
 export const GOOGLE_RECIPE_LIMITS = Object.freeze({ bytes: 4 * 1024 * 1024, rows: 2000, columns: 26, cellChars: 500 })
 const FILE_ID = /^[A-Za-z0-9_-]{10,128}$/
@@ -60,7 +62,7 @@ export function createGoogleRecipeSession({ userId, tokenFor, fetch, bases = GOO
 
   async function api(what, method, url, body = null, retried = false) {
     if (signal?.aborted) throw Object.assign(new Error('timeout'), { name: 'AbortError', code: 'timeout' })
-    if (!retried && budget && !budget.take('vendorCalls', 1)) throw Object.assign(new Error('The run\'s vendor call budget is spent.'), { name: 'RecipeBudgetSpent', code: 'budget' })
+    if (!retried) spendVendorCall(budget)
     calls[what] = (calls[what] || 0) + (retried ? 0 : 1)
     let token
     try {
@@ -93,6 +95,8 @@ export function createGoogleRecipeSession({ userId, tokenFor, fetch, bases = GOO
 
   return {
     name: 'google',
+    // Each Google call is counted against the run's budget here (not per method).
+    countsOwnCalls: true,
     calls,
 
     /** A file's name, kind, version (bumps on every change), modified time and link. */

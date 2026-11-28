@@ -17,7 +17,7 @@ export const FOLD_LEASE_MS = 5 * 60000
 
 export const inboxId = (teamId, channel, ts) => `slack:${teamId}:${channel}:${ts}`
 export const ledgerId = (teamId, channel, key) => `slack:${teamId}:${channel}:${key}`
-export const foldId = (teamId, channel) => `slack:${teamId}:${channel}`
+export const foldId = (teamId, channel) => `slackfold:${teamId}:${channel}`
 
 const byTs = (a, b) => Number(a.ts) - Number(b.ts)
 const strip = ({ _id, teamId, channel, instanceIds, expiresAt, ...row }) => row
@@ -115,29 +115,31 @@ export function mongoSlackStores({ inbox, ledger, folds }) {
       },
       get: (id) => inbox.findOne({ _id: id }),
       async list(teamId, channel) {
-        const rows = await inbox.find({ teamId, channel, folded: { $ne: true } }, { projection: { _id: 0, teamId: 0, channel: 0, instanceIds: 0, expiresAt: 0, at: 0, folded: 0 } }).sort({ tsNum: 1 }).limit(5000).toArray()
-        return rows.map(({ tsNum, ...m }) => m)
+        const rows = await inbox.find({ teamId, channel, folded: { $ne: true } }, { sort: { tsNum: 1 }, limit: 5000 }).toArray()
+        return rows.map(({ _id, teamId: _t, channel: _c, instanceIds, expiresAt, at, folded, tsNum, ...m }) => m)
       },
       async markFolded(teamId, channel, list) {
         if (list.length) await inbox.updateMany({ _id: { $in: list.map((ts) => inboxId(teamId, channel, ts)) } }, { $set: { folded: true } })
       },
       async dropInstance(instanceId) {
         await inbox.updateMany({ instanceIds: instanceId }, { $pull: { instanceIds: instanceId } })
-        await inbox.deleteMany({ instanceIds: { $size: 0 } })
+        await inbox.deleteMany({ instanceIds: [] })
       },
     },
     ledger: {
-      all: async (teamId, channel) => (await ledger.find({ teamId, channel }).limit(20000).toArray()).map(strip),
+      all: async (teamId, channel) => (await ledger.find({ teamId, channel }, { limit: 20000 }).toArray()).map(strip),
       async upsert(teamId, channel, instanceId, rows, expiresAt) {
         if (!rows.length) return
-        await ledger.bulkWrite(rows.map((row) => ({ updateOne: { filter: { _id: ledgerId(teamId, channel, row.key) }, update: { $set: { ...row, teamId, channel, expiresAt }, $addToSet: { instanceIds: instanceId } }, upsert: true } })), { ordered: false })
+        const ops = rows.map((row) => ({ filter: { _id: ledgerId(teamId, channel, row.key) }, update: { $set: { ...row, teamId, channel, expiresAt }, $addToSet: { instanceIds: instanceId } } }))
+        if (typeof ledger.bulkWrite === 'function') await ledger.bulkWrite(ops.map(({ filter, update }) => ({ updateOne: { filter, update, upsert: true } })), { ordered: false })
+        else for (const { filter, update } of ops) await ledger.updateOne(filter, update, { upsert: true })
       },
       async remove(teamId, channel, keys) {
         if (keys.length) await ledger.deleteMany({ _id: { $in: keys.map((key) => ledgerId(teamId, channel, key)) } })
       },
       async dropInstance(instanceId) {
         await ledger.updateMany({ instanceIds: instanceId }, { $pull: { instanceIds: instanceId } })
-        await ledger.deleteMany({ instanceIds: { $size: 0 } })
+        await ledger.deleteMany({ instanceIds: [] })
       },
     },
     folds: {

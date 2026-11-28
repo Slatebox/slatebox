@@ -4,7 +4,7 @@
 // S1, the decision log (recipes catalog, wave 1 rank 4): every decision made in a channel's threads,
 // on a lane board that is always current, each card linked to its thread.
 import { defineRecipe } from '../../common/recipes/manifest.mjs'
-import { channelsSchema, FOLD_TRIGGER, SLACK_READ_NEEDS, tzSchema } from '../_slack-ledger/config.mjs'
+import { channelsSchema, teamIdSchema, FOLD_TRIGGER, SLACK_READ_NEEDS, tzSchema } from '../_slack-ledger/config.mjs'
 
 export const DECISION_LANES = Object.freeze([
   { key: 'maybe', label: 'Maybe' },
@@ -28,6 +28,7 @@ export const manifest = defineRecipe({
     required: ['channels'],
     properties: {
       channels: channelsSchema,
+      teamId: teamIdSchema,
       confidence: { type: 'number', minimum: 0.3, maximum: 1, default: 0.7, description: 'Below this, a decision goes to the Maybe lane.' },
       threadsOnly: { type: 'boolean', default: false, description: 'Read threads only, not top-level messages.' },
       deciders: { type: 'array', maxItems: 20, items: { type: 'string', pattern: '^[UW][A-Z0-9]{2,20}$' }, default: [], description: 'Only these people make decisions (empty: anyone).', 'x-picker': 'slack.user' },

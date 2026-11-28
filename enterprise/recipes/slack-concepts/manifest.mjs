@@ -5,7 +5,7 @@
 // decline") as a mind map, the channel at the center, related terms clustered, each term linked to
 // the message that first defined it. For people joining a project mid-flight.
 import { defineRecipe } from '../../common/recipes/manifest.mjs'
-import { channelsSchema, SLACK_READ_NEEDS, tzSchema } from '../_slack-ledger/config.mjs'
+import { channelsSchema, teamIdSchema, SLACK_READ_NEEDS, tzSchema } from '../_slack-ledger/config.mjs'
 
 export const manifest = defineRecipe({
   id: 'slack-concepts',
@@ -27,6 +27,7 @@ export const manifest = defineRecipe({
     required: ['channels'],
     properties: {
       channels: channelsSchema,
+      teamId: teamIdSchema,
       max: { type: 'integer', minimum: 10, maximum: 80, default: 40, description: 'How many terms to show.' },
       tz: tzSchema,
     },

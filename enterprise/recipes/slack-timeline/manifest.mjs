@@ -5,7 +5,7 @@
 // on a launch plan (up to 12 tasks, owners, due dates, "after X"), and every commitment on a board of
 // Open, Done and Slipped. A later message that moves a date moves the task and shows the slip.
 import { defineRecipe } from '../../common/recipes/manifest.mjs'
-import { channelsSchema, FOLD_TRIGGER, SLACK_READ_NEEDS, tzSchema } from '../_slack-ledger/config.mjs'
+import { channelsSchema, teamIdSchema, FOLD_TRIGGER, SLACK_READ_NEEDS, tzSchema } from '../_slack-ledger/config.mjs'
 
 export const COMMITMENT_LANES = Object.freeze([
   { key: 'open', label: 'Open' },
@@ -28,6 +28,7 @@ export const manifest = defineRecipe({
     required: ['channels'],
     properties: {
       channels: channelsSchema,
+      teamId: teamIdSchema,
       pastDays: { type: 'integer', minimum: 0, maximum: 90, default: 14, description: 'Show tasks due this many days back.' },
       futureDays: { type: 'integer', minimum: 7, maximum: 365, default: 60, description: 'Show tasks due this many days ahead.' },
       lanes: { type: 'array', maxItems: 6, items: { type: 'string', minLength: 1, maxLength: 40 }, default: [], description: 'Milestone lanes, e.g. Backend, Payments, Launch (empty: from the channel\'s most used terms).' },

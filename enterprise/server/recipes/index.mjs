@@ -15,11 +15,26 @@
 /* eslint-disable no-console */
 import { recipeActions } from './actions.mjs'
 import { setRecipeHooks } from '/server/recipes-hooks.mjs'
+import slackDecisionLog from '../../recipes/slack-decision-log/index.mjs'
+import slackTimeline from '../../recipes/slack-timeline/index.mjs'
+import slackConcepts from '../../recipes/slack-concepts/index.mjs'
+import slackDigest from '../../recipes/slack-digest/index.mjs'
+import googleSheetBoard from '../../recipes/google-sheet-board/index.mjs'
+import googleDesignDoc from '../../recipes/google-design-doc/index.mjs'
+import webhookRender from '../../recipes/webhook-render/index.mjs'
+import projectIndex from '../../recipes/project-index/index.mjs'
+import { slackVendorFactory } from './vendors/slack/factory.mjs'
+import { googleVendorFactory } from './vendors/google/factory.mjs'
 
 export const RECIPE_MODULES = Object.freeze([
+  slackDecisionLog, slackTimeline, slackConcepts, slackDigest, // Slack (one channel ledger)
+  googleSheetBoard, googleDesignDoc, // Google (drive.file)
+  webhookRender, projectIndex, // any system; the project itself
 ])
 
 export const VENDOR_FACTORIES = Object.freeze([
+  slackVendorFactory,
+  googleVendorFactory,
 ])
 
 const byId = new Map(RECIPE_MODULES.map((m) => [m.manifest.id, m]))

@@ -1,6 +1,9 @@
 // What recipe code may import. A built-in recipe (enterprise/recipes/<id>/) sees the world only
 // through its context (enterprise/server/recipes/context.mjs): it may import the common recipe
-// modules, the MIT Mermaid modules, the engine's operations and workshops, and its own folder;
+// modules, the MIT Mermaid modules (by the app's root path, /imports/..., as the Meteor build
+// resolves it: enterprise/ is staged at web/app/enterprise), the engine's operations and
+// workshops, its own folder, and the shared recipe folders (enterprise/recipes/_<name>/, such as
+// _slack-ledger, the channel ledger four Slack recipes read);
 // never the registry, Mongo, Meteor, fetch libraries or the app's server. And the runtime's pure
 // modules stay pure: only meteor.js touches Meteor.
 import test from 'node:test'
@@ -25,13 +28,14 @@ const importsOf = (text) => [...text.matchAll(/(?:^|\n)\s*(?:import|export)[^'"`
 export function recipeMayImport(file, specifier) {
   if (specifier === 'slateboxjs/operations' || specifier === 'slateboxjs/workshops') return true
   if (specifier.startsWith('node:')) return ['node:crypto', 'node:zlib', 'node:path'].includes(specifier)
+  if (/^\/imports\/api\/common\/mermaid\/[\w-]+\.mjs$/.test(specifier)) return true
   if (!specifier.startsWith('.')) return false
   const target = resolve(dirname(file), specifier)
   const rel = relative(root, target)
   if (rel.startsWith('enterprise/common/')) return true
   if (rel.startsWith('web/app/imports/api/common/mermaid/')) return true
   const own = relative(root, file).split('/').slice(0, 3).join('/') // enterprise/recipes/<id>
-  return rel.startsWith(own + '/')
+  return rel.startsWith(own + '/') || /^enterprise\/recipes\/_[a-z0-9-]+\//.test(rel)
 }
 
 test('the rule itself', () => {
@@ -46,6 +50,13 @@ test('the rule itself', () => {
   assert.equal(recipeMayImport(file, 'meteor/mongo'), false)
   assert.equal(recipeMayImport(file, 'node-fetch'), false)
   assert.equal(recipeMayImport(file, 'node:http'), false)
+  assert.equal(recipeMayImport(file, '/imports/api/common/mermaid/parse.mjs'), true, 'the Mermaid modules by the app\'s root path')
+  assert.equal(recipeMayImport(file, '/imports/api/common/models.js'), false)
+  assert.equal(recipeMayImport(file, '../_slack-ledger/fold.mjs'), true, 'a shared recipe folder')
+  const shared = join(root, 'enterprise/recipes/_slack-ledger/fold.mjs')
+  assert.equal(recipeMayImport(shared, '../_shared/text.mjs'), true)
+  assert.equal(recipeMayImport(shared, '../slack-decision-log/run.mjs'), false, 'a shared folder never reaches into a recipe')
+  assert.equal(recipeMayImport(shared, '../../server/recipes/vendors/slack/session.mjs'), false)
 })
 
 test('every built-in recipe imports only what it may', () => {

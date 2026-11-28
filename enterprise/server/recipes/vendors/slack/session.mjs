@@ -16,6 +16,7 @@
 // reads the inbox, not Slack.
 import { SIGN_IN_CODES } from './api.mjs'
 import { FOLD_LEASE_MS, LEDGER_DAYS } from './stores.mjs'
+import { spendVendorCall } from '../spend.mjs'
 
 export const SESSION_LIMITS = Object.freeze({ searchPages: 5, searchCount: 100, channelPages: 5, channelsPage: 200, names: 30, historyLimit: 15 })
 
@@ -23,13 +24,6 @@ const USER = /^[UW][A-Z0-9]{2,20}$/
 const CHANNEL = /^[CG][A-Z0-9]{6,24}$/
 const day = (ms) => new Date(ms - 86400000).toISOString().slice(0, 10) // search's after: is exclusive
 
-export class RecipeBudgetSpent extends Error {
-  constructor(what) {
-    super(`The run's ${what} budget is spent.`)
-    this.name = 'RecipeBudgetSpent'
-    this.code = 'budget'
-  }
-}
 export class RecipeSignInNeeded extends Error {
   constructor(message = 'Connect Slack again on the Integrations page.') {
     super(message)
@@ -58,14 +52,14 @@ export function messageOf(raw, channel) {
 /**
  * deps: { token, teamId, slackUserId, account { url }, instanceId, call (api.mjs), gates
  * (slackReadGates: claim/get/hold), listed (Marketplace or internal app: no once-a-minute gate),
- * historyLimit, stores (stores.mjs), budget { take(kind, n) → bool } | null, signal, now,
+ * historyLimit, stores (stores.mjs), budget (the run's: spend or take, see ../spend.mjs) | null, signal, now,
  * ledgerDays }
  */
 export function createSlackRecipeSession({ token, teamId, slackUserId = null, account = {}, instanceId, call, gates, listed = false, historyLimit = SESSION_LIMITS.historyLimit, historyPerMinute = 1, stores, budget = null, signal = null, now = Date.now, ledgerDays = LEDGER_DAYS }) {
   const calls = {}
   async function slack(method, params) {
     if (signal?.aborted) throw Object.assign(new Error('timeout'), { name: 'AbortError', code: 'timeout' })
-    if (budget && !budget.take('vendorCalls', 1)) throw new RecipeBudgetSpent('vendor call')
+    spendVendorCall(budget)
     calls[method] = (calls[method] || 0) + 1
     try {
       return await call(token, method, params, { signal })
@@ -115,6 +109,8 @@ export function createSlackRecipeSession({ token, teamId, slackUserId = null, ac
 
   return {
     name: 'slack',
+    // Each Slack call is counted against the run's budget here (not per method).
+    countsOwnCalls: true,
     teamId,
     account: { url: typeof account.url === 'string' ? account.url : null, teamId },
     calls,
@@ -187,7 +183,7 @@ export function createSlackRecipeSession({ token, teamId, slackUserId = null, ac
         }
         if (names.size >= SESSION_LIMITS.names) continue
         const json = await slack('users.info', { user: id }).catch((error) => {
-          if (error instanceof RecipeSignInNeeded || error instanceof RecipeBudgetSpent) throw error
+          if (error instanceof RecipeSignInNeeded || error?.code === 'budget') throw error
           return null
         })
         const p = json?.user

@@ -47,6 +47,7 @@ import { migrateIntegrations, resumeLapsedIntegrations, retireSlackMcp } from '.
 import { itemsFromLayout } from './translate.mjs'
 import { createGoogleService, googleConfiguration, googleSettings, GOOGLE_ADDRESS } from './google/google.mjs'
 import { createSlackService, slackOnlyFetch, slackSettings, SLACK_ADDRESS } from './slack/slack.mjs'
+import { setRecipeConnectors } from './recipes/vendors/connectors-hand-off.mjs'
 import { INVITE_CARDS, NATIVE_CARDS } from '../common/gallery.mjs'
 import { randomBytes } from 'node:crypto'
 import sharp from 'sharp'
@@ -594,6 +595,8 @@ export function startConnectors({ via = null, isUnlocked = () => true } = {}) {
     google: googleConfiguration(google(), { vaultKey: Boolean(master) }),
     ...(cloud && { cloudLibrary: await cloud.catalog.status() }),
   })
+  // Recipes read Slack and Google as the person who set them up, through the same vault, fetches and read gate.
+  setRecipeConnectors({ vault, integrations: integrationsStore, slack: { fetch: slackFetch, config: slackConfig, gates: gatesStore }, google: { fetch: googleFetch, config: google } })
   return { service, google: googleService, slack: slackService, slackEvents: slackEventsStore, signIn, origin: appOrigin, userFor, findGallery, configured, community: () => communitySource(), integrationApps }
 }
 

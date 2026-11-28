@@ -10,11 +10,14 @@ import { join, relative } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { validateManifest } from '../enterprise/common/recipes/manifest.mjs'
-import { SLACK_GOOGLE_RECIPES } from '../enterprise/recipes/slack-google.mjs'
-import { SLACK_GOOGLE_MANIFESTS } from '../enterprise/recipes/slack-google-manifests.mjs'
+import { RECIPE_MODULES, VENDOR_FACTORIES } from '../enterprise/server/recipes/index.mjs'
+import { CATALOG } from '../enterprise/common/recipes/catalog.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const recipes = join(root, 'enterprise/recipes')
+const IDS = ['slack-decision-log', 'slack-timeline', 'slack-concepts', 'slack-digest', 'google-sheet-board', 'google-design-doc', 'webhook-render', 'project-index']
+const SLACK_GOOGLE_RECIPES = RECIPE_MODULES.filter((m) => IDS.includes(m.manifest.id))
+const SLACK_GOOGLE_MANIFESTS = CATALOG.filter((m) => IDS.includes(m.id))
 const MINE = ['_shared', '_slack-ledger', 'slack-decision-log', 'slack-timeline', 'slack-digest', 'slack-concepts', 'google-sheet-board', 'google-design-doc', 'webhook-render', 'project-index']
 const files = (dir) => readdirSync(dir).flatMap((name) => {
   const path = join(dir, name)
@@ -27,14 +30,17 @@ test('every manifest is valid, its id and note prefix unique; the modules are { 
   const prefixes = new Set()
   for (const recipe of SLACK_GOOGLE_RECIPES) {
     const m = recipe.manifest
-    assert.deepEqual(validateManifest(m), [], m.id)
+    assert.equal(validateManifest(m), null, m.id)
     assert.equal(typeof recipe.run, 'function')
     assert.ok(Object.isFrozen(m))
     assert.ok(!ids.has(m.id) && !prefixes.has(m.idPrefix), m.id)
     ids.add(m.id)
     prefixes.add(m.idPrefix)
   }
-  assert.deepEqual(SLACK_GOOGLE_MANIFESTS.map((m) => m.id), SLACK_GOOGLE_RECIPES.map((r) => r.manifest.id))
+  assert.deepEqual(SLACK_GOOGLE_MANIFESTS.map((m) => m.id), IDS, 'in the catalog the UI reads')
+  assert.deepEqual(SLACK_GOOGLE_RECIPES.map((r) => r.manifest.id), IDS, 'registered with the runtime')
+  assert.deepEqual(VENDOR_FACTORIES.map((f) => f.name).filter((n) => /slack|google/i.test(n)), ['slackVendorFactory', 'googleVendorFactory'])
+  assert.deepEqual(VENDOR_FACTORIES.flatMap((f) => f.routes?.() || []).filter((r) => r.vendor === 'google'), [{ method: 'POST', path: '/integrations/google/watch', raw: true, vendor: 'google' }])
   assert.deepEqual([...prefixes].sort(), ['gd', 'gs', 'sc', 'sd', 'st', 'sw', 'xi', 'xw'], 'the prefixes design D assigns')
   // Writes outside Slatebox: only the digest's post and the sheet's write-back, each with a plain description.
   const writes = SLACK_GOOGLE_RECIPES.flatMap((r) => r.manifest.writes.map((w) => [r.manifest.id, w.kind, w.describe({ channels: ['C0LEADERS1'], fileId: 'x', columns: ['C'] })]))

@@ -180,5 +180,7 @@ test('a post: only in the granted channel, never empty or too long; performed as
   const done = await w.vendor.perform(post, { instance, grant })
   assert.deepEqual(w.api.posted.map((p) => p.channel), [CHANNEL.id])
   assert.match(done.ref, /^https:\/\/acme\.slack\.com\/archives\/C0CHECKOUT1\/p/)
+  await w.vendor.perform({ ...post, body: { ...post.body, slateUrl: 'https://app.slatebox.com/canvas/abc' } }, { instance, grant })
+  assert.equal(w.api.posted[1].text, 'Week of Nov 23 digest\nhttps://app.slatebox.com/canvas/abc', 'the slate\'s link the runtime resolved')
   assert.equal(OWNER, instance.ownerId)
 })

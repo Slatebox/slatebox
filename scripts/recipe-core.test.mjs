@@ -76,7 +76,8 @@ test("a recipe is named on the canvas for the person it runs for", async (t) => 
 });
 
 test("signed webhook paths keep their raw body; everything else is parsed as before", () => {
-  assert.deepEqual([...RAW_BODY_PREFIXES], ["/hooks/recipes/", "/integrations/github/events", "/integrations/google/watch"]);
+  assert.deepEqual([...RAW_BODY_PREFIXES], ["/hooks/recipes/", "/integrations/github/events", "/integrations/google/watch", "/integrations/slack/"]);
+  assert.equal(isRawBodyPath("/integrations/slack/events"), true, "Slack's events, signed by Slack");
   assert.equal(isRawBodyPath("/hooks/recipes/rh_abc"), true);
   assert.equal(isRawBodyPath("/integrations/github/events"), true);
   assert.equal(isRawBodyPath("/connectors/oauth/callback"), false);

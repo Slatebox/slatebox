@@ -5,7 +5,7 @@
 // week (a frame per channel: decisions, slips, open questions, top terms, a short summary) and a
 // presentation made from it; optionally a post in a channel the owner granted.
 import { defineRecipe } from '../../common/recipes/manifest.mjs'
-import { CHANNEL_ID, channelsSchema, SLACK_READ_NEEDS, tzSchema } from '../_slack-ledger/config.mjs'
+import { CHANNEL_ID, channelsSchema, teamIdSchema, SLACK_READ_NEEDS, tzSchema } from '../_slack-ledger/config.mjs'
 
 export const DIGEST_SECTIONS = Object.freeze(['decisions', 'slips', 'questions', 'concepts', 'summary'])
 
@@ -24,6 +24,7 @@ export const manifest = defineRecipe({
     required: ['channels'],
     properties: {
       channels: channelsSchema,
+      teamId: teamIdSchema,
       sections: { type: 'array', uniqueItems: true, items: { enum: [...DIGEST_SECTIONS] }, default: [...DIGEST_SECTIONS], description: 'What each channel\'s frame shows.' },
       presentation: { type: 'boolean', default: true, description: 'Also make a presentation from the digest.' },
       post: {
