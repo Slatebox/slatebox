@@ -71,7 +71,7 @@ const projectsApi = {
   /** @param {{projectId?: string, accessKey?: string, linkKey?: string}} input  accessKey: a drive's link (/p/<accessKey>)
    *  @returns {Promise<{project: Project, drive: Project, folders: Project[]}>} */
   get: getProject,
-  /** @param {{name: string, description?: string, color?: number|null, orgId?: string|null, parentId?: string|null}} input
+  /** @param {{name: string, description?: string, color?: number|null, parentId?: string|null}} input  (no owner: the team's when the person is in one)
    *  @returns {Promise<Project>} a drive, or a folder when parentId is given */
   create: async (input) => toProject(await call('projects.create', input)),
   /** @param {{projectId: string, name?: string, description?: string, color?: number|null, parentId?: string}} input */

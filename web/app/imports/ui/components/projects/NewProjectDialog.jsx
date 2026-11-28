@@ -9,9 +9,6 @@ import DialogContent from '@mui/material/DialogContent'
 import DialogActions from '@mui/material/DialogActions'
 import Button from '@mui/material/Button'
 import TextField from '@mui/material/TextField'
-import RadioGroup from '@mui/material/RadioGroup'
-import Radio from '@mui/material/Radio'
-import FormControlLabel from '@mui/material/FormControlLabel'
 import Typography from '@mui/material/Typography'
 import Box from '@mui/material/Box'
 import projectsApi from '../../../api/client/projects'
@@ -21,7 +18,6 @@ export default function NewProjectDialog({ open, onClose, onCreated }) {
   const orgId = useTracker(() => Meteor.user()?.orgId || null, [])
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [owner, setOwner] = useState('team')
   const [color, setColor] = useState(0)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -38,7 +34,6 @@ export default function NewProjectDialog({ open, onClose, onCreated }) {
         name: nameCheck.value,
         description: descriptionCheck.value,
         color,
-        orgId: orgId && owner === 'team' ? orgId : null,
       })
       onCreated(project)
     } catch (e) {
@@ -56,12 +51,8 @@ export default function NewProjectDialog({ open, onClose, onCreated }) {
             slotProps={{ htmlInput: { maxLength: NAME_MAX } }} error={Boolean(error) && !nameCheck.ok} />
           <TextField label="Description" value={description} onChange={(e) => setDescription(e.target.value)} multiline minRows={2}
             slotProps={{ htmlInput: { maxLength: DESCRIPTION_MAX } }} />
-          {orgId && (
-            <RadioGroup value={owner} onChange={(e) => setOwner(e.target.value)} aria-label="Whose project">
-              <FormControlLabel value="team" control={<Radio />} label="The team’s project" />
-              <FormControlLabel value="personal" control={<Radio />} label="My own project" />
-            </RadioGroup>
-          )}
+          {/* projects.create takes no owner: the server makes it the team's when the person is in one */}
+          {orgId && <Typography variant="body2" color="text.secondary">It is your team’s project: you own it, and your team’s admins can manage it too.</Typography>}
           <Box role="radiogroup" aria-label="Color" sx={{ display: 'flex', gap: 1 }}>
             {PROJECT_COLORS.map((hex, i) => (
               <Box key={hex} component="button" type="button" role="radio" aria-checked={color === i} aria-label={`Color ${i + 1}`}

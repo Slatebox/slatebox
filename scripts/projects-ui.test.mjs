@@ -314,3 +314,18 @@ test('project copy is sentence case, says agent not AI, and uses US spelling', (
     assert.doesNotMatch(src, />(New Project|Add A Slate|Move Slates Here|Make A New Link|Copy Link|Delete Project|New Folder)</, f)
   }
 })
+
+// test.slatebox.com, 2026-11-27: New project sent orgId, which projects.create does not take
+// (additionalProperties: false), so every project made from the dialog was refused. Each field the
+// browser sends to projects.create is one the action accepts.
+test('New project and New folder send projects.create only the fields it takes', async () => {
+  const { default: action } = await import('../web/app/server/actions/projects-create.mjs').then((m) => ({ default: Object.values(m).find((v) => v?.id === 'projects.create') }))
+  const accepted = new Set(Object.keys(action.input.properties))
+  for (const [file, pattern] of [['components/projects/NewProjectDialog.jsx', /projectsApi\.create\(\{([\s\S]*?)\}\)/], ['components/projects/ProjectFolders.jsx', /projectsApi\.create\(\{([^}]*)\}\)/]]) {
+    const body = ui(file).match(pattern)?.[1]
+    assert.ok(body, `${file} calls projectsApi.create with an object`)
+    const keys = [...body.matchAll(/(?:^|[,{\s])([A-Za-z]+)\s*(?=:|,|$)/gm)].map((m) => m[1]).filter((k) => !/^(nameCheck|descriptionCheck|value|hereId)$/.test(k))
+    assert.ok(keys.length > 0, file)
+    for (const key of keys) assert.ok(accepted.has(key), `${file} sends ${key}, which projects.create does not take`)
+  }
+})
