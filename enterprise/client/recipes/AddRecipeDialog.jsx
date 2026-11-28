@@ -28,6 +28,7 @@ import Typography from '@mui/material/Typography'
 import CircularProgress from '@mui/material/CircularProgress'
 import SnapSlate from '/imports/ui/components/SnapSlate'
 import { openSignInWindow } from '../signin'
+import { connectLinear } from '../linear'
 import { refreshCatalog, useCatalog } from './availability'
 import recipesApi from './recipesApi'
 import ConfigForm from './ConfigForm'
@@ -57,7 +58,31 @@ function RecipeChoice({ manifest, onPick }) {
 
 function ConnectStep({ manifest, projectId }) {
   const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
   const name = INTEGRATION_WORDS[manifest.integration]
+  // Linear: its own one-click sign-in (Connect, Authorize on Linear, done).
+  async function connectToLinear() {
+    setNote('')
+    setBusy(true)
+    try {
+      const outcome = await connectLinear()
+      if (!outcome.ok) setNote(outcome.message || 'Linear didn\'t finish connecting. Try again.')
+      refreshCatalog()
+    } catch (error) {
+      setNote(error?.reason || error?.message || 'Linear didn\'t finish connecting. Try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+  if (manifest.integration === 'linear') {
+    return (
+      <Box sx={{ display: 'grid', gap: 2, justifyItems: 'start' }}>
+        <Typography>{manifest.label} reads Linear as you, with your access there. It changes something in Linear only when you allow it for this recipe.</Typography>
+        <Button variant="contained" disableElevation onClick={connectToLinear} disabled={busy}>{busy ? 'Connecting…' : 'Connect Linear'}</Button>
+        {note && <Typography role="alert" color="error" variant="body2">{note}</Typography>}
+      </Box>
+    )
+  }
   async function connect() {
     setNote('')
     const win = openSignInWindow()
