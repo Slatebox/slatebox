@@ -66,6 +66,10 @@ const log = (message, details) => console.log(`[upload-removal] ${message}`, det
 // removed is dropped from the CDN too. Files kept in the database (a self-host) have no CDN.
 const cdnConfig = storedFileCdn()
 const cdn = cdnConfig ? createCdnInvalidator({ ...cdnConfig, log }) : null
+// Said once at start, so the logs show whether removed files are dropped from the CDN.
+if (Meteor.settings.aws?.imageBucket) {
+  log(cdnConfig ? 'CDN invalidation on' : 'CDN invalidation off (no aws.cloudFrontDistributionId); cached copies expire within a day', {})
+}
 
 export const uploadRemoval = createUploadRemoval({
   queue,
