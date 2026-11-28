@@ -3,6 +3,7 @@
 // applier draws them, so an import is an ordinary edit: saved by the save core, sent to everyone
 // on the slate, and readable afterwards. Plans keep to the public limits (50 operations each).
 import { labelSize, layoutDiagram, noteSize } from './layout.mjs'
+import { syncModelPlans } from './sync.mjs'
 
 export const OPERATIONS_PER_PLAN = 50
 
@@ -187,8 +188,13 @@ export function drawingOf(model, base = NOTE_STYLE) {
  * Plans that draw a diagram model on a slate.
  * options.existingIds: note and connector ids already on the slate.
  * options.origin: where the diagram's top-left corner goes.
+ * options.sync: { current, base?, touched?, idMap? }: read the diagram back onto the slate
+ * current instead (adds, text and shape changes, line changes, deletions of what base held;
+ * never a move). See sync.mjs.
  */
-export function diagramPlans(model, { existingIds = [], existingConnectorIds = [], origin = { x: 0, y: 0 }, noteStyle: look } = {}) {
+export function diagramPlans(model, { existingIds = [], existingConnectorIds = [], origin = { x: 0, y: 0 }, noteStyle: look, sync = null } = {}) {
+  // Sync: the diagram read back onto the slate it came from, changing only what it changed (sync.mjs).
+  if (sync) return syncModelPlans(model, sync)
   const drawing = drawingOf(model, newNoteStyle(look))
   const idFor = noteIds(existingIds)
   const frameIds = new Map(drawing.frames.map((frame) => [frame.name, idFor(frame.name)]))
