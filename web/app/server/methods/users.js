@@ -34,6 +34,7 @@ import { removePersonalData } from '../profile/meteor'
 import { removeIntegrationsOfAccount } from '../integrations/meteor'
 import { removePasskeysAddedUnverified, removePasskeysOf } from '../passkeys/meteor'
 import { releaseUploadsOfSlates, removeUploadsOfAccount } from '../upload-removal'
+import { removeSuggestionsOfSlates } from '../agents/suggestions-removal'
 
 import {
   Permissions,
@@ -633,6 +634,9 @@ method[CONSTANTS.methods.users.delete] = async function removeOwnAccount() {
   await SlateOperationRuns.removeAsync(owner)
   // other people's pictures on these slates are released (removed later when nothing else shows them)
   await releaseUploadsOfSlates(owner)
+  // every agent's suggestions on these slates, the person's own token's included (a kept photo's
+  // action stays for undo otherwise, and its photo's address holds the file in the store)
+  await removeSuggestionsOfSlates(owner)
   await Slates.removeAsync(owner)
   await SlateSnapshots.removeAsync(owner)
   // every presentation they made (a deck keeps a copy of the slate and its pictures) and its chat

@@ -46,7 +46,9 @@
     "accessKey": "",
     "secretKey": "",
     "imageBucket": "",
-    "cloudUrl": ""
+    "cloudUrl": "",
+    "cloudFrontDistributionId": "",
+    "//cloudFrontDistributionId": "Optional: the CloudFront distribution that serves cloudUrl. When set, files the app removes (deleted notes, deleted accounts) are dropped from the CDN at once; the IAM user above then needs cloudfront:CreateInvalidation on it. Leave empty without a CDN. Either way stored files are sent with Cache-Control public, max-age=86400."
   },
   "nounProject": {
     "//": "Icon search for custom shapes and the style bar (The Noun Project API key and secret, OAuth 1.0a). Leave both empty to turn icon search off: the custom shape pane then offers only drawing with AI.",

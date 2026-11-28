@@ -8,7 +8,8 @@ import { MongoInternals } from 'meteor/mongo'
 import { Random } from 'meteor/random'
 import { dateFolder, uploadKey } from './upload-keys.mjs'
 import { accountFileKeyFor, bucketUploadsOf } from './upload-removal.mjs'
-import { deleteS3Object, listS3Keys, putS3Object, readS3Object } from './s3Utils'
+import { cdnDistributionOf } from './cdn-invalidation.mjs'
+import { createCloudFrontInvalidation, deleteS3Object, listS3Keys, putS3Object, readS3Object } from './s3Utils'
 
 const inBucket = () => Boolean(Meteor.settings.aws?.imageBucket)
 
@@ -80,6 +81,13 @@ export async function deleteStoredFile(key) {
   }
   const files = databaseFiles()
   for (const id of await databaseFileIds(key)) await files.delete(id).catch(() => {})
+}
+
+// The CDN in front of the bucket (cdn-invalidation.mjs), told what the upload-removal queue removes:
+// { distributionId, cloudUrl, send }, or null without a bucket or without aws.cloudFrontDistributionId.
+export function storedFileCdn() {
+  const distributionId = inBucket() ? cdnDistributionOf(Meteor.settings) : null
+  return distributionId ? { distributionId, cloudUrl: storedFileBase(), send: createCloudFrontInvalidation } : null
 }
 
 // Uploads before this day are not looked for when an account has no creation date.

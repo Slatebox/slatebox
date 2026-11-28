@@ -28,6 +28,9 @@ import {
   uploadKeysIn,
 } from "../web/app/server/common/upload-removal.mjs";
 import { dateFolder, uploadKey, uploadKeyFor } from "../web/app/server/common/upload-keys.mjs";
+import { removeSuggestionsOn } from "../web/app/server/agents/suggestions.mjs";
+import { memoryCollection } from "./exec-test-world.mjs";
+import { cdnDistributionOf, cdnPathOf, createCdnInvalidator, PATHS_PER_INVALIDATION, UPLOAD_CACHE_CONTROL } from "../web/app/server/common/cdn-invalidation.mjs";
 import { createSlateSaveCore } from "../web/app/server/slate-save-core.mjs";
 import { memoryMongo } from "./memory-mongo.mjs";
 
@@ -98,7 +101,7 @@ function mockBucket(keys = []) {
 let clockNow = () => Date.now();
 
 // The database the reference check reads: named collections of documents.
-function world({ docs = {}, bucketKeys = [], start = new Date(2026, 10, 27, 12).getTime() } = {}) {
+function world({ docs = {}, bucketKeys = [], start = new Date(2026, 10, 27, 12).getTime(), cdn = null } = {}) {
   const clock = { t: start };
   clockNow = () => clock.t;
   const db = { slates: [], slateSnapshots: [], libraryItems: [], agentSuggestions: [], organizationSettings: [], ...docs };
@@ -113,6 +116,7 @@ function world({ docs = {}, bucketKeys = [], start = new Date(2026, 10, 27, 12).
       if (usedFails) throw usedFails;
       return referencedKeys(Object.values(db).flat(), keys);
     },
+    cdn,
     now: () => clock.t,
     log: (message, details) => logs.push({ message, details }),
   });
@@ -494,4 +498,173 @@ test("both save cores release deleted notes' files, and a deleted slate releases
   const store = app("server/common/fileStore.js");
   assert.match(store, /\(\?:u\|ai\)\|presentation\)_\$\{userId\}_/);
   assert.match(store, /\.filter\(\(key\) => accountFileKeyFor\(key, userId\)\)/);
+});
+
+// ---- the CDN in front of the bucket (2026-11-28: a deleted photo stayed public at files.slatebox.com, a
+// CloudFront distribution, for as long as its cached copy lived: no Cache-Control, no invalidation) ----
+
+// A CloudFront that records each CreateInvalidation, and a switch to make it fail.
+function mockCloudFront() {
+  const calls = [];
+  let failing = null;
+  return {
+    calls,
+    fail(error) { failing = error; },
+    send: async (input) => {
+      if (failing) throw failing;
+      calls.push(structuredClone(input));
+      return { Invalidation: { Id: `I${calls.length}`, Status: "InProgress" } };
+    },
+  };
+}
+
+test("the distribution comes from aws.cloudFrontDistributionId; a CDN path keeps cloudUrl's own path", () => {
+  assert.equal(cdnDistributionOf({ aws: { cloudFrontDistributionId: " E2ABC3DEF4GHIJ " } }), "E2ABC3DEF4GHIJ");
+  for (const settings of [{}, { aws: {} }, { aws: { cloudFrontDistributionId: "" } }, { aws: { cloudFrontDistributionId: "not an id" } }, { aws: { cloudFrontDistributionId: 7 } }]) {
+    assert.equal(cdnDistributionOf(settings), null, JSON.stringify(settings));
+  }
+  const k = key(ALICE, 1);
+  assert.equal(cdnPathOf(k, FILES), `/${k}`);
+  assert.equal(cdnPathOf(k, `${FILES}/`), `/${k}`);
+  assert.equal(cdnPathOf(k, "https://cdn.example/files/"), `/files/${k}`);
+  assert.equal(UPLOAD_CACHE_CONTROL, "public, max-age=86400");
+});
+
+test("a released file the sweep removes is dropped from the CDN; one still named is not", async () => {
+  const gone = key(ALICE, 1);
+  const kept = key(ALICE, 2);
+  const cf = mockCloudFront();
+  const cdn = createCdnInvalidator({ distributionId: "E2ABC3DEF4GHIJ", cloudUrl: FILES, send: cf.send, now: () => 1795800000000 });
+  const w = world({ bucketKeys: [gone, kept], docs: { slates: [{ _id: "s", nodes: [photoNote("n", kept)] }] }, cdn });
+  await w.removal.released([gone, kept]);
+  w.clock.t += GRACE_MS;
+  await w.removal.sweep();
+  assert.deepEqual([...w.bucket.objects], [kept]);
+  assert.equal(cf.calls.length, 1);
+  const [call] = cf.calls;
+  assert.equal(call.DistributionId, "E2ABC3DEF4GHIJ");
+  assert.deepEqual(call.InvalidationBatch.Paths, { Quantity: 1, Items: [`/${gone}`] });
+  assert.match(call.InvalidationBatch.CallerReference, /^slatebox-removal-1795800000000-[0-9a-f]{8}-\d+$/);
+  // nothing removed: nothing asked
+  await w.removal.released([kept]);
+  w.clock.t += GRACE_MS;
+  await w.removal.sweep();
+  assert.equal(cf.calls.length, 1);
+});
+
+test("a removed account's files are dropped from the CDN in batches, each with its own reference", async () => {
+  const mine = Array.from({ length: 5 }, (_, n) => key(ALICE, n + 1));
+  const cf = mockCloudFront();
+  const cdn = createCdnInvalidator({ distributionId: "E2ABC3DEF4GHIJ", cloudUrl: FILES, send: cf.send, perRequest: 2 });
+  const w = world({ bucketKeys: [...mine, key(BOB, 9)], cdn });
+  await w.removal.accountRemoved({ userId: ALICE, createdAt: new Date(2026, 10, 18) });
+  await w.removal.sweep();
+  assert.deepEqual(cf.calls.map((c) => c.InvalidationBatch.Paths.Quantity), [2, 2, 1]);
+  assert.deepEqual(cf.calls.flatMap((c) => c.InvalidationBatch.Paths.Items).sort(), mine.map((k) => `/${k}`).sort());
+  assert.equal(new Set(cf.calls.map((c) => c.InvalidationBatch.CallerReference)).size, 3, "CloudFront takes each reference once");
+  assert.ok(PATHS_PER_INVALIDATION <= 3000, "CloudFront's limit on file paths in progress");
+});
+
+test("a CDN that fails never fails the removal: logged without a key or path, not retried", async () => {
+  const k = key(ALICE, 1);
+  const cf = mockCloudFront();
+  cf.fail(Object.assign(new Error(`AccessDenied for /${k}`), { name: "AccessDenied", $metadata: { httpStatusCode: 403 } }));
+  const logs = [];
+  const cdn = createCdnInvalidator({ distributionId: "E2ABC3DEF4GHIJ", cloudUrl: FILES, send: cf.send, log: (message, details) => logs.push({ message, details }) });
+  const w = world({ bucketKeys: [k], cdn });
+  await w.removal.released([k]);
+  w.clock.t += GRACE_MS;
+  await w.removal.sweep();
+  assert.equal(w.bucket.objects.has(k), false, "removed from the bucket");
+  assert.equal(w.queue.rows.size, 0, "done, not retried");
+  assert.deepEqual(logs, [{ message: "CDN invalidation failed; the cached copies expire within a day", details: { paths: 1, name: "AccessDenied", status: 403 } }]);
+  assert.doesNotMatch(JSON.stringify([...logs, ...w.logs]), /R0000|u_A111/);
+  // a CDN object that throws outright is caught by the queue as well
+  const w2 = world({ bucketKeys: [k], cdn: { invalidate: async () => { throw new Error(k); } } });
+  await w2.removal.released([k]);
+  w2.clock.t += GRACE_MS;
+  await w2.removal.sweep();
+  assert.equal(w2.queue.rows.size, 0);
+  assert.doesNotMatch(JSON.stringify(w2.logs), /R0000/);
+});
+
+test("without a distribution nothing is asked; a removal failing part way still drops what went", async () => {
+  const cf = mockCloudFront();
+  const none = createCdnInvalidator({ distributionId: null, cloudUrl: FILES, send: cf.send });
+  assert.equal(await none.invalidate([key(ALICE, 1)]), 0);
+  assert.equal(cf.calls.length, 0);
+  // the account's second removal fails: the first is dropped from the CDN now, the rest retried
+  const mine = [key(ALICE, 1), key(ALICE, 2)];
+  const cdn = createCdnInvalidator({ distributionId: "E2ABC3DEF4GHIJ", cloudUrl: FILES, send: cf.send });
+  const w = world({ bucketKeys: mine, cdn });
+  const remove = w.bucket.files.remove;
+  let n = 0;
+  w.bucket.files.remove = async (k) => { if (++n === 2) throw Object.assign(new Error("down"), { name: "ServiceUnavailable" }); return remove(k); };
+  await w.removal.accountRemoved({ userId: ALICE, createdAt: new Date(2026, 10, 18) });
+  await w.removal.sweep();
+  assert.equal(cf.calls.length, 1);
+  assert.equal(cf.calls[0].InvalidationBatch.Paths.Quantity, 1);
+  assert.equal(w.queue.rows.size, 1, "the account is retried");
+});
+
+test("the app wires the CDN from the settings, only with files in the bucket, and every bucket upload carries Cache-Control", () => {
+  const glue = app("server/upload-removal.js");
+  assert.match(glue, /const cdnConfig = storedFileCdn\(\)\nconst cdn = cdnConfig \? createCdnInvalidator\(\{ \.\.\.cdnConfig, log \}\) : null/);
+  assert.match(glue, /\n  cdn,\n/);
+  const store = app("server/common/fileStore.js");
+  assert.match(store, /const distributionId = inBucket\(\) \? cdnDistributionOf\(Meteor\.settings\) : null/);
+  assert.match(store, /\{ distributionId, cloudUrl: storedFileBase\(\), send: createCloudFrontInvalidation \}/);
+  const s3 = app("server/common/s3Utils.js");
+  const put = s3.slice(s3.indexOf("export async function putS3Object"), s3.indexOf("export async function deleteS3Object"));
+  assert.match(put, /CacheControl: UPLOAD_CACHE_CONTROL,/);
+  assert.match(s3, /new CreateInvalidationCommand\(input\)/);
+  assert.equal(JSON.parse(app("settings.example.json")).aws.cloudFrontDistributionId, "");
+});
+
+// 2026-11-28, on test.slatebox.com: users.delete left the account's own personal-token suggestion
+// (a photo it kept: the action stays for undo) on its deleted slate, and its photo address held the
+// file in the store until the suggestion expired.
+test("deleting slates removes every agent's suggestions on them, kept or waiting; other slates' stay", async () => {
+  const k = key(ALICE, 1);
+  const suggestions = memoryCollection();
+  const controls = memoryCollection();
+  const action = (id, slateId, ownerId, state) => ({ _id: id, slateId, ownerId, agentId: "token:t1", items: [{ id: "i", kind: "add", state, nodeId: "n", node: photoNote("n", k) }] });
+  await suggestions.insertOne(action("kept", "aliceSlate", ALICE, "kept"));
+  await suggestions.insertOne(action("waiting", "aliceSlate", BOB, "pending"));
+  await suggestions.insertOne(action("elsewhere", "bobSlate", BOB, "pending"));
+  await controls.insertOne({ _id: "aliceSlate", paused: true });
+  await controls.insertOne({ _id: "bobSlate", paused: false });
+  // before: the suggestion keeps the deleted slate's photo in the store
+  const before = world({ bucketKeys: [k], docs: { agentSuggestions: [...suggestions.docs.values()].filter((d) => d.slateId === "aliceSlate") } });
+  await before.removal.accountRemoved({ userId: ALICE, createdAt: new Date(2026, 10, 18) });
+  await before.removal.sweep();
+  assert.ok(before.bucket.objects.has(k), "held by the suggestion");
+
+  assert.deepEqual(await removeSuggestionsOn(["aliceSlate", "aliceSlate", null], { suggestions, controls }), { removed: 2 });
+  assert.deepEqual([...suggestions.docs.keys()], ["elsewhere"]);
+  assert.deepEqual([...controls.docs.keys()], ["bobSlate"]);
+  assert.deepEqual(await removeSuggestionsOn([], { suggestions, controls }), { removed: 0 });
+  // after: nothing names the photo, so the account's removal removes it at once
+  const after = world({ bucketKeys: [k], docs: { agentSuggestions: [...suggestions.docs.values()].filter((d) => d.slateId === "aliceSlate") } });
+  await after.removal.accountRemoved({ userId: ALICE, createdAt: new Date(2026, 10, 18) });
+  await after.removal.sweep();
+  assert.equal(after.bucket.objects.has(k), false);
+});
+
+test("every path that deletes slates removes their suggestions first", () => {
+  const paths = {
+    "server/methods/users.js": ["await removeSuggestionsOfSlates(owner)", "await Slates.removeAsync(owner)"],
+    "server/methods/organizations.js": ["await removeSuggestionsOfSlates({ userId: user._id })", "await Slates.removeAsync({ userId: user._id })"],
+    "server/methods/team-member-slates.js": ["await removeSuggestionsOfSlates({ _id: { $in: ids } })", "await Slates.removeAsync({ _id: { $in: ids } })"],
+    "server/methods/slates.js": ["await removeSuggestionsOfSlates({ _id: slate._id })", "await Slates.removeAsync({ _id: slate._id })"],
+  };
+  for (const [file, [suggestions, slates]] of Object.entries(paths)) {
+    const text = app(file);
+    assert.match(text, /import \{ removeSuggestionsOfSlates \} from '\.\.\/agents\/suggestions-removal'/, file);
+    assert.ok(text.indexOf(suggestions) > 0 && text.indexOf(suggestions) < text.indexOf(slates), `${file}: suggestions before the slates go`);
+  }
+  // only the collections: no action layer (suggestions-meteor.js loads server/actions/mount)
+  const glue = app("server/agents/suggestions-removal.js");
+  assert.deepEqual(glue.match(/^import .* from '([^']+)'$/gm).map((line) => line.replace(/.* from /, "")), ["'meteor/mongo'", "'../../imports/api/common/models'", "'./suggestions.mjs'"]);
+  assert.match(glue, /return removeSuggestionsOn\(ids, \{ suggestions: AgentSuggestions\.rawCollection\(\), controls: controls\(\) \}\)/);
 });

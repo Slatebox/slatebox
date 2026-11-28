@@ -105,7 +105,7 @@ The registry updates the two `latest` tags separately. If promotion stops after 
 
 - **Email** — Set `mailGun.server` in `.state/settings.json` to your SMTP URL for login links, invitations, verification, and password resets.
 - **Calls** — Add `daily.apiKey` to the server-only `.state/settings.json` using your organization’s Daily credential. Turn on audio or video huddles in the slate settings. Daily hosts the media rooms and handles network traversal. The bundled WebSocket service carries board changes. For browser microphone and camera access, serve the app over HTTPS or use localhost for development.
-- **Published presentation images** — Configure your own `aws.region`, `aws.accessKey`, `aws.secretKey`, `aws.imageBucket` and `aws.cloudUrl` for the app's S3 image-storage integration. Published images need an HTTPS asset origin reachable by viewers.
+- **Published presentation images** — Configure your own `aws.region`, `aws.accessKey`, `aws.secretKey`, `aws.imageBucket` and `aws.cloudUrl` for the app's S3 image-storage integration. Published images need an HTTPS asset origin reachable by viewers. If a CloudFront distribution serves `aws.cloudUrl`, also set `aws.cloudFrontDistributionId` (optional; the IAM user needs `cloudfront:CreateInvalidation`) so files the app removes stop being served at once instead of when their cached copy expires (stored files are sent with `Cache-Control: public, max-age=86400`).
 
 ### Integrations
 

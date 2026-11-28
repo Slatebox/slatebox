@@ -17,7 +17,7 @@
 //
 // No Meteor here: the store takes a MongoDB driver collection (server/agents/suggestions-meteor.js).
 import { createHash } from 'node:crypto'
-import { CONNECTOR_STYLE_KEYS, NODE_KEYS, readConnector, readNote } from 'slateboxjs/operations'
+import { CONNECTOR_STYLE_KEYS, NODE_KEYS, readConnector, readNote, readPhoto } from 'slateboxjs/operations'
 import { problem } from '../actions/errors.mjs'
 import { cleanStepText } from '../../imports/api/common/agent-label.mjs'
 
@@ -74,6 +74,15 @@ export function addNoteOps(node) {
   if (media && typeof media === 'object' && typeof media.url === 'string') {
     add.media = Object.fromEntries(Object.entries(media).filter(([key, value]) => MEDIA_KEYS.includes(key) && value !== null && value !== undefined))
     // its caption is the video's title and its shape the player's frame: add_nodes takes neither
+    delete add.text
+    delete add.shape
+  }
+  // A photo note is added as its photo (add_nodes photo), which sets the picture, its size and its
+  // fit. Without it the note lands as a plain rectangle and the stored photo is pointed at by nothing.
+  const photo = media ? null : readPhoto(node?.options)
+  if (photo) {
+    add.photo = photo
+    // the picture is the whole note: add_nodes takes no words or shape with it
     delete add.text
     delete add.shape
   }
@@ -203,6 +212,23 @@ export function withOwnGhosts(slate, actions) {
       if (!holder.relationships.associations.some((line) => line.id === item.association.id)) holder.relationships.associations.push(clone(item.association))
     }
   return out
+}
+
+// ---- slates that are deleted -----------------------------------------------------------------
+
+/**
+ * The slates are being deleted (a slate, or every slate of an account that is removed): what any
+ * agent suggested on them goes too, kept items and all, and so do their agent controls. Nothing is
+ * left to keep or undo on a slate that is gone, and a waiting photo's address would otherwise hold
+ * its file in the store until the suggestion expired (upload-removal.mjs reads suggestions).
+ * suggestions, controls: MongoDB driver collections (agentSuggestions, agentSlateControls).
+ */
+export async function removeSuggestionsOn(slateIds, { suggestions, controls }) {
+  const ids = [...new Set(slateIds || [])].filter((id) => typeof id === 'string' && id)
+  if (!ids.length) return { removed: 0 }
+  const result = await suggestions.deleteMany({ slateId: { $in: ids } })
+  await controls.deleteMany({ _id: { $in: ids } })
+  return { removed: result?.deletedCount || 0 }
 }
 
 // ---- the store -------------------------------------------------------------------------------

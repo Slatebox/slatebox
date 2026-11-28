@@ -15,6 +15,9 @@
 //     slate, a copy, a snapshot (kept 3 days), a library item or an open suggestion that still names
 //     the file keeps it.
 //
+// A file removed from a bucket behind a CDN is dropped from the CDN too (deps.cdn,
+// cdn-invalidation.mjs), so it stops being served at once rather than when its cached copy expires.
+//
 // Nothing here ever blocks the account removal or the save that released the files: the work is
 // queued, run in the background, and a failure is logged (the error's name and status only, never a
 // key, URL or credential) and retried with a backoff by the sweep.
@@ -189,10 +192,12 @@ export async function referencedKeys(documents, keys) {
  *                     _id and dueAt): a file released again during a run keeps its new wait.
  * @param deps.files   { listUploadsOf(userId, since) -> keys, remove(key) }: the file store.
  * @param deps.isUsed  (Set of keys) -> Set of the keys a stored document still names.
+ * @param deps.cdn     optional { invalidate(keys) }: told the keys each run removed, so a CDN in front
+ *                     of the file store stops serving them (cdn-invalidation.mjs). Never blocks a run.
  * @param deps.now     the clock
  * @param deps.log     (message, details) for what was done and what failed; details never hold a key.
  */
-export function createUploadRemoval({ queue, files, isUsed, now = Date.now, log = () => {}, graceMs = GRACE_MS }) {
+export function createUploadRemoval({ queue, files, isUsed, cdn = null, now = Date.now, log = () => {}, graceMs = GRACE_MS }) {
   /** Files a save or a deleted slate stopped using: removed after the grace period if nothing names them then. */
   async function released(keys) {
     const at = now()
@@ -209,6 +214,16 @@ export function createUploadRemoval({ queue, files, isUsed, now = Date.now, log 
     await queue.put({ _id: `account:${userId}`, kind: 'account', userId, since, dueAt: now(), attempts: 0 })
   }
 
+  // The CDN drops its copies of what was removed. A failure there never fails the removal.
+  async function uncache(keys) {
+    if (!cdn || !keys.length) return
+    try {
+      await cdn.invalidate(keys)
+    } catch (error) {
+      log('CDN invalidation failed', failureOf(error))
+    }
+  }
+
   async function failed(item, error) {
     const attempts = (item.attempts || 0) + 1
     const failure = failureOf(error)
@@ -220,29 +235,34 @@ export function createUploadRemoval({ queue, files, isUsed, now = Date.now, log 
   async function runAccount(item) {
     const keys = new Set(await files.listUploadsOf(item.userId, item.since))
     const used = keys.size ? await isUsed(keys) : new Set()
-    let removed = 0
-    for (const key of keys) {
-      if (used.has(key)) continue
-      await files.remove(key)
-      removed += 1
+    const removed = []
+    try {
+      for (const key of keys) {
+        if (used.has(key)) continue
+        await files.remove(key)
+        removed.push(key)
+      }
+    } finally {
+      // Also when a removal failed part way: what is gone already is dropped from the CDN now.
+      await uncache(removed)
     }
     const kept = [...used].filter((key) => keys.has(key))
     // Kept: another slate shows it (a copy, a team slate that stays). Checked again after the grace
     // period, when the snapshots that named it have gone, and kept for as long as anything uses it.
     if (kept.length) await released(kept)
     await queue.done(item)
-    log('account uploads removed', { removed, kept: kept.length })
+    log('account uploads removed', { removed: removed.length, kept: kept.length })
   }
 
   async function runFiles(items) {
     const keys = new Set(items.map((item) => item.key))
     const used = await isUsed(keys)
-    let removed = 0
+    const removed = []
     for (const item of items) {
       try {
         if (!used.has(item.key)) {
           await files.remove(item.key)
-          removed += 1
+          removed.push(item.key)
         }
         // Still named somewhere: kept. A later save or deletion that releases it queues it again.
         await queue.done(item)
@@ -250,7 +270,8 @@ export function createUploadRemoval({ queue, files, isUsed, now = Date.now, log 
         await failed(item, error)
       }
     }
-    if (items.length) log('released uploads checked', { removed, kept: items.length - removed })
+    await uncache(removed)
+    if (items.length) log('released uploads checked', { removed: removed.length, kept: items.length - removed.length })
   }
 
   /** One run of the queue: the items due now, claimed so another server does not run them too. */

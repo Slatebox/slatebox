@@ -28,6 +28,7 @@ import { recordNativeGuestEdit } from './kept-native-slate'
 import { saveNativeSlate } from './native-slate-save.mjs'
 import { slateSaveCore } from '../slate-save'
 import { releaseUploadsOfSlates } from '../upload-removal'
+import { removeSuggestionsOfSlates } from '../agents/suggestions-removal'
 import AuthManager from '../../imports/api/common/AuthManager'
 import CONSTANTS from '../../imports/api/common/constants'
 import { boardEmbed } from '../../imports/api/common/slate-embed.mjs'
@@ -99,6 +100,8 @@ export async function deleteOwnedSlate(slate) {
   await Messages.removeAsync({ slateId: slate._id })
   await Comments.removeAsync({ slateId: slate._id })
   await AgentTasks.removeAsync({ slateId: slate._id })
+  // what agents suggested on it: nothing is left to keep or undo
+  await removeSuggestionsOfSlates({ _id: slate._id })
   await Slates.removeAsync({ _id: slate._id })
   if (slate.creative?.model?.kind === 'workshop') {
     await SlatePresentations.removeAsync({ slateShareId: slate.shareId, userId: slate.userId, workshop: { $exists: true } })

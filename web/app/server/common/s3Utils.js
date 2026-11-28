@@ -10,15 +10,19 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
+import { CloudFrontClient, CreateInvalidationCommand } from '@aws-sdk/client-cloudfront'
 import { pagedKeys } from './upload-removal.mjs'
+import { UPLOAD_CACHE_CONTROL } from './cdn-invalidation.mjs'
+
+const credentials = () => ({
+  accessKeyId: Meteor.settings.aws.accessKey,
+  secretAccessKey: Meteor.settings.aws.secretKey,
+})
 
 function createS3() {
   return new S3Client({
     region: Meteor.settings.aws.region || 'us-east-1',
-    credentials: {
-      accessKeyId: Meteor.settings.aws.accessKey,
-      secretAccessKey: Meteor.settings.aws.secretKey,
-    },
+    credentials: credentials(),
   })
 }
 
@@ -138,6 +142,9 @@ export async function putS3Object({ body, key, contentType, contentDisposition }
       Key: key,
       ContentType: contentType,
       ...(contentDisposition && { ContentDisposition: contentDisposition }),
+      // A cached copy (the CDN's, a browser's) lives a day at most: a removed file stops being
+      // served within the day even when the CDN is not told (cdn-invalidation.mjs).
+      CacheControl: UPLOAD_CACHE_CONTROL,
       Body: body,
     })
   )
@@ -180,6 +187,17 @@ export async function readS3Object(key, maxBytes) {
       parts.push(part)
     }
     return Buffer.concat(parts)
+  } finally {
+    client.destroy()
+  }
+}
+
+// One CloudFront invalidation (cdn-invalidation.mjs builds it): the CDN in front of the image
+// bucket drops its copies of these paths. CloudFront is global; its API answers in us-east-1.
+export async function createCloudFrontInvalidation(input) {
+  const client = new CloudFrontClient({ region: 'us-east-1', credentials: credentials() })
+  try {
+    return await client.send(new CreateInvalidationCommand(input))
   } finally {
     client.destroy()
   }

@@ -117,6 +117,11 @@ export function memoryCollection() {
       if (found) docs.delete(found._id);
       return { deletedCount: found ? 1 : 0 };
     },
+    async deleteMany(selector) {
+      const gone = [...docs.values()].filter((doc) => matches(doc, selector));
+      for (const doc of gone) docs.delete(doc._id);
+      return { deletedCount: gone.length };
+    },
     async findOneAndUpdate(selector, update, options = {}) {
       let found = find(selector);
       let inserting = false;

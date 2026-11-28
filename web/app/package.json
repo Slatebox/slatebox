@@ -29,6 +29,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.106",
     "@ai-sdk/openai-compatible": "3.0.93",
+    "@aws-sdk/client-cloudfront": "^3.1086.0",
     "@aws-sdk/client-s3": "^3.1086.0",
     "@babel/runtime": "^7.25.7",
     "@cdxoo/dbscan": "^1.1.1",

@@ -31,6 +31,7 @@ import { audit } from '../audit/recorder.mjs'
 import { removeIntegrationsOfAccount } from '../integrations/meteor'
 import { removeAccountRows } from './account-rows'
 import { releaseUploadsOfSlates, removeUploadsOfAccount } from '../upload-removal'
+import { removeSuggestionsOfSlates } from '../agents/suggestions-removal'
 
 const method = {}
 
@@ -153,6 +154,8 @@ method[CONSTANTS.methods.organizations.delete] = async function deleteOrganizati
       await SlateAccess.removeAsync({ slateId: { $in: owned } })
       await Comments.removeAsync({ slateId: { $in: owned } })
       await releaseUploadsOfSlates({ userId: user._id })
+      // every agent's suggestions on them, the owner's own included
+      await removeSuggestionsOfSlates({ userId: user._id })
       await Slates.removeAsync({ userId: user._id })
       await SlateSnapshots.removeAsync({ userId: user._id })
 

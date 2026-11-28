@@ -5,7 +5,8 @@ import { Meteor } from 'meteor/meteor'
 import { Mongo, MongoInternals } from 'meteor/mongo'
 import { Slates } from '../imports/api/common/models'
 import { createUploadRemoval, referencedKeys, uploadKeysIn } from './common/upload-removal.mjs'
-import { deleteStoredFile, listUploadsOf } from './common/fileStore'
+import { deleteStoredFile, listUploadsOf, storedFileCdn } from './common/fileStore'
+import { createCdnInvalidator } from './common/cdn-invalidation.mjs'
 
 export const UploadRemovals = new Mongo.Collection('uploadRemovals')
 const queueRows = () => UploadRemovals.rawCollection()
@@ -61,10 +62,16 @@ const queue = {
 
 const log = (message, details) => console.log(`[upload-removal] ${message}`, details)
 
+// With files in the bucket behind a CloudFront distribution (aws.cloudFrontDistributionId), what is
+// removed is dropped from the CDN too. Files kept in the database (a self-host) have no CDN.
+const cdnConfig = storedFileCdn()
+const cdn = cdnConfig ? createCdnInvalidator({ ...cdnConfig, log }) : null
+
 export const uploadRemoval = createUploadRemoval({
   queue,
   files: { listUploadsOf, remove: (key) => deleteStoredFile(key) },
   isUsed: (keys) => referencedKeys(everyDocument(), keys),
+  cdn,
   log,
 })
 

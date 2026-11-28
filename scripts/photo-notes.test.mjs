@@ -107,6 +107,13 @@ function world({ grants = [] } = {}) {
     newId: () => `s${++n}`,
   });
   w.deps.agentOptions = { editDirectly: () => false };
+  // Who may keep or discard: the slate's owner (scripts/agent-suggestions.test.mjs's world).
+  w.deps.resolveSlateForUser = async (shareId, userId) => {
+    const slate = w.slate(shareId);
+    if (!slate) return null;
+    const own = slate.userId === userId;
+    return { slate, canRead: own, canEdit: own };
+  };
   return Object.assign(w, { photos });
 }
 
@@ -118,6 +125,7 @@ async function viewerPrincipal(w, { userId = "owner", scopes = ["slates:read", "
   return principalFromToken({ token: { _id: id, kind: "oauth", userId, name: "Slatebox viewer", scopes, resource: ORIGIN + VIEWER_RESOURCE_PATH } }, { audiences });
 }
 
+const person = (userId = "owner") => ({ kind: "person", userId, tokenId: null, tokenName: null, scopes: ["slates:read", "slates:write"] });
 const add = (w, principal, input) => w.registry.run(principal, "slates.addPhoto", { shareId: "demo", ...input });
 const status = (promise) => promise.then((r) => r.status, (e) => e.status);
 
@@ -294,6 +302,35 @@ test("without a center the photo goes beside the slate's notes; a personal token
   assert.ok(suggested.body.suggestion, "a suggestion people on the slate keep or discard");
   assert.equal(w.slate("demo").nodes.length, count, "nothing saved yet");
   assert.ok(w.presenceRows.docs.size > 0, "the agent shows on the slate");
+});
+
+// 2026-11-28, on test.slatebox.com: a personal token's photo, kept with Keep all, landed as a plain
+// rectangle with no picture (on screen and in the stored slate), and the stored photo was orphaned.
+test("a personal token's photo, kept by a person, is the photo note: the picture, its size and its words", async (t) => {
+  const w = world();
+  t.after(() => w.close());
+  const agent = await w.principalFor(["slates:read", "slates:write"]);
+  const suggested = await add(w, agent, { photo: b64(await phoneJpeg()), center: { x: 500, y: 300 }, alt: "The whiteboard" });
+  assert.equal(suggested.body.outcome, "suggested");
+  const [item] = suggested.body.suggestion.items;
+  assert.equal(item.node.options.image, suggested.body.url, "the ghost shows the photo");
+  const kept = await w.registry.run(person(), "suggestions.decide", { shareId: "demo", decision: "keep", actionId: suggested.body.suggestion.actionId });
+  assert.equal(kept.body.kept.length, 1);
+  assert.deepEqual(kept.body.refused, []);
+  const node = w.slate("demo").nodes.find((n) => n.options.id === suggested.body.nodeId);
+  assert.ok(node, "the note is saved");
+  assert.equal(node.options.image, suggested.body.url, "the kept note shows the photo");
+  assert.equal(node.options.imageFit, "cover");
+  assert.deepEqual([node.options.imageOrigWidth, node.options.imageOrigHeight], [40, 80]);
+  assert.deepEqual(node.options.photo, { url: suggested.body.url, width: 40, height: 80, alt: "The whiteboard" });
+  assert.equal(node.options.text, "");
+  // Where and how large the ghost was.
+  assert.deepEqual([node.options.width, node.options.height], [160, 320]);
+  assert.deepEqual([node.options.xPos, node.options.yPos], [500 - 80, 300 - 160]);
+  // The stored photo is the one the note points at: nothing removed, nothing orphaned.
+  assert.equal(w.photos.stored.size, 1);
+  assert.deepEqual(w.photos.removed, []);
+  assert.equal(`${FILES}/${[...w.photos.stored.keys()][0]}`, node.options.image);
 });
 
 test("preview stores nothing; a save that fails removes the stored photo", async (t) => {
