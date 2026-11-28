@@ -278,3 +278,28 @@ test('who can add agents sits in the invite dialog\'s header corner, labeled, on
   assert.doesNotMatch(heading, /uppercase/)
   assert.match(walk, /sx=\{heading\}>Your integrations</)
 })
+
+test('the invite dialog never runs off the right edge of a narrow window (360, 390, 768 wide)', () => {
+  // 2026-11-28: on a narrow window the corner control (label + select, neither allowed to shrink) pushed the
+  // header past the dialog, and the gallery's chip row (one line that scrolls sideways under 600px) stretched
+  // the body's grid column to its full length, so the whole body ran off the right edge. Measured in Chromium
+  // at 320 to 1024 wide: nothing inside the dialog's paper reaches past it, the paper never scrolls sideways.
+  const walk = readFileSync(new URL('../enterprise/client/InviteWalkthrough.jsx', import.meta.url), 'utf8')
+  const header = walk.slice(walk.indexOf('id="invite-agent-title"'), walk.indexOf('<DialogContent'))
+  // the corner control may shrink, never wider than the header, and its label wraps above the select
+  const corner = header.match(/<Box sx=\{([^\n]*)\} data-invite-outside-agents="">/)
+  assert.ok(corner, 'the corner control\'s box')
+  assert.match(corner[1], /flex: '0 1 auto'/)
+  assert.match(corner[1], /minWidth: 0/)
+  assert.match(corner[1], /maxWidth: '100%'/)
+  assert.match(corner[1], /flexWrap: 'wrap'/)
+  assert.doesNotMatch(corner[1], /flex: '0 0 auto'/, 'a box that cannot shrink pushes the dialog wider than the window')
+  // the body's grids are one column no wider than the dialog (an auto column grows to its widest child: the chip row)
+  const choose = walk.slice(walk.indexOf("{step === 'choose' && !upgrade && ("), walk.indexOf('<Tabs '))
+  assert.match(choose, /<Box sx=\{\{ display: 'grid', gridTemplateColumns: 'minmax\(0, 1fr\)', gap: 2 \}\}>/)
+  for (const panel of ['existing', 'custom']) {
+    assert.match(walk, new RegExp(`data-invite-panel="${panel}" sx=\\{\\{ display: 'grid', gridTemplateColumns: 'minmax\\(0, 1fr\\)'`), panel)
+  }
+  // the chip row is the one thing that scrolls sideways, inside its own box
+  assert.match(walk, /aria-label="Show agents for" sx=\{\{[^\n]*overflowX: \{ xs: 'auto'/)
+})

@@ -487,14 +487,16 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
             {subtitle && <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25, overflowWrap: 'anywhere' }} data-invite-subtitle="">{subtitle}</Typography>}
           </Box>
           {/* The slate owner's choice of who may bring outside agents here: a small control in the
-              header's corner (under the title when the dialog is narrow), only for whoever may change it. */}
+              header's corner (under the title when the dialog is narrow), only for whoever may change it.
+              It never pushes the dialog wider than the window: it may shrink, and its label wraps above
+              the select when the two do not fit on one line. */}
           {step === 'choose' && !upgrade && setting?.canChange && (
-            <Box sx={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 1 }} data-invite-outside-agents="">
+            <Box sx={{ flex: '0 1 auto', minWidth: 0, maxWidth: '100%', display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 1, rowGap: 0.5 }} data-invite-outside-agents="">
               <Typography component="span" id="invite-outside-agents-label" sx={(t) => ({ fontSize: 13, fontWeight: 650, color: '#3b6a50', whiteSpace: 'nowrap', ...t.applyStyles('dark', { color: '#bed7b5' }) })}>Who can add agents</Typography>
               <TextField select size="small" value={setting.outsideAgents} title="Who can bring outside agents onto this slate"
                 SelectProps={{ labelId: 'invite-outside-agents-label' }}
                 inputProps={{ 'data-invite-outside-agents-select': '' }}
-                sx={{ minWidth: 0, '& .MuiInputBase-root': { fontSize: 13.5, bgcolor: 'background.paper' }, '& .MuiSelect-select': { py: 0.625, pl: 1.25 } }}
+                sx={{ minWidth: 0, maxWidth: '100%', '& .MuiInputBase-root': { fontSize: 13.5, bgcolor: 'background.paper' }, '& .MuiSelect-select': { py: 0.625, pl: 1.25 } }}
                 onChange={(e) => Meteor.callAsync('integrations.setSlateSetting', { shareId, outsideAgents: e.target.value }).then((answer) => live.current && setSetting(answer)).catch((err) => setError(errorText(err)))}>
                 <MenuItem value="editors">Anyone who can edit</MenuItem>
                 <MenuItem value="owner">Only me</MenuItem>
@@ -511,7 +513,9 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
           </Box>
         )}
         {step === 'choose' && !upgrade && (
-          <Box sx={{ display: 'grid', gap: 2 }}>
+          // minmax(0, 1fr): one column no wider than the dialog, so the chip row (it scrolls sideways on
+          // a narrow window) never stretches the body past the right edge.
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 2 }}>
             <Typography variant="body2" sx={{ fontSize: 15, lineHeight: 1.55 }}>
               {integrationMode
                 ? 'Connect it once, then invite it onto any slate or let it join every slate you own, with no new sign-in.'
@@ -546,7 +550,7 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
               </Box>
             )}
             {tab === 'existing' && (
-              <Box role="tabpanel" id="connect-panel-existing" aria-labelledby="connect-tab-existing" data-invite-panel="existing" sx={{ display: 'grid', gap: 2 }}>
+              <Box role="tabpanel" id="connect-panel-existing" aria-labelledby="connect-tab-existing" data-invite-panel="existing" sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 2 }}>
                 <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.5 }} data-invite-tab-line="existing">{CONNECT_TABS.find((t) => t.id === 'existing').line}</Typography>
                 {!integrationMode && integrations.length > 0 && (
                   <Box sx={(t) => ({ ...section(t), display: 'grid', gap: 1 })} data-invite-integrations="">
@@ -681,7 +685,7 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
               </Box>
             )}
             {tab === 'custom' && (
-              <Box role="tabpanel" id="connect-panel-custom" aria-labelledby="connect-tab-custom" data-invite-panel="custom" sx={{ display: 'grid', gap: 2 }}>
+              <Box role="tabpanel" id="connect-panel-custom" aria-labelledby="connect-tab-custom" data-invite-panel="custom" sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 2 }}>
                 <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.5 }} data-invite-tab-line="custom">{CONNECT_TABS.find((t) => t.id === 'custom').line}</Typography>
                 <Box component="form" onSubmit={(e) => { e.preventDefault(); discover(undefined, { fromCustom: true }) }} sx={(t) => ({ ...section(t), display: 'grid', gap: 1.5 })} data-invite-custom="">
                   <TextField size="small" fullWidth label="Paste an MCP address" placeholder="https://example.com/mcp" value={address} autoFocus
