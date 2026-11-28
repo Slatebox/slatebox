@@ -76,7 +76,7 @@ const surface = (theme) => ({
 })
 const section = (theme) => ({ ...surface(theme), p: { xs: 1.75, sm: 2 } })
 const heading = (theme) => ({
-  display: 'block', textTransform: 'uppercase', fontSize: 11.5, fontWeight: 750, letterSpacing: '0.09em', lineHeight: 1.6, mb: 1, color: '#3b6a50',
+  display: 'block', fontSize: 13.5, fontWeight: 750, letterSpacing: 0, lineHeight: 1.5, mb: 1, color: '#3b6a50',
   ...theme.applyStyles('dark', { color: '#bed7b5' }),
 })
 const success = (theme) => ({
@@ -479,11 +479,29 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
         })}>
           <Hexagon color={MARK} size={28} style={{}} />
         </Box>
-        <Box sx={{ minWidth: 0 }}>
-          <DialogTitle id="invite-agent-title" sx={{ p: 0, fontSize: { xs: 17, sm: 19 }, fontWeight: 750, lineHeight: 1.3, letterSpacing: '-0.01em' }}>
-            {upgrade ? `Let ${upgrade.name} make changes too` : integrationMode ? 'Connect an integration' : `Invite an agent to “${slateName || 'this slate'}”`}
-          </DialogTitle>
-          {subtitle && <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25, overflowWrap: 'anywhere' }} data-invite-subtitle="">{subtitle}</Typography>}
+        <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 2, rowGap: 1 }}>
+          <Box sx={{ flex: '1 1 240px', minWidth: 0 }}>
+            <DialogTitle id="invite-agent-title" sx={{ p: 0, fontSize: { xs: 17, sm: 19 }, fontWeight: 750, lineHeight: 1.3, letterSpacing: '-0.01em' }}>
+              {upgrade ? `Let ${upgrade.name} make changes too` : integrationMode ? 'Connect an integration' : `Invite an agent to “${slateName || 'this slate'}”`}
+            </DialogTitle>
+            {subtitle && <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25, overflowWrap: 'anywhere' }} data-invite-subtitle="">{subtitle}</Typography>}
+          </Box>
+          {/* The slate owner's choice of who may bring outside agents here: a small control in the
+              header's corner (under the title when the dialog is narrow), only for whoever may change it. */}
+          {step === 'choose' && !upgrade && setting?.canChange && (
+            <Box sx={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 1 }} data-invite-outside-agents="">
+              <Typography component="span" id="invite-outside-agents-label" sx={(t) => ({ fontSize: 13, fontWeight: 650, color: '#3b6a50', whiteSpace: 'nowrap', ...t.applyStyles('dark', { color: '#bed7b5' }) })}>Who can add agents</Typography>
+              <TextField select size="small" value={setting.outsideAgents} title="Who can bring outside agents onto this slate"
+                SelectProps={{ labelId: 'invite-outside-agents-label' }}
+                inputProps={{ 'data-invite-outside-agents-select': '' }}
+                sx={{ minWidth: 0, '& .MuiInputBase-root': { fontSize: 13.5, bgcolor: 'background.paper' }, '& .MuiSelect-select': { py: 0.625, pl: 1.25 } }}
+                onChange={(e) => Meteor.callAsync('integrations.setSlateSetting', { shareId, outsideAgents: e.target.value }).then((answer) => live.current && setSetting(answer)).catch((err) => setError(errorText(err)))}>
+                <MenuItem value="editors">Anyone who can edit</MenuItem>
+                <MenuItem value="owner">Only me</MenuItem>
+                <MenuItem value="off">No one</MenuItem>
+              </TextField>
+            </Box>
+          )}
         </Box>
       </Box>
       <DialogContent sx={{ px: { xs: 2, sm: 3 }, py: { xs: 2, sm: 2.5 }, borderTop: 'none' }}>
@@ -499,17 +517,6 @@ export default function InviteWalkthrough({ open, onClose, shareId = null, slate
                 ? 'Connect it once, then invite it onto any slate or let it join every slate you own, with no new sign-in.'
                 : 'Agents work on this slate with you: everyone here sees each one as a cursor, and its suggestions as ghost notes to keep or discard.'}
             </Typography>
-            {setting?.canChange && (
-              <Box sx={(t) => ({ ...section(t), display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' })} data-invite-outside-agents="">
-                <Typography variant="body2" sx={{ flex: 1, minWidth: 200 }}>Who can bring outside agents onto this slate</Typography>
-                <TextField select size="small" value={setting.outsideAgents} sx={{ minWidth: 180 }} inputProps={{ 'aria-label': 'Who can bring outside agents onto this slate', 'data-invite-outside-agents-select': '' }}
-                  onChange={(e) => Meteor.callAsync('integrations.setSlateSetting', { shareId, outsideAgents: e.target.value }).then((answer) => live.current && setSetting(answer)).catch((err) => setError(errorText(err)))}>
-                  <MenuItem value="editors">Anyone who can edit</MenuItem>
-                  <MenuItem value="owner">Only me</MenuItem>
-                  <MenuItem value="off">No one</MenuItem>
-                </TextField>
-              </Box>
-            )}
             {connected && (
               <Box role="status" data-invite-connected={connected.name} sx={(t) => ({ ...section(t), display: 'flex', alignItems: 'center', gap: 1 })}>
                 <Typography variant="body2" sx={{ flex: 1 }}>✓ You already connected {connected.name}. Invite it here with no new sign-in.</Typography>

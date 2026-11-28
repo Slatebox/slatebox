@@ -316,7 +316,9 @@ test('Custom: a problem with the pasted address is said under its field, in plai
   for (const marker of ['error={Boolean(addressError)}', 'helperText={addressError || undefined}', "id: 'invite-address-problem'", "'aria-describedby': 'invite-address-problem'", "discover(undefined, { fromCustom: true })"])
     assert.ok(custom.includes(marker), marker)
   // The dialog's intro does not repeat what each tab's own line says.
-  const intro = source.slice(source.indexOf("{step === 'choose' && !upgrade && ("), source.indexOf('setting?.canChange'))
+  const introStart = source.indexOf("{step === 'choose' && !upgrade && (\n")
+  const intro = source.slice(introStart, source.indexOf('{connected && (', introStart))
+  assert.ok(intro.includes('Agents work on this slate with you'), 'the intro is the slice under test')
   assert.doesNotMatch(intro, /Pick an agent Slatebox lists|paste the address of any MCP server/i)
 })
 

@@ -256,3 +256,25 @@ test('integrations.allowChanges is a person-only registry action; integrations.c
   assert.ok(actions.find((a) => a.id === 'integrations.connect').input.properties.replaces)
   assert.equal(cardFor('https://mcp.linear.app/mcp/readonly').id, 'linear')
 })
+
+test('who can add agents sits in the invite dialog\'s header corner, labeled, only for whoever may change it; headings are sentence case', () => {
+  // owner, 2026-11-27: "this could move up to the corner huh? permission here i mean"
+  const walk = readFileSync(new URL('../enterprise/client/InviteWalkthrough.jsx', import.meta.url), 'utf8')
+  const header = walk.slice(walk.indexOf('id="invite-agent-title"'), walk.indexOf('<DialogContent'))
+  const body = walk.slice(walk.indexOf('<DialogContent'))
+  assert.ok(header.includes('data-invite-outside-agents=""'), 'the control is in the header')
+  assert.ok(!body.includes('data-invite-outside-agents'), 'the old full-width card is gone')
+  assert.equal((walk.match(/integrations\.setSlateSetting/g) || []).length, 1, 'one place changes it')
+  // the same rule: shown only while choosing, and only to someone the server says may change it
+  assert.match(header, /\{step === 'choose' && !upgrade && setting\?\.canChange && \(/)
+  // a visible label that is also the select's accessible name
+  assert.match(header, /id="invite-outside-agents-label"[^\n]*\}>Who can add agents<\/Typography>/)
+  assert.match(header, /SelectProps=\{\{ labelId: 'invite-outside-agents-label' \}\}/)
+  for (const option of ['"editors">Anyone who can edit', '"owner">Only me', '"off">No one']) assert.ok(header.includes(option), option)
+  // it wraps under the title on a narrow dialog instead of squeezing it
+  assert.match(walk.slice(walk.indexOf('<DialogTitle') - 400, walk.indexOf('<DialogTitle')), /flexWrap: 'wrap'/)
+  // copy rule: section headings say what they say (sentence case), never forced to capitals
+  const heading = walk.match(/const heading = \(theme\) => \(\{[^}]*\}/)[0]
+  assert.doesNotMatch(heading, /uppercase/)
+  assert.match(walk, /sx=\{heading\}>Your integrations</)
+})
