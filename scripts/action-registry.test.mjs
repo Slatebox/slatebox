@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { beforeEach, test } from "node:test";
 import { createRequire } from "node:module";
 import { createSlateSaveCore } from "../web/app/server/slate-save-core.mjs";
-import { API_TOKEN_SCOPES, createApiTokenService } from "../web/app/server/api-token-core.mjs";
+import { API_TOKEN_SCOPES, ENTERPRISE_ONLY_SCOPES, createApiTokenService } from "../web/app/server/api-token-core.mjs";
 import { actions, createAppRegistry } from "../web/app/server/actions/index.mjs";
 import { createRegistry, defineAction } from "../web/app/server/actions/registry.mjs";
 import { buildOpenApi } from "../web/app/server/actions/openapi.mjs";
@@ -653,7 +653,8 @@ test("the registry meters people too on actions that reach outside addresses", a
 test("the scopes a token may need are derived from the actions: every scope any agent-callable action checks, in the token vocabulary's order", () => {
   const registry = world.build();
   // ai:admin is checked by ai.update and ai.check for level team or server, so they declare it.
-  assert.deepEqual(registry.neededScopes(), API_TOKEN_SCOPES);
+  // recipes:* are checked by the enterprise actions only (scripts/recipe-actions.test.mjs checks those).
+  assert.deepEqual(registry.neededScopes(), API_TOKEN_SCOPES.filter((scope) => !ENTERPRISE_ONLY_SCOPES.includes(scope)));
   assert.ok(registry.neededScopes().includes("slates:delete"), "deleting is its own permission");
   assert.deepEqual(["slates.delete", "comments.remove"].map((id) => registry.get(id).scope), ["slates:delete", "slates:delete"]);
   for (const id of ["agentTasks.list", "agentTasks.create", "agentTasks.update", "comments.list", "comments.add", "comments.resolve", "comments.remove"]) {

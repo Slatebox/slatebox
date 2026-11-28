@@ -91,7 +91,8 @@ function sources(dir, out = []) {
 }
 
 test('every action in the catalogue is recorded somewhere', () => {
-  const text = sources(new URL('server/', app).pathname).join('\n')
+  // the app's server, and the enterprise code that records through api.audit (recipes)
+  const text = [...sources(new URL('server/', app).pathname), ...sources(new URL('../enterprise/server/', import.meta.url).pathname)].join('\n')
   // named outside the catalogue (server/audit/events.mjs), where an entry is made
   const unused = Object.keys(AUDIT_ACTIONS).filter((id) => !text.includes(`'${id}'`))
   assert.deepEqual(unused, [])

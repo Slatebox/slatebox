@@ -134,6 +134,21 @@ export function createAgentPresence({
     // wear the name (sanitizeClientName refuses "Slatebox"), and it keeps one colour on every slate.
     if (principal.builtin === 'slatebox')
       return { agentKey: agentKeyFor(await keyOf(), principal.tokenId, slate._id), label: SLATEBOX_AGENT_LABEL, initial: 'S', colorIndex: 0, origin: 'slatebox', via: null, invitedBy: null, iconUrl: null }
+    // A recipe (enterprise/server/recipes/principal.mjs): named by the server from the recipe's own
+    // manifest, on behalf of the person it runs for: "GitHub architect · runs for Ana". Its token id
+    // is recipe:<instanceId>, so it is one agent on the slate across its runs.
+    if (principal.builtin === 'recipe' && principal.agent?.name) {
+      const owner = await findUser(principal.agent.onBehalfOf || principal.userId).catch(() => null)
+      const recipeName = String(principal.agent.name).replace(/\s+/g, ' ').trim().slice(0, PRESENCE_LIMITS.clientChars)
+      const first = firstNameOf(owner)
+      const label = first ? `${recipeName} · runs for ${first}` : recipeName
+      return {
+        agentKey: agentKeyFor(await keyOf(), principal.tokenId, slate._id),
+        label, initial: recipeName.charAt(0).toUpperCase() || 'R',
+        colorIndex: Number.isInteger(principal.agent.colorIndex) ? principal.agent.colorIndex % PALETTE_SIZE : 0,
+        origin: 'recipe', via: null, invitedBy: first || null, iconUrl: null,
+      }
+    }
     const [user, token] = await Promise.all([
       findUser(principal.userId).catch(() => null),
       principal.tokenId && !String(principal.tokenId).startsWith('session:') ? findToken(principal.tokenId).catch(() => null) : null,

@@ -388,7 +388,9 @@ export default defineAction({
 // A canvas plan. An agent's save is a suggestion (ghosts everyone on the slate sees, for a person
 // to keep), unless a person let that agent edit directly; then it saves, filed as one undoable
 // action. The Slatebox agent works on tasks a person assigned and approved, and saves; a person's
-// own edits and every preview are unchanged.
+// own edits and every preview are unchanged. A recipe's run (principal.builtin 'recipe', built by
+// the recipes runtime) saves directly only when it says so (principal.direct): on a slate the recipe
+// made, once its owner chose "Apply future updates automatically"; otherwise it suggests too.
 export async function canvasEdit(principal, input, ctx) {
   const { deps, mode, resource: slate } = ctx
   const store = deps.suggestions
@@ -396,7 +398,7 @@ export async function canvasEdit(principal, input, ctx) {
   if (!store || principal.kind !== 'agent' || principal.builtin === 'slatebox' || principal.firstParty === 'viewer' || mode !== 'save' || !deps.presence?.identify)
     return applyToCanvas(principal, input, ctx)
   const who = await deps.presence.identify(principal, slate)
-  const direct = (await store.modeOf(slate._id, who.agentId, Boolean(deps.agentOptions?.editDirectly?.()))) === 'direct'
+  const direct = (principal.builtin === 'recipe' && principal.direct === true) || (await store.modeOf(slate._id, who.agentId, Boolean(deps.agentOptions?.editDirectly?.()))) === 'direct'
   if (!direct) return suggestToCanvas(principal, input, ctx, who)
   const result = await applyToCanvas(principal, input, {
     ...ctx,
