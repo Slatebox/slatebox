@@ -349,7 +349,8 @@ test('inbound webhooks: signature, schema, replay, rate limit, then a run with t
   assert.equal(queued.trigger.reason, 'CI build 42')
   assert.equal((await w.inbound.handle({ hookId: 'rh_nosuchhook', rawBody: '{}', headers: {} })).status, 404)
   for (let k = 0; k < 40; k += 1) {
-    const r = await send({ data: { nodes: [] } }, { delivery: `x${k}` })
+    // each a new call: its own body (a resent body is a replay, whatever its delivery header says)
+    const r = await send({ id: `x${k}`, data: { nodes: [] } }, { delivery: `x${k}` })
     if (r.status === 429) {
       assert.ok(k >= 28)
       assert.equal(r.headers['Retry-After'], '600')

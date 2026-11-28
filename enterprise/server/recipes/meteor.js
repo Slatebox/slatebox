@@ -311,7 +311,29 @@ export function startRecipes({ via = null, isUnlocked = () => true, projects, re
   Meteor.publish('recipes.forProject', async function forProject(projectId) {
     if (typeof projectId !== 'string' || !this.userId || !isUnlocked()) return this.ready()
     if (!(await projects.roleFor(this.userId, projectId))) return this.ready()
-    return collections.recipeInstances.find({ projectId }, { fields: { recipeId: 1, projectId: 1, name: 1, state: 1, pausedReason: 1, applyMode: 1, firstRunKept: 1, nextDueAt: 1, lastRun: 1, colorIndex: 1, ownerId: 1, slateMap: 1, created: 1, triggers: 1 } })
+    // Each card says who its recipe runs for ("GitHub architect · runs for Ana"): the owner's first
+    // name rides along as ownerName, read once per owner (a take-over changes ownerId and is read then).
+    const cursor = collections.recipeInstances.find({ projectId }, { fields: { recipeId: 1, projectId: 1, name: 1, state: 1, pausedReason: 1, applyMode: 1, firstRunKept: 1, nextDueAt: 1, lastRun: 1, colorIndex: 1, ownerId: 1, slateMap: 1, created: 1, triggers: 1 } })
+    const names = new Map()
+    for (const { ownerId } of await collections.recipeInstances.find({ projectId }, { fields: { ownerId: 1 } }).fetchAsync()) {
+      if (ownerId && !names.has(ownerId)) names.set(ownerId, await firstName(ownerId).catch(() => null))
+    }
+    const named = (id, fields) => {
+      if (!fields.ownerId) return fields
+      if (names.has(fields.ownerId)) return { ...fields, ownerName: names.get(fields.ownerId) }
+      firstName(fields.ownerId).catch(() => null).then((name) => {
+        names.set(fields.ownerId, name)
+        try { this.changed('recipeInstances', id, { ownerName: name }) } catch { /* gone or stopped */ }
+      })
+      return { ...fields, ownerName: null }
+    }
+    const handle = await cursor.observeChangesAsync({
+      added: (id, fields) => this.added('recipeInstances', id, named(id, fields)),
+      changed: (id, fields) => this.changed('recipeInstances', id, named(id, fields)),
+      removed: (id) => this.removed('recipeInstances', id),
+    })
+    this.onStop(() => handle.stop())
+    this.ready()
   })
   Meteor.publish('recipes.runsFor', async function runsFor(instanceId, limit = 20) {
     if (typeof instanceId !== 'string' || !this.userId || !isUnlocked()) return this.ready()

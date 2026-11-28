@@ -25,6 +25,19 @@ export const STATE_WORDS = Object.freeze({
 })
 
 export const stateChip = (state) => STATE_WORDS[state] || { label: 'Unknown', color: 'default', help: '' }
+
+/** Why a recipe stopped, said on its card (the runtime pauses with a reason; a person's pause has none to tell). */
+export const PAUSED_WORDS = Object.freeze({
+  failures: { label: 'Stopped after errors', color: 'error', help: 'It failed 3 times in a row and paused itself. Runs says why; Resume tries again.' },
+  sign_in: { label: 'Needs sign-in', color: 'warning', help: 'Sign in to its integration again, then resume it.' },
+  access: { label: 'Lost access', color: 'warning', help: 'Its owner no longer has access to this project. A manager can take it over.' },
+  grant_revoked: { label: 'Paused', color: 'warning', help: 'A permission it used was taken back. Resume runs it without that change.' },
+  permissions_changed: { label: 'Paused', color: 'warning', help: 'Its integration’s permissions changed. Check them, then resume it.' },
+  uninstalled: { label: 'Paused', color: 'warning', help: 'The Slatebox app was removed from its integration. Add it again, then resume it.' },
+  unknown_recipe: { label: 'Paused', color: 'warning', help: 'This server no longer carries this recipe.' },
+})
+/** The chip for an instance: its state, or why it was paused. */
+export const instanceChip = (instance) => (instance?.state === 'paused' && PAUSED_WORDS[instance.pausedReason]) || stateChip(instance?.state)
 /** States a person can resume from (Resume runs it again; sign-in and access need fixing first). */
 export const canResume = (state) => ['paused', 'failed', 'blocked_limit'].includes(state)
 export const canPause = (state) => state === 'active'
@@ -78,9 +91,10 @@ export function lastRunLine(lastRun, now = Date.now()) {
   if (!lastRun?.at) return 'No runs yet'
   const when = ago(lastRun.at, now)
   const changed = Number(lastRun.ops ?? lastRun.changed ?? 0)
-  if (lastRun.outcome === 'failed') return `${when} · failed`
+  if (lastRun.outcome === 'failed') return `${when} · failed (Runs says why)`
   if (lastRun.outcome === 'skipped') return `${when} · skipped`
-  return `${when} · ${changed ? `${plural(changed, 'note')} changed` : 'nothing changed'}`
+  const line = `${when} · ${changed ? `${plural(changed, 'note')} changed` : 'nothing changed'}`
+  return lastRun.outcome === 'partial' ? `${line} · done in part` : line
 }
 
 export const EVENT_TRIGGER_WORDS = Object.freeze({
@@ -160,7 +174,7 @@ export function triggerWords(trigger) {
 /** "Next run in 5 min", "Runs on every push", or why it will not run. */
 export function nextRunLine(instance, now = Date.now()) {
   if (!instance) return ''
-  if (instance.state !== 'active') return stateChip(instance.state).help
+  if (instance.state !== 'active') return instanceChip(instance).help
   if (instance.nextDueAt) return `Next run ${until(instance.nextDueAt, now)}`
   const vendor = (instance.triggers || []).find((t) => t.kind === 'vendor')
   if (vendor) return `Runs ${triggerWords(vendor).replace(/^On /, 'on ')}`

@@ -78,7 +78,11 @@ test('an instance card’s last and next run lines', () => {
   assert.equal(lastRunLine({ at: NOW - 2 * 60e3, outcome: 'done', ops: 3 }, NOW), '2 min ago · 3 notes changed')
   assert.equal(lastRunLine({ at: NOW - 2 * 60e3, outcome: 'done', ops: 1 }, NOW), '2 min ago · 1 note changed')
   assert.equal(lastRunLine({ at: NOW - 2 * 60e3, outcome: 'done', ops: 0 }, NOW), '2 min ago · nothing changed')
-  assert.equal(lastRunLine({ at: NOW - 60 * 60e3, outcome: 'failed' }, NOW), '1 h ago · failed')
+  assert.equal(lastRunLine({ at: NOW - 60 * 60e3, outcome: 'failed' }, NOW), '1 h ago · failed (Runs says why)')
+  assert.equal(lastRunLine({ at: NOW - 2 * 60e3, outcome: 'partial', ops: 2 }, NOW), '2 min ago · 2 notes changed · done in part')
+  // A recipe the runtime paused says why, and how to fix it.
+  assert.equal(nextRunLine({ state: 'paused', pausedReason: 'failures' }, NOW), 'It failed 3 times in a row and paused itself. Runs says why; Resume tries again.')
+  assert.equal(nextRunLine({ state: 'paused', pausedReason: null }, NOW), 'Paused. Nothing runs until it is resumed.')
   assert.equal(nextRunLine({ state: 'active', nextDueAt: NOW + 5 * 60e3 }, NOW), 'Next run in 5 min')
   assert.equal(nextRunLine({ state: 'active', triggers: [{ kind: 'vendor', event: 'github.push' }] }, NOW), 'Runs on every push')
   assert.equal(nextRunLine({ state: 'active', triggers: [{ kind: 'manual' }] }, NOW), 'Runs when someone clicks Run now')

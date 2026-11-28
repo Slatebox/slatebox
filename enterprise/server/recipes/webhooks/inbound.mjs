@@ -11,7 +11,8 @@
 //   202 { runId }: the run is queued with trigger { kind: 'inbound', input: data }
 // Framework-free: routes.mjs passes the raw body and headers in and writes the answer out.
 import { validate } from '/server/actions/schema.mjs'
-import { DELIVERY_HEADER, SIGNATURE_HEADER, liveSecrets, verifySignature } from './sign.mjs'
+import { createHash } from 'node:crypto'
+import { DELIVERY_HEADER, SIGNATURE_HEADER, liveSecrets, parseSignature, verifySignature } from './sign.mjs'
 import { isDuplicate } from '../store.mjs'
 
 export const INBOUND_LIMITS = Object.freeze({ bodyBytes: 256 * 1024, perHour: 30, replayMs: 3600 * 1000, reasonChars: 200 })
@@ -56,32 +57,38 @@ export function createInbound({ store, clock = Date.now, sealer, manifestOf, enq
     if (!manifest?.inputSchema) return answer(400, { error: { code: 'bad_payload', message: 'This recipe takes no data.', details: { pointer: '/data' } } })
     const invalid = validate(manifest.inputSchema, parsed.data)
     if (invalid) return answer(400, { error: { code: 'bad_payload', message: invalid.message, details: { pointer: '/data' + pointerOf(invalid.path) } } })
-    // Replays: the same delivery within an hour answers the first run, and runs nothing.
+    // Replays: the same delivery within an hour answers the first run, and runs nothing. The
+    // Slatebox-Delivery header is not signed, so a captured request sent again with a new one is
+    // caught by its signature instead (its time and body, which the signature covers).
     const deliveryId = String(header(headers, DELIVERY_HEADER) || parsed.id || '').slice(0, 128)
-    const replayKey = deliveryId ? `replay:${hook._id}:${deliveryId}` : null
-    if (replayKey) {
-      const seen = await inbox.findOne({ _id: replayKey })
+    const signedAt = parseSignature(header(headers, SIGNATURE_HEADER))?.t
+    const keys = [
+      `replay:${hook._id}:sig:${signedAt}:${createHash('sha256').update(body).digest('hex')}`,
+      ...(deliveryId ? [`replay:${hook._id}:${deliveryId}`] : []),
+    ]
+    for (const key of keys) {
+      const seen = await inbox.findOne({ _id: key })
       if (seen && now - new Date(seen.at).getTime() < limits.replayMs) return answer(200, { runId: seen.runId, duplicate: true })
     }
     if (instance.state !== 'active') return answer(409, { error: { code: 'recipe_not_on', message: 'This recipe is not on. Turn it on, then send again.' } })
     const lastHour = await runs.countDocuments({ instanceId: instance._id, 'trigger.kind': 'inbound', created: { $gt: new Date(now - 3600000) } })
     if (lastHour >= limits.perHour) return answer(429, { error: { code: 'rate_limited', message: `At most ${limits.perHour} calls an hour for one recipe.` } }, { 'Retry-After': '600' })
-    if (replayKey) {
+    for (const key of keys) {
       try {
-        await inbox.insertOne({ _id: replayKey, at: new Date(now), runId: null })
+        await inbox.insertOne({ _id: key, at: new Date(now), runId: null })
       } catch (error) {
         if (!isDuplicate(error)) throw error
         // an older key past its hour: take it over
-        const taken = await inbox.updateOne({ _id: replayKey, at: { $lt: new Date(now - limits.replayMs) } }, { $set: { at: new Date(now), runId: null } })
+        const taken = await inbox.updateOne({ _id: key, at: { $lt: new Date(now - limits.replayMs) } }, { $set: { at: new Date(now), runId: null } })
         if (!taken.modifiedCount) {
-          const first = await inbox.findOne({ _id: replayKey })
+          const first = await inbox.findOne({ _id: key })
           return answer(200, { runId: first?.runId ?? null, duplicate: true })
         }
       }
     }
     const reason = typeof parsed.reason === 'string' ? parsed.reason.replace(/\s+/g, ' ').slice(0, limits.reasonChars) : null
     const run = await enqueue(instance, { kind: 'inbound', hookId: hook._id, deliveryId: deliveryId || null, ...(reason && { reason }), input: parsed.data })
-    if (replayKey) await inbox.updateOne({ _id: replayKey }, { $set: { runId: run._id } })
+    for (const key of keys) await inbox.updateOne({ _id: key }, { $set: { runId: run._id } })
     await hooks.updateOne({ _id: hook._id }, { $set: { lastDelivery: { at: new Date(now), status: 'received', code: 202 } } })
     return answer(202, { runId: run._id })
   }

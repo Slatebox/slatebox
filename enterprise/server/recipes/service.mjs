@@ -442,6 +442,21 @@ export function createRecipeService(deps) {
 
     async decideWrite(principal, cardId, decision) {
       if (principal.kind !== 'person') refuse(403, 'session_required', 'Only you, signed in to Slatebox, can approve a change outside it.')
+      if (decision === 'approve') {
+        // An approval makes the change now, so it obeys what a run obeys: every switch, the
+        // recipe still on (or paused by a person), and its owner still an editor of the project.
+        const card = typeof cardId === 'string' ? await cards.findOne({ _id: cardId }) : null
+        const instance = card ? await instances.findOne({ _id: card.instanceId }) : null
+        if (instance && instance.ownerId === principal.userId) {
+          await requireOn(instance.orgId)
+          if ((await switches.ownerPaused(instance.ownerId)) || (await projects.isRecipesPaused(instance.projectId)))
+            refuse(409, 'recipes_paused', 'Recipes are paused here. Resume them to approve this change.')
+          if (['blocked_access', 'needs_sign_in'].includes(instance.state))
+            refuse(409, 'recipe_stopped', 'This recipe is stopped. Fix what stopped it, then approve the change.')
+          if (rank(await roleIn(principal, instance.projectId)) < rank('editor'))
+            refuse(403, 'forbidden', 'You no longer edit this project, so its recipe cannot change things outside Slatebox for you.')
+        }
+      }
       return permissions.decide(principal.userId, cardId, decision)
     },
 

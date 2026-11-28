@@ -38,6 +38,16 @@ export class SignInNeeded extends Error {
     this.vendor = vendor
   }
 }
+// A switch turned or access lost while the run was under way: it stops before it saves or changes
+// anything outside Slatebox (stillAllowed, between the steps that do).
+export class RunStopped extends Error {
+  constructor(reason) {
+    super('Recipes were paused or turned off while this run was under way.')
+    this.name = 'RunStopped'
+    this.code = reason
+    this.reason = reason
+  }
+}
 export class AccessLost extends Error {
   constructor(code = 'access_lost') {
     super('The person this recipe runs for no longer has access to its project.')
@@ -68,6 +78,9 @@ export function createRunner(deps) {
   /** Stops an instance until a person acts (and says why, to its owner and to hooks). */
   async function stopInstance(instance, state, reason, run = null) {
     await setInstance(instance._id, { state, pausedReason: reason, pausedBy: null, nextDueAt: null, debounceUntil: null, pendingTrigger: null })
+    // A run of it under way stops too: its signal aborts at the next heartbeat (the run itself, when
+    // it is the one stopping the instance, ends on its own).
+    await store.runs.updateMany({ instanceId: instance._id, state: 'running', ...(run?._id && { _id: { $ne: run._id } }) }, { $set: { cancelRequested: true, cancelledBy: null } })
     await emitSafe({ type: 'recipe.paused', instance, run, data: { reason, by: null } })
     await audit({ action: 'recipe.paused', instance, details: { instanceId: instance._id, reason } })
     await notify(instance.ownerId, { code: `recipe_${reason}`, instanceId: instance._id, projectId: instance.projectId, text: `${instance.name} stopped: ${reasonText(reason)}` }).catch(() => {})
@@ -87,6 +100,21 @@ export function createRunner(deps) {
     const role = await projects.roleFor(instance.ownerId, instance.projectId)
     if (!EDITOR_ROLES.includes(role)) throw new AccessLost()
     if (instance.orgId && !(await switches.isMember(instance.ownerId, instance.orgId))) throw new AccessLost('left_team')
+  }
+
+  // Between the steps that change things (each slate, each write outside Slatebox): the switches
+  // and the owner's access, read again, so a kill switch or a lost role stops a run already going.
+  async function stillAllowed(instance, run) {
+    if (run.mode === 'preview') return
+    const fresh = (await store.instances.findOne({ _id: instance._id })) || { ...instance, state: 'deleted' }
+    const skip = await switchesSay(fresh, run)
+    if (skip) throw new RunStopped(skip)
+    try {
+      await checkAccess(fresh)
+    } catch (error) {
+      if (error instanceof AccessLost) throw new RunStopped('blocked_access')
+      throw error
+    }
   }
 
   async function openVendors(instance, manifest, signal, budget) {
@@ -290,6 +318,11 @@ export function createRunner(deps) {
       const err = aborted ? { name: 'Error', status: null, code: reasonCode } : error
       if (error instanceof SignInNeeded && run.mode !== 'preview') await stopInstance(instance, 'needs_sign_in', 'sign_in', run)
       if (error?.name === 'GrantRevoked' && run.mode !== 'preview') await stopInstance(instance, 'paused', 'grant_revoked', run)
+      if (error instanceof RunStopped) {
+        if (error.reason === 'blocked_access') await stopInstance(instance, 'blocked_access', 'access', run)
+        const done = await finish({ state: 'skipped', skippedReason: error.reason, log: [...log, logLine(clock(), 'warn', error.reason, error.message)] })
+        return { state: done.state }
+      }
       if (error instanceof InterceptFailed) {
         const done = await finish({ state: 'skipped', skippedReason: 'hook_failed', log: [...log, logLine(clock(), 'warn', 'hook_failed', error.message)] })
         return { state: done.state }
@@ -403,6 +436,7 @@ export function createRunner(deps) {
     const sourceLine = String(answer.source || answer.summary || manifest.label).slice(0, 80)
     for (const entryDesired of desired.slates) {
       if (signal.aborted) throw signal.reason
+      await stillAllowed(instance, run)
       const roleKey = roleKeyOf(entryDesired)
       const done = await applySlate({ instance, manifest, run, principal, desired: entryDesired, gone: desired.gone?.[roleKey] || null, sourceLine, log: say, budget, revisionBySlate })
       if (!done) {
@@ -427,6 +461,8 @@ export function createRunner(deps) {
     // Outside Slatebox.
     const writes = []
     for (const write of (answer.writes || []).slice(0, 20)) {
+      if (signal.aborted) throw signal.reason
+      await stillAllowed(instance, run)
       const intercept = intercepts
         ? (w) => intercepts.call('writeback.proposed', { instance, run, data: { kind: w.kind, target: w.target, decision: w.decision }, signal })
         : null

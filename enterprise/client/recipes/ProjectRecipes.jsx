@@ -43,7 +43,7 @@ import RecipePermissions from './RecipePermissions'
 import ConfigForm from './ConfigForm'
 import { RecipesOffSwitch } from './RecipesAdmin'
 import {
-  INTEGRATION_WORDS, canPause, canResume, formatTokens, groupCatalog, lastRunLine, nextRunLine, outputsLine, recipeErrorWords, runsFor, stateChip, validateConfig,
+  INTEGRATION_WORDS, canPause, canResume, instanceChip, formatTokens, groupCatalog, lastRunLine, nextRunLine, outputsLine, recipeErrorWords, runsFor, validateConfig,
 } from './recipesModel.mjs'
 
 const atLeast = (role, wanted) => (ROLE_RANK[role] ?? 0) >= ROLE_RANK[wanted]
@@ -126,7 +126,7 @@ function InstanceCard({ instance, manifest, role, onSetUp, onOpen }) {
   const [menu, setMenu] = useState(null)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
-  const chip = stateChip(instance.state)
+  const chip = instanceChip(instance)
   async function act(fn, done = '') {
     setBusy(true); setNote('')
     try { await fn(); if (done) setNote(done) } catch (e) { setNote(recipeErrorWords(e)) } finally { setBusy(false) }
