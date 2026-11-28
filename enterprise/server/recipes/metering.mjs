@@ -35,7 +35,9 @@ export function createRecipeAI({ instance, recipeId, budget, complete, signal = 
     if (refused) return null
     if (typeof purpose !== 'string' || !AI_CALL_LIMITS.purpose.test(purpose)) throw new Error('ctx.ai.json needs a purpose (lowercase words)')
     if (!schema || typeof schema !== 'object') throw new Error('ctx.ai.json needs the answer\'s schema')
-    const input = String(prompt || '')
+    // A prompt is text or plain data (names, lists): data goes to the model as JSON, never as
+    // "[object Object]".
+    const input = typeof prompt === 'string' ? prompt : prompt == null ? '' : JSON.stringify(prompt)
     const cappedIn = Math.min(maxIn, AI_CALL_LIMITS.maxIn)
     const text = estimateTokens(input) > cappedIn ? input.slice(0, cappedIn * 4) : input
     const outCap = Math.min(maxOut, AI_CALL_LIMITS.maxOut)

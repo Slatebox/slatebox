@@ -59,7 +59,7 @@ async function nameModules(ctx, model, labels, changedModules) {
       schema: LABEL_SCHEMA,
       maxIn: 1500,
       maxOut: 80,
-      prompt: { module: mod.name, path: mod.path, repo: model.repo, files, owner: mod.owner },
+      prompt: { task: 'Name this code module in 2 to 4 words and say its purpose in one short sentence, from its file names only.', module: mod.name, path: mod.path, repo: model.repo, files, owner: mod.owner },
     })
     if (!result) {
       refused = true
