@@ -126,9 +126,13 @@ export function createGithubClient({ fetch = globalThis.fetch, apiBase = GITHUB_
     },
     repo: async (repo) => call('GET', `/repos/${seg(checkRepo(repo))}`),
     branch: async (repo, name) => call('GET', `/repos/${seg(checkRepo(repo))}/branches/${seg(name)}`, { allow404: true }),
-    /** compare base...head: files (up to 300) and commit messages. */
-    async compare(repo, base, head) {
-      const data = await call('GET', `/repos/${seg(checkRepo(repo))}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`, { query: { per_page: 100 } })
+    /**
+     * compare base...head: files (up to 300) and commit messages. GitHub pages a compare's commits
+     * oldest first, so the first page of 100 drops the newest of a bigger range; newest: true asks with
+     * no paging at all, which GitHub answers with up to 250 commits ending at the newest (one call).
+     */
+    async compare(repo, base, head, { newest = false } = {}) {
+      const data = await call('GET', `/repos/${seg(checkRepo(repo))}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`, newest ? {} : { query: { per_page: 100 } })
       return {
         status: data.status,
         truncated: (data.files || []).length >= GITHUB_LIMITS.compareFiles,

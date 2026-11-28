@@ -9,7 +9,8 @@
 //
 // Built-in recipes and vendors: each adds one line to RECIPE_MODULES or VENDOR_FACTORIES (and its
 // manifest to enterprise/common/recipes/catalog.mjs).
-//   recipe module   { manifest: defineRecipe({...}), run: async (ctx) => ({ desired, writes?, summary }) }
+//   recipe module   { manifest: defineRecipe({...}), run: async (ctx) => ({ desired, writes?, retire?, summary }) }
+//                   (retire: write keys whose waiting approval cards are no longer current)
 //   vendor factory  (deps) => { name, session(instance, { signal, budget }), routes(), matchInstances(event),
 //                               perform(write, { instance, grant, signal }), checkHardLimits(write) }
 /* eslint-disable no-console */

@@ -24,7 +24,25 @@ export const STATE_COLORS = Object.freeze({
 
 const DAY = 86400000
 export const dayNumber = (iso) => Math.floor(Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) / DAY)
-export const todayIso = (now) => new Date(now).toISOString().slice(0, 10)
+/**
+ * The calendar day (ISO) a moment falls on in a team's time zone (Linear's team.timezone, an IANA
+ * name); UTC when there is none or it is not one this server knows. A Tokyo cycle starting Monday
+ * 00:00 JST is Monday, not Sunday 15:00 UTC.
+ */
+export function dayIn(moment, timeZone = null) {
+  const date = new Date(moment)
+  if (Number.isNaN(date.getTime())) return null
+  if (timeZone) {
+    try {
+      const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date).map((x) => [x.type, x.value]))
+      return `${parts.year}-${parts.month}-${parts.day}`
+    } catch {
+      // an unknown zone: UTC
+    }
+  }
+  return date.toISOString().slice(0, 10)
+}
+export const todayIso = (now, timeZone = null) => dayIn(now, timeZone)
 /** Calendar days from a to b (ISO days). */
 export const daysBetween = (a, b) => dayNumber(b) - dayNumber(a)
 /** "Dec 19" (and the year when it is not this one). */
@@ -119,16 +137,20 @@ export function roadmapWorkGraph({ org, projects, blockers = [] }) {
   return { containers, items, deps, updates }
 }
 
-/** Linear's workflow state types as a cycle board's four lanes (≤ 5 a board). */
+/**
+ * Linear's workflow state types as a cycle board's four lanes (≤ 5 a board). A lane's types are in
+ * write-back order: a card moved to To do goes to the team's first unstarted status (Todo), never to
+ * Triage or Backlog, which would take the issue out of the planned work of the cycle.
+ */
 export const CYCLE_LANES = Object.freeze([
-  { key: 'todo', label: 'To do', types: ['triage', 'backlog', 'unstarted'] },
+  { key: 'todo', label: 'To do', types: ['unstarted', 'backlog', 'triage'] },
   { key: 'started', label: 'In progress', types: ['started'] },
   { key: 'completed', label: 'Done', types: ['completed'] },
   { key: 'canceled', label: 'Canceled', types: ['canceled'] },
 ])
 export const cycleLaneOf = (stateType) => (CYCLE_LANES.find((l) => l.types.includes(stateType)) || CYCLE_LANES[0]).key
 
-/** The first workflow state of a lane, for write-back (lowest position among the lane's types). */
+/** The first workflow state of a lane, for write-back (the lane's first type there, then lowest position). */
 export function firstStateOf(states, laneKey) {
   const lane = CYCLE_LANES.find((l) => l.key === laneKey)
   if (!lane) return null

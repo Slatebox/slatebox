@@ -40,6 +40,8 @@ const idOk = (id) => {
 }
 const clip = (value, n = LINEAR_RECIPE_LIMITS.textChars) => String(value ?? '').replace(/[\u0000-\u001f]+/g, ' ').slice(0, n) // eslint-disable-line no-control-regex
 const day = (value) => (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null)
+// a team's IANA time zone ("Asia/Tokyo"), or null
+const zone = (value) => (typeof value === 'string' && /^[A-Za-z_]+(?:\/[A-Za-z0-9_+-]+){0,2}$/.test(value) && value.length <= 64 ? value : null)
 const https = (value) => (typeof value === 'string' && /^https:\/\/linear\.app\//.test(value) ? value.slice(0, 300) : null)
 
 // ---------- the fixed queries ----------
@@ -47,20 +49,22 @@ const https = (value) => (typeof value === 'string' && /^https:\/\/linear\.app\/
 const PROJECT_FIELDS = `id name url state startDate targetDate health progress updatedAt completedAt canceledAt
   status { type name }
   lead { name }
-  teams(first: 10) { nodes { id key name } }
+  teams(first: 10) { nodes { id key name timezone } }
   projectMilestones(first: 25) { nodes { id name targetDate } }
   projectUpdates(first: 1) { nodes { health body createdAt url } }`
 
 export const QUERIES = Object.freeze({
-  teams: 'query Teams { teams(first: 100) { nodes { id key name } } }',
+  teams: 'query Teams { teams(first: 100) { nodes { id key name timezone } } }',
+  // Open projects only: completed and canceled ones are never drawn, so they never count toward the
+  // page cap (a workspace with 180 closed projects still draws its first 200 open ones).
   projects: `query Projects($teams: [ID!], $after: String) {
-  projects(first: 50, after: $after, filter: { accessibleTeams: { some: { id: { in: $teams } } } }) {
+  projects(first: 50, after: $after, filter: { accessibleTeams: { some: { id: { in: $teams } } }, status: { type: { nin: ["completed", "canceled"] } } }) {
     nodes { ${PROJECT_FIELDS} }
     pageInfo { hasNextPage endCursor }
   }
 }`,
   projectsWithInitiatives: `query ProjectsWithInitiatives($teams: [ID!], $after: String) {
-  projects(first: 50, after: $after, filter: { accessibleTeams: { some: { id: { in: $teams } } } }) {
+  projects(first: 50, after: $after, filter: { accessibleTeams: { some: { id: { in: $teams } } }, status: { type: { nin: ["completed", "canceled"] } } }) {
     nodes { ${PROJECT_FIELDS} initiatives(first: 5) { nodes { id name } } }
     pageInfo { hasNextPage endCursor }
   }
@@ -75,7 +79,7 @@ export const QUERIES = Object.freeze({
 }`,
   activeCycle: `query ActiveCycle($team: String!, $after: String) {
   team(id: $team) {
-    id key name
+    id key name timezone
     states(first: 50) { nodes { id name type position } }
     activeCycle {
       id number name startsAt endsAt
@@ -91,15 +95,31 @@ export const QUERIES = Object.freeze({
     }
   }
 }`,
+  issuesByIdentifier: `query IssuesByIdentifier($filter: IssueFilter!, $first: Int!) {
+  issues(first: $first, filter: $filter) {
+    nodes { id identifier number title url completedAt state { type name } project { id name url progress } team { key } }
+  }
+}`,
   updateIssueState: 'mutation UpdateIssueState($id: String!, $stateId: String!) { issueUpdate(id: $id, input: { stateId: $stateId }) { success issue { id identifier state { id type } } } }',
   createComment: 'mutation CreateComment($issueId: String!, $body: String!) { commentCreate(input: { issueId: $issueId, body: $body }) { success comment { id url } } }',
 })
 
-/** Issues by their identifiers (ENG-123), one aliased lookup each, at most 50 a query. */
+/**
+ * Issues by their identifiers (ENG-123), at most 50 a query: one issues() list filtered by team key
+ * and number. Not aliased issue(id:) lookups: Linear's issue(id:) is non-null, so one identifier it
+ * does not have (deleted, a typo, a team the person cannot see) nulls the whole answer. A list just
+ * leaves it out. The filter is sent as variables, never spliced into the query.
+ */
 export function issuesQuery(identifiers) {
-  const list = identifiers.filter((i) => IDENTIFIER.test(i)).slice(0, LINEAR_RECIPE_LIMITS.identifiersPerQuery)
-  const fields = 'id identifier title url completedAt state { type name } project { id name url progress } team { key }'
-  return { list, query: `query IssuesByIdentifier {\n${list.map((k, n) => `  i${n}: issue(id: ${JSON.stringify(k)}) { ${fields} }`).join('\n')}\n}` }
+  const list = [...new Set(identifiers.filter((i) => IDENTIFIER.test(i)))].slice(0, LINEAR_RECIPE_LIMITS.identifiersPerQuery)
+  const byTeam = new Map()
+  for (const k of list) {
+    const [team, number] = k.split('-')
+    if (!byTeam.has(team)) byTeam.set(team, [])
+    byTeam.get(team).push(Number(number))
+  }
+  const filter = { or: [...byTeam].map(([key, numbers]) => ({ team: { key: { eq: key } }, number: { in: numbers } })) }
+  return { list, query: QUERIES.issuesByIdentifier, variables: { filter, first: LINEAR_RECIPE_LIMITS.identifiersPerQuery } }
 }
 
 // ---------- answers, as plain data ----------
@@ -113,7 +133,7 @@ export function projectOf(p) {
     startDate: day(p.startDate), targetDate: day(p.targetDate), health: ['onTrack', 'atRisk', 'offTrack'].includes(p.health) ? p.health : null,
     progress: Number.isFinite(p.progress) ? Math.round(p.progress * (p.progress <= 1 ? 100 : 1)) : null,
     lead: p.lead?.name ? clip(p.lead.name, 60) : null,
-    teams: nodes(p.teams).map((t) => ({ id: t.id, key: clip(t.key, 10), name: clip(t.name, 60) })),
+    teams: nodes(p.teams).map((t) => ({ id: t.id, key: clip(t.key, 10), name: clip(t.name, 60), timezone: zone(t.timezone) })),
     initiatives: nodes(p.initiatives).map((i) => ({ id: i.id, name: clip(i.name, 80) })),
     milestones: nodes(p.projectMilestones).map((m) => ({ id: m.id, name: clip(m.name, 80), targetDate: day(m.targetDate) })),
     lastUpdate: update ? { health: update.health || null, at: update.createdAt || null, excerpt: clip(update.body, 280), url: https(update.url) } : null,
@@ -178,8 +198,7 @@ export function createLinearRecipeSession({ userId, tokenFor, fetch, endpoint = 
       throw new LinearSignInNeeded()
     }
     if (!response.ok && response.status >= 500) throw new LinearRecipeError('failed', response.status)
-    // Partial answers are kept (an aliased issue lookup where one identifier is not there);
-    // no data at all is the error it says.
+    // Partial answers are kept (data with errors beside it); no data at all is the error it says.
     if (!json.data) {
       if (codes.includes('FORBIDDEN')) throw new LinearRecipeError('forbidden', 403)
       throw new LinearRecipeError(codes.includes('INPUT_ERROR') || response.status === 400 ? 'refused' : 'failed', response.status >= 400 && response.status < 500 ? response.status : 502)
@@ -208,11 +227,11 @@ export function createLinearRecipeSession({ userId, tokenFor, fetch, endpoint = 
     /** The teams the person can see: [{ id, key, name }]. */
     async teams() {
       const { data } = await gql('teams', QUERIES.teams)
-      return nodes(data.teams).map((t) => ({ id: t.id, key: clip(t.key, 10), name: clip(t.name, 60) }))
+      return nodes(data.teams).map((t) => ({ id: t.id, key: clip(t.key, 10), name: clip(t.name, 60), timezone: zone(t.timezone) }))
     },
 
     /**
-     * The projects of these teams, with their latest update, milestones and (initiatives: true, an
+     * The open projects of these teams (not completed or canceled), with their latest update, milestones and (initiatives: true, an
      * admin's app-actor install) their initiatives. initiatives refused by Linear falls back without.
      * → { projects, complete, initiatives }
      */
@@ -256,7 +275,7 @@ export function createLinearRecipeSession({ userId, tokenFor, fetch, endpoint = 
         const { data } = await gql('cycle', QUERIES.activeCycle, { team: teamId, after })
         const t = data.team
         if (!t) throw new LinearRecipeError('not_found', 404)
-        team = team || { id: t.id, key: clip(t.key, 10), name: clip(t.name, 60), states: nodes(t.states).map((s) => ({ id: s.id, name: clip(s.name, 40), type: clip(s.type, 20), position: Number(s.position) || 0 })) }
+        team = team || { id: t.id, key: clip(t.key, 10), name: clip(t.name, 60), timezone: zone(t.timezone), states: nodes(t.states).map((s) => ({ id: s.id, name: clip(s.name, 40), type: clip(s.type, 20), position: Number(s.position) || 0 })) }
         const c = t.activeCycle
         if (!c) return { team, cycle: null, complete: true }
         cycle = cycle || { id: c.id, number: Number(c.number) || 0, name: c.name ? clip(c.name, 80) : null, startsAt: c.startsAt || null, endsAt: c.endsAt || null }
@@ -272,17 +291,18 @@ export function createLinearRecipeSession({ userId, tokenFor, fetch, endpoint = 
       const wanted = [...new Set(identifiers.filter((i) => IDENTIFIER.test(i)))]
       const out = []
       for (let at = 0; at < wanted.length; at += LINEAR_RECIPE_LIMITS.identifiersPerQuery) {
-        const { list, query } = issuesQuery(wanted.slice(at, at + LINEAR_RECIPE_LIMITS.identifiersPerQuery))
-        const { data } = await gql('issues', query)
-        list.forEach((_, n) => {
-          const i = data[`i${n}`]
-          if (!i) return
+        const { list, query, variables } = issuesQuery(wanted.slice(at, at + LINEAR_RECIPE_LIMITS.identifiersPerQuery))
+        const { data } = await gql('issues', query, variables)
+        const asked = new Set(list)
+        for (const i of nodes(data.issues)) {
+          if (!i || !asked.has(i.identifier)) continue
+          asked.delete(i.identifier)
           out.push({
             id: i.id, identifier: clip(i.identifier, 20), title: clip(i.title, 200), url: https(i.url), done: ['completed', 'canceled'].includes(i.state?.type), state: { type: clip(i.state?.type || '', 20), name: clip(i.state?.name || '', 40) },
             project: i.project ? { id: i.project.id, name: clip(i.project.name, 120), url: https(i.project.url), progress: Number.isFinite(i.project.progress) ? Math.round(i.project.progress * (i.project.progress <= 1 ? 100 : 1)) : null } : null,
             team: clip(i.team?.key || '', 10),
           })
-        })
+        }
       }
       return out
     },

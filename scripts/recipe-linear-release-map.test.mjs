@@ -13,7 +13,7 @@ import { createVendor } from '../enterprise/server/recipes/vendors/linear/index.
 import { triggerOf as githubTriggerOf } from '../enterprise/server/recipes/vendors/github/routes.mjs'
 import { createGithubClient } from '../enterprise/server/recipes/vendors/github/client.mjs'
 import { identifiersIn } from '../enterprise/recipes/_linear/workgraph.mjs'
-import { ORG, TEAMS, NOW, RELEASE_ISSUES } from '../enterprise/recipes/_linear/fixtures/acme.mjs'
+import { ORG, P, PROJECTS, TEAMS, NOW, RELEASE_ISSUES } from '../enterprise/recipes/_linear/fixtures/acme.mjs'
 import { fakeLinear } from './fakes/linear-api.mjs'
 import { createRecipeWorld } from './fakes/recipe-world.mjs'
 
@@ -28,14 +28,15 @@ const COMMITS = {
   'v1.3.0...v1.4.0': ['ENG-201 fraud rule engine', 'PAY-11 ledger hook (#38)'],
 }
 
-function setup({ releases = RELEASES } = {}) {
+function setup({ releases = RELEASES, commits = COMMITS } = {}) {
   const issues = structuredClone(RELEASE_ISSUES)
-  const fake = fakeLinear({ issues })
+  const projects = structuredClone(PROJECTS)
+  const fake = fakeLinear({ issues, projects })
   const linear = createVendor({ accountOf: async () => ({ status: 'active', organizationId: ORG }), tokenFor: async () => 'tok', fetch: fake.fetch, deliveries: { claim: async () => true }, later: (fn) => fn() })
   const gh = { calls: [], list: releases }
   const github = {
     releases: async (repo) => { gh.calls.push(['releases', repo]); return structuredClone(gh.list) },
-    compare: async (repo, base, head) => { gh.calls.push(['compare', `${base}...${head}`]); return { commits: (COMMITS[`${base}...${head}`] || []).map((message, n) => ({ sha: String(n).repeat(40), message })) } },
+    compare: async (repo, base, head, options) => { gh.calls.push(['compare', `${base}...${head}`, options]); return { commits: (commits[`${base}...${head}`] || []).map((message, n) => ({ sha: String(n).repeat(40), message })) } },
   }
   const w = createRecipeWorld({ recipes: [XJ1], realVendors: { linear }, vendors: { github }, now: NOW })
   const drive = w.projects.addDrive({ ownerId: 'ana', name: 'Releases' })
@@ -53,7 +54,7 @@ function setup({ releases = RELEASES } = {}) {
     return (await w.drain())[0]
   }
   const slateId = async () => (await w.store.instances.findOne({ _id: id })).slateMap.releases
-  return { w, fake, gh, issues, start, again, slateId, id: () => id }
+  return { w, fake, gh, issues, projects, start, again, slateId, id: () => id }
 }
 
 test('the manifest reads Linear and GitHub, writes nothing, and runs on GitHub\'s release event', () => {
@@ -99,7 +100,8 @@ test('a frame per release with its issues and each project\'s progress; the drif
   assert.ok(texts.includes('ENG-201 Issue ENG-201\nFraud rules'))
   assert.ok(texts.includes('ENG-202 Issue ENG-202\nFraud rules\nnot closed in Linear'))
   assert.ok(texts.includes('WEB-77 Issue WEB-77\nnot closed in Linear'), 'an issue with no project')
-  assert.ok(texts.includes('Fraud rules: 40% done'))
+  assert.ok(texts.includes('Fraud rules: progress at this release not recorded'), 'releases already out when the recipe is added: their progress then is not known')
+  assert.ok(!texts.some((t) => /Fraud rules: \d+%/.test(t)), 'never today\'s progress shown as then')
   const board = [...s.w.slates.boards.entries()].find(([k]) => k.startsWith(`${slateId}:`))[1]
   assert.equal(board.title, 'Shipped but not closed in Linear')
   assert.deepEqual(board.cards.map((c) => c.label).sort(), ['ENG-202 Issue ENG-202 · v1.5.0', 'WEB-77 Issue WEB-77 · v1.5.0'])
@@ -135,4 +137,54 @@ test('a new release adds its frame; the oldest past the limit leaves', async () 
   assert.ok(texts.includes('acme/platform v1.6.0 · Nov 27'))
   assert.ok(texts.includes('No Linear issues named in its commits.'))
   assert.equal(out.result.emitted.filter((e) => e.type === 'release_map.updated').length, 1)
+})
+
+test('progress is recorded for releases published after the recipe was added, and compared release to release', async () => {
+  const commits = { ...COMMITS, 'v1.5.0...v1.6.0': ['ENG-202 rules ui'], 'v1.6.0...v1.7.0': ['ENG-201 rule engine follow-up'] }
+  const s = setup({ commits })
+  await s.start()
+  s.gh.list = [{ tag: 'v1.6.0', name: 'v1.6.0', publishedAt: '2026-11-27T11:00:00Z', url: null, prerelease: false }, ...RELEASES]
+  await s.again()
+  s.projects.find((p) => p.id === P.p5).progress = 0.55
+  s.w.advance(86400000)
+  s.gh.list = [{ tag: 'v1.7.0', name: 'v1.7.0', publishedAt: '2026-11-28T11:00:00Z', url: null, prerelease: false }, ...s.gh.list]
+  const out = await s.again()
+  assert.equal(out.state, 'done')
+  const slateId = await s.slateId()
+  s.w.slates.keepAll(slateId)
+  const texts = s.w.slates.notesOf(slateId).map((n) => n.text)
+  assert.ok(texts.includes('Fraud rules: 40% done'), 'v1.6.0: its progress then, nothing recorded before it')
+  assert.ok(texts.includes('Fraud rules: 40% → 55% done'), 'v1.7.0 against v1.6.0')
+})
+
+test('a commit naming an issue Linear does not have (a typo, deleted) leaves the release recorded with the rest', async () => {
+  const commits = { ...COMMITS, 'v1.4.0...v1.5.0': [...COMMITS['v1.4.0...v1.5.0'], 'ENG-99999 typo in the id'] }
+  const s = setup({ commits })
+  const first = await s.start()
+  assert.equal(first.state, 'done', JSON.stringify(first.run?.log))
+  const slateId = await s.slateId()
+  s.w.slates.keepAll(slateId)
+  const texts = s.w.slates.notesOf(slateId).map((n) => n.text)
+  assert.ok(texts.includes('ENG-202 Issue ENG-202\nFraud rules\nnot closed in Linear'))
+  assert.ok(!texts.some((t) => t.startsWith('ENG-99999')))
+  const compares = s.gh.calls.filter((c) => c[0] === 'compare').length
+  assert.equal((await s.again()).state, 'done')
+  assert.equal(s.gh.calls.filter((c) => c[0] === 'compare').length, compares, 'recorded once, not read again')
+})
+
+test('a release\'s commits are read newest first: the compare asks GitHub with no paging (250, ending at the newest)', async () => {
+  const s = setup()
+  await s.start()
+  for (const c of s.gh.calls.filter((x) => x[0] === 'compare')) assert.deepEqual(c[2], { newest: true })
+  const urls = []
+  const fetch = async (url) => {
+    urls.push(String(url))
+    return new Response(JSON.stringify({ status: 'ahead', files: [], commits: Array.from({ length: 180 }, (_, n) => ({ sha: String(n).padStart(40, '0'), commit: { message: `ENG-${n + 1} change` }, parents: [{}] })) }), { status: 200 })
+  }
+  const client = createGithubClient({ fetch, installationId: '42', token: async () => 't' })
+  const got = await client.compare(REPO, 'v1.4.0', 'v1.5.0', { newest: true })
+  assert.equal(got.commits.length, 180)
+  assert.ok(!urls[0].includes('per_page'), urls[0])
+  await client.compare(REPO, 'v1.4.0', 'v1.5.0')
+  assert.match(urls[1], /per_page=100/, 'other callers keep their page of 100')
 })

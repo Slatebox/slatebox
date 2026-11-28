@@ -571,7 +571,8 @@ export function createRunner(deps) {
       await setInstance(instance._id, { firstRunKept: true })
       instance.firstRunKept = true
     }
-    // Outside Slatebox.
+    // Outside Slatebox. Waiting cards the recipe says are stale go first (answer.retire: write keys).
+    if (Array.isArray(answer.retire) && answer.retire.length && permissions.retire) await permissions.retire(instance, answer.retire, run)
     const writes = []
     for (const write of (answer.writes || []).slice(0, 20)) {
       if (signal.aborted) throw signal.reason

@@ -177,6 +177,17 @@ test('issues by identifier: 50 a call, the ones Linear does not show are left ou
   assert.equal(fake.calls.length, 1)
   assert.equal(issuesQuery(Array.from({ length: 80 }, (_, n) => `ENG-${n + 1}`)).list.length, 50)
   assert.ok(!issuesQuery(['ENG-1"){x}']).query.includes('x}'), 'an identifier is never spliced into the query unchecked')
+  assert.deepEqual(issuesQuery(['ENG-1', 'WEB-31', 'ENG-7']).variables.filter, { or: [{ team: { key: { eq: 'ENG' } }, number: { in: [1, 7] } }, { team: { key: { eq: 'WEB' } }, number: { in: [31] } }] })
+})
+
+test('one identifier Linear does not have (deleted, a typo) leaves the rest found, not the whole answer null', async () => {
+  const fake = fakeLinear()
+  const s = createLinearRecipeSession({ userId: 'u1', tokenFor: async () => 'tok', fetch: fake.fetch })
+  // the fake answers aliased issue(id:) lookups as real Linear does: one not found nulls data
+  const aliased = await fake.fetch('https://api.linear.app/graphql', { headers: {}, body: JSON.stringify({ query: 'query IssuesByIdentifier {\n  i0: issue(id: "ENG-201") { id }\n  i1: issue(id: "ENG-99999") { id }\n}' }) })
+  assert.equal(JSON.parse(await aliased.text()).data, null)
+  const got = await s.issuesByIdentifier(['ENG-201', 'ENG-99999', 'WEB-31'])
+  assert.deepEqual(got.map((i) => i.identifier).sort(), ['ENG-201', 'WEB-31'])
 })
 
 test('blockers collapse to the issues that block another project\'s open issue', async () => {

@@ -4,19 +4,24 @@
 // One cycle's slate (pure), "ENG cycle 48 (Nov 24 – Dec 7)":
 //   the board   a team board with lanes To do, In progress, Done, Canceled; a card per issue,
 //               "ENG-212 Fix refunds · Ana · 3 pts · blocked". A board holds 24 cards: a bigger
-//               cycle is split by assignee (each person's issues stay on one board).
+//               cycle is split by assignee (each person's issues stay on one board). Once drawn, an
+//               issue stays on its board while that board has room (placed, from the run before),
+//               so a 25th issue or a new assignee never moves cards, and people's moves, elsewhere.
 //   blockers    each blocked issue as an amber note, a line from each issue blocking it; another
 //               team's issues in a frame for that team; a blocker already done is grey.
 //   scope       one note: planned at the start, added after it started, removed since.
 import { plain, count } from '../_shared/text.mjs'
-import { CYCLE_LANES, STATE_COLORS, cycleLaneOf, dayWords, keyOf } from '../_linear/workgraph.mjs'
+import { CYCLE_LANES, STATE_COLORS, cycleLaneOf, dayIn, dayWords, keyOf } from '../_linear/workgraph.mjs'
 
 export const CYCLE_LIMITS = Object.freeze({ cards: 24, boards: 6, blockers: 80 })
 const isOpen = (state) => !['completed', 'canceled'].includes(state?.type)
 
 export const cycleKey = (team, cycle) => `${team.key}-${cycle.number}`
+/** "ENG cycle 48 (Nov 24 – Dec 7)": the days in the team's time zone (Linear's team.timezone). */
 export function cycleName(team, cycle, now) {
-  const span = cycle.startsAt && cycle.endsAt ? ` (${dayWords(cycle.startsAt.slice(0, 10), now)} – ${dayWords(cycle.endsAt.slice(0, 10), now)})` : ''
+  const starts = cycle.startsAt ? dayIn(cycle.startsAt, team.timezone) : null
+  const ends = cycle.endsAt ? dayIn(cycle.endsAt, team.timezone) : null
+  const span = starts && ends ? ` (${dayWords(starts, now)} – ${dayWords(ends, now)})` : ''
   return plain(`${team.key} ${cycle.name ? cycle.name : `cycle ${cycle.number}`}${span}`, 120)
 }
 
@@ -50,14 +55,62 @@ export function packByAssignee(issues) {
   return boards
 }
 
-export function cycleSlate({ org, team, cycle, now, reclaim = new Set(), removed = [], subIssues = false }) {
-  const issues = cycle.issues.filter((i) => subIssues || !i.parentId).sort((a, b) => a.identifier.localeCompare(b.identifier, 'en', { numeric: true }))
+const whoOf = (i) => i.assignee || 'No one yet'
+const byIdentifier = (a, b) => a.identifier.localeCompare(b.identifier, 'en', { numeric: true })
+const boardOrder = (key) => (key === 'cycle' ? 0 : Number(key.split(':')[1]) || 99)
+
+/**
+ * The cycle's issues onto boards: [{ key, issues }]. First time (nothing placed): one board 'cycle'
+ * for 24 or fewer, else packByAssignee onto people:1, people:2 ... After that (placed: { boardKey:
+ * [identifier] }), an issue stays on its board while it has room; the rest go, a person's together,
+ * to a board that has that person and room, else any with room, else a new one.
+ */
+export function placeIssues(issues, placed = null) {
+  const boardOf = new Map(Object.entries(placed || {}).flatMap(([key, ids]) => (Array.isArray(ids) && (key === 'cycle' || /^people:\d+$/.test(key)) ? ids.map((id) => [id, key]) : [])))
+  if (!boardOf.size) {
+    if (issues.length <= CYCLE_LIMITS.cards) return [{ key: 'cycle', issues }]
+    return packByAssignee(issues).map((g, n) => ({ key: `people:${n + 1}`, issues: g.issues }))
+  }
+  const bins = new Map()
+  const rest = []
+  for (const i of issues) {
+    const key = boardOf.get(i.identifier)
+    if (key && (bins.get(key)?.length || 0) < CYCLE_LIMITS.cards) {
+      if (!bins.has(key)) bins.set(key, [])
+      bins.get(key).push(i)
+    } else rest.push(i)
+  }
+  const people = new Map()
+  for (const i of rest) {
+    if (!people.has(whoOf(i))) people.set(whoOf(i), [])
+    people.get(whoOf(i)).push(i)
+  }
+  const newKey = () => {
+    let n = 1
+    while (bins.has(`people:${n}`)) n += 1
+    return `people:${n}`
+  }
+  for (const [who, list] of [...people].sort((a, b) => a[0].localeCompare(b[0]))) {
+    for (let at = 0; at < list.length; at += CYCLE_LIMITS.cards) {
+      const part = list.slice(at, at + CYCLE_LIMITS.cards)
+      const fits = ([, l]) => l.length + part.length <= CYCLE_LIMITS.cards
+      const key = [...bins].find((b) => fits(b) && b[1].some((x) => whoOf(x) === who))?.[0] ?? [...bins].find(fits)?.[0] ?? newKey()
+      if (!bins.has(key)) bins.set(key, [])
+      bins.get(key).push(...part)
+    }
+  }
+  return [...bins].sort((a, b) => boardOrder(a[0]) - boardOrder(b[0])).map(([key, list]) => ({ key, issues: list.sort(byIdentifier) }))
+}
+
+export function cycleSlate({ org, team, cycle, now, reclaim = new Set(), removed = [], subIssues = false, placed = null }) {
+  const issues = cycle.issues.filter((i) => subIssues || !i.parentId).sort(byIdentifier)
   const lanes = CYCLE_LANES.map(({ key, label }) => ({ key, label }))
-  const groups = issues.length <= CYCLE_LIMITS.cards ? [{ people: null, issues }] : packByAssignee(issues)
-  const boards = groups.slice(0, CYCLE_LIMITS.boards).map((g, n) => ({
-    key: g.people ? `people:${n + 1}` : 'cycle',
+  const groups = placeIssues(issues, placed).slice(0, CYCLE_LIMITS.boards)
+  const single = groups.length === 1 && groups[0].key === 'cycle'
+  const boards = groups.map((g) => ({
+    key: g.key,
     component: 'team-board',
-    title: plain(g.people ? g.people.join(', ') : `${team.key} cycle ${cycle.number}`, 80),
+    title: plain(single ? `${team.key} cycle ${cycle.number}` : [...new Set(g.issues.map(whoOf))].sort((a, b) => a.localeCompare(b)).join(', '), 80),
     lanes,
     cards: g.issues.map((i) => issueCard(org, i, { reclaim: reclaim.has(i.id) })),
   }))
@@ -107,5 +160,7 @@ export function cycleSlate({ org, team, cycle, now, reclaim = new Set(), removed
     blocked,
     added: added.map((i) => i.identifier),
     issues,
+    // where each issue was drawn: { boardKey: [identifier] }
+    placement: Object.fromEntries(boards.map((b, n) => [b.key, groups[n].issues.map((i) => i.identifier)])),
   }
 }

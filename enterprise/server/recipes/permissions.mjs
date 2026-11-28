@@ -228,6 +228,18 @@ export function createPermissions({ store, clock = Date.now, audit = async () =>
     return { kind: write.kind, target: targetLine(write.target), state: 'card', cardId: card._id }
   }
 
+  /**
+   * Cards still waiting for changes that are no longer current (the recipe says which, by write key:
+   * the source moved that item itself since, or the person moved the card back): superseded, so a
+   * later approve can never make a stale change over a newer one. Only this recipe's waiting cards.
+   */
+  async function retire(instance, keys, run = null) {
+    const list = [...new Set((keys || []).filter((k) => typeof k === 'string' && k.length <= 300))].slice(0, 200)
+    if (!list.length) return 0
+    const done = await cards.updateMany({ instanceId: instance._id, key: { $in: list }, state: 'waiting' }, { $set: { state: 'superseded', updated: new Date(clock()), runId: run?._id ?? null } })
+    return done?.modifiedCount || 0
+  }
+
   /** A person's answer to a card: approve makes the change once (checked again), decline closes it. */
   async function decide(userId, cardId, decision, { signal = null } = {}) {
     const card = await cards.findOne({ _id: cardId })
@@ -259,7 +271,7 @@ export function createPermissions({ store, clock = Date.now, audit = async () =>
     }
   }
 
-  return { grant, revoke, check, perform, propose, decide, liveGrants }
+  return { grant, revoke, check, perform, propose, decide, retire, liveGrants }
 }
 
 const hashOf = (body) => JSON.stringify(body ?? null).length + ':' + [...JSON.stringify(body ?? null)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7)

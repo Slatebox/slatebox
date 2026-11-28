@@ -16,7 +16,8 @@ export const RELEASE_LIMITS = Object.freeze({ issuesPerRelease: 35, drift: 24 })
 export const releaseKey = (repo, tag) => `${repo}@${tag}`
 
 /**
- * releases: [{ repo, tag, publishedAt, url, issues: [{ k, t, s, done, p, pn }], projects: { id: { n, pp } }, more, compared }]
+ * releases: [{ repo, tag, publishedAt, url, issues: [{ k, t, s, done, p, pn }], projects: { id: { n, pp, late } }, more, compared }]
+ * (late: the release was already out when the recipe first read it, so its progress then is not known)
  * oldest first. live: Map(identifier → { done, s }) Linear's state now (overrides the recorded one).
  * workspace: the Linear workspace's URL key, for each issue's link.
  */
@@ -40,7 +41,7 @@ export function releaseSlate({ releases, live = new Map(), now, workspace = null
     for (const [id, p] of Object.entries(r.projects || {})) {
       const was = before?.projects?.[id]?.pp
       const key = `xr:${rk}:project:${id}`
-      const change = Number.isFinite(p.pp) ? (Number.isFinite(was) ? `${was}% → ${p.pp}% done` : `${p.pp}% done`) : 'progress unknown'
+      const change = Number.isFinite(p.pp) ? (Number.isFinite(was) ? `${was}% → ${p.pp}% done` : `${p.pp}% done`) : p.late ? 'progress at this release not recorded' : 'progress unknown'
       nodes.push({ key, text: plain(`${p.n}: ${change}`, 120), shape: 'rectangle', colors: STATE_COLORS.open })
       members.push(key)
     }

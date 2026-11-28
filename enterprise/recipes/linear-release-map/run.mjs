@@ -4,16 +4,20 @@
 // One release-map run. Linear: the teams' keys (1 call), the issues new releases name (1 call per
 // 50), and the state now of every issue still open on the map (1 call per 50). GitHub: each repo's
 // newest releases (1 call a repo) and, once per new release, the compare with the release before
-// it (1 call: its commit messages, at most 250). 0 tokens.
+// it (1 call: its commit messages, at most 250, the newest). 0 tokens.
 //
 // A release is read once and kept in the recipe's ledger (release:<repo>@<tag>): the issues its
 // commits name with their project and state then, and each project's progress then. Later runs only
 // refresh whether those issues are closed in Linear, so the drift board empties as Linear catches up.
+// Progress "then" is Linear's progress now, so it is recorded only for a release just published (since
+// the last run, or within a day): the releases already out when the recipe is added (or when more
+// releases are asked for) say their progress then is not known, instead of all showing today's.
 import { plain } from '../_shared/text.mjs'
 import { identifiersIn } from '../_linear/workgraph.mjs'
 import { RELEASE_LIMITS, releaseKey, releaseSlate } from './render.mjs'
 
 const LIVE_MAX = 100
+const DAY = 86400000
 
 export default async function run(ctx) {
   const config = { releases: 6, prereleases: false, ...ctx.instance.config }
@@ -40,8 +44,10 @@ export default async function run(ctx) {
       }
       const before = all[n + 1] || null
       let messages = []
-      if (before) messages = (await github.compare(repo, before.tag, release.tag)).commits.map((c) => c.message)
-      fresh.push({ repo, tag: release.tag, publishedAt: release.publishedAt, url: release.url, ids: identifiersIn(messages, { teams: keys }), compared: Boolean(before) })
+      if (before) messages = (await github.compare(repo, before.tag, release.tag, { newest: true })).commits.map((c) => c.message)
+      const published = Date.parse(release.publishedAt || '')
+      const justOut = Number.isFinite(published) && ((cursor.at && published >= cursor.at - DAY) || now - published <= DAY)
+      fresh.push({ repo, tag: release.tag, publishedAt: release.publishedAt, url: release.url, ids: identifiersIn(messages, { teams: keys }), compared: Boolean(before), justOut })
     }
   }
 
@@ -53,7 +59,7 @@ export default async function run(ctx) {
   for (const r of fresh) {
     const issues = r.ids.map((k) => byId.get(k)).filter(Boolean)
     const projects = {}
-    for (const i of issues) if (i.project && Object.keys(projects).length < 10) projects[i.project.id] = { n: plain(i.project.name, 60), pp: i.project.progress }
+    for (const i of issues) if (i.project && Object.keys(projects).length < 10) projects[i.project.id] = r.justOut ? { n: plain(i.project.name, 60), pp: i.project.progress } : { n: plain(i.project.name, 60), pp: null, late: true }
     const record = {
       repo: r.repo, tag: r.tag, publishedAt: r.publishedAt, url: r.url, compared: r.compared,
       issues: issues.slice(0, RELEASE_LIMITS.issuesPerRelease).map((i) => ({ k: i.identifier, t: plain(i.title, 70), s: i.state.type, done: i.done, ...(i.project && { p: i.project.id, pn: plain(i.project.name, 60) }) })),
@@ -76,7 +82,7 @@ export default async function run(ctx) {
   const drawn = releaseSlate({ releases: ordered, live, now, workspace })
   const seen = new Set(cursor.drift || [])
   for (const d of drawn.drift.filter((x) => !seen.has(`${x.tag}:${x.issue}`)).slice(0, 20)) ctx.emit('release_map.drift', { issue: d.issue, tag: d.tag })
-  ctx.setCursor({ workspace, drift: drawn.drift.map((d) => `${d.tag}:${d.issue}`) })
+  ctx.setCursor({ workspace, drift: drawn.drift.map((d) => `${d.tag}:${d.issue}`), at: now })
   return {
     desired: { slates: [drawn.slate] },
     summary: `${ordered.length} releases, ${fresh.length} new; ${drawn.drift.length} shipped but not closed in Linear.`,

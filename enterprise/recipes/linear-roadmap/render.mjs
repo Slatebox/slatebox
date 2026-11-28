@@ -16,7 +16,6 @@ import { HEALTH_COLORS, HEALTH_WORDS, ROADMAP_LANES, collapseBlockers, dayWords,
 
 export const ROADMAP_LIMITS = Object.freeze({ cards: 24, boardsPerSlate: 8, projects: 200 })
 const SEVERITY = { offTrack: 0, atRisk: 1, onTrack: 2 }
-const chunk = (list, size) => Array.from({ length: Math.ceil(list.length / size) }, (_, i) => list.slice(i * size, i * size + size))
 
 /** A project's card words (80 characters at most: a board card's limit). */
 export function cardLabel(project, { now, slipDays = 0 }) {
@@ -29,10 +28,14 @@ export function cardLabel(project, { now, slipDays = 0 }) {
 
 /**
  * The roadmap slates. groupsBefore: board keys a past run drew (a group gone now gets an empty board,
- * so its cards go). → [slate]
+ * so its cards go). placed: { boardKey: [projectId] } and slateOfBoard: { boardKey: slate index } from
+ * the run before: a project stays on its board while that board has room, and a board stays on its
+ * slate, so a 25th project or a new group sorting in never moves cards (and people's moves on them)
+ * to another board or slate. → [slate]
  */
-export function roadmapSlates({ org, projects, by, today, now, slips = {}, reclaim = new Set(), teams = [], groupsBefore = [], quarterLine = '' }) {
+export function roadmapSlates({ org, projects, by, today, now, slips = {}, reclaim = new Set(), teams = [], groupsBefore = [], quarterLine = '', placed = {}, slateOfBoard = {} }) {
   const open = projects.filter((p) => !isClosedProject(p))
+  const boardOf = new Map(Object.entries(placed || {}).flatMap(([key, ids]) => (Array.isArray(ids) ? ids.map((id) => [id, key]) : [])))
   const groups = new Map()
   for (const p of open) {
     const g = groupOf(p, by)
@@ -40,14 +43,33 @@ export function roadmapSlates({ org, projects, by, today, now, slips = {}, recla
     groups.get(g.key).projects.push(p)
   }
   const boards = []
+  const lanes = () => ROADMAP_LANES.map((l) => ({ ...l }))
   for (const g of [...groups.values()].sort((a, b) => a.title.localeCompare(b.title))) {
     const sorted = g.projects.sort((a, b) => (a.targetDate || '9999').localeCompare(b.targetDate || '9999') || a.name.localeCompare(b.name))
-    chunk(sorted, ROADMAP_LIMITS.cards).forEach((part, i, all) => boards.push({
-      key: i ? `${g.key}/${i + 1}` : g.key,
+    const keyAt = (n) => (n === 1 ? g.key : `${g.key}/${n}`)
+    const indexOf = (key) => (key === g.key ? 1 : key?.startsWith(`${g.key}/`) && /^\d+$/.test(key.slice(g.key.length + 1)) ? Number(key.slice(g.key.length + 1)) : null)
+    const bins = new Map() // n -> projects
+    const rest = []
+    for (const p of sorted) {
+      const n = indexOf(boardOf.get(p.id))
+      if (n && (bins.get(n)?.length || 0) < ROADMAP_LIMITS.cards) {
+        if (!bins.has(n)) bins.set(n, [])
+        bins.get(n).push(p)
+      } else rest.push(p)
+    }
+    for (const p of rest) {
+      let n = 1
+      while ((bins.get(n)?.length || 0) >= ROADMAP_LIMITS.cards) n += 1
+      if (!bins.has(n)) bins.set(n, [])
+      bins.get(n).push(p)
+    }
+    const used = [...bins.keys()].sort((a, b) => a - b)
+    for (const n of used) boards.push({
+      key: keyAt(n),
       component: 'team-board',
-      title: plain(all.length > 1 ? `${g.title} (${i + 1})` : g.title, 80),
-      lanes: ROADMAP_LANES.map((l) => ({ ...l })),
-      cards: part.map((p) => ({
+      title: plain(used.length > 1 || n > 1 ? `${g.title} (${n})` : g.title, 80),
+      lanes: lanes(),
+      cards: bins.get(n).map((p) => ({
         key: keyOf(org, 'project', p.id),
         label: cardLabel(p, { now, slipDays: slips[p.id] || 0 }),
         lane: roadmapLane(p.targetDate, today),
@@ -55,18 +77,51 @@ export function roadmapSlates({ org, projects, by, today, now, slips = {}, recla
         // Linear changed this project's date since the last run: a card a person moved follows it again.
         ...(reclaim.has(p.id) && { reclaim: true }),
       })),
-    }))
+    })
   }
   const drawn = new Set(boards.map((b) => b.key))
-  for (const key of groupsBefore) if (!drawn.has(key)) boards.push({ key, component: 'team-board', title: 'No open projects', lanes: ROADMAP_LANES.map((l) => ({ ...l })), cards: [] })
+  for (const key of groupsBefore) if (!drawn.has(key)) boards.push({ key, component: 'team-board', title: 'No open projects', lanes: lanes(), cards: [] })
   const legend = `From Linear (${teams.join(', ') || 'your teams'}): each open project in the lane its target date puts it, as of ${dayWords(today, now)}. ${quarterLine} Move a card to plan on the slate; Linear's next change to that project moves it back.`
-  return chunk(boards, ROADMAP_LIMITS.boardsPerSlate).map((set, s) => ({
+  // Boards onto slates of 8: each on the slate it was on while that one has room, the rest in order.
+  const sets = []
+  const room = (s) => (sets[s]?.length || 0) < ROADMAP_LIMITS.boardsPerSlate
+  const put = (s, board) => {
+    while (sets.length <= s) sets.push([])
+    sets[s].push(board)
+  }
+  const later = []
+  for (const board of boards) {
+    const s = slateOfBoard[board.key]
+    if (Number.isInteger(s) && s >= 0 && s < 50 && room(s)) put(s, board)
+    else later.push(board)
+  }
+  for (const board of later) {
+    let s = 0
+    while (!room(s)) s += 1
+    put(s, board)
+  }
+  return sets.map((set, s) => ({ set, s })).filter(({ set, s }) => set.length || s === 0).map(({ set, s }) => ({
     role: 'roadmap',
     ...(s && { key: String(s + 1) }),
     name: s ? `Roadmap (${s + 1})` : 'Roadmap',
     boards: set,
     notes: [{ key: 'legend', anchor: 'legend', text: plain(legend, 400) }],
   }))
+}
+
+/** Where each project's card and each board were drawn (for the next run's roadmapSlates): { placed: { boardKey: [projectId] }, slateOfBoard }. */
+export function roadmapPlacement(slates) {
+  const placed = {}
+  const slateOfBoard = {}
+  for (const slate of slates) {
+    const s = slate.key ? Number(slate.key) - 1 : 0
+    for (const board of slate.boards) {
+      if (!board.cards.length) continue
+      slateOfBoard[board.key] = s
+      placed[board.key] = board.cards.map((card) => card.key.slice(card.key.lastIndexOf(':') + 1))
+    }
+  }
+  return { placed, slateOfBoard }
 }
 
 /** The dependency map: projects in team frames, blocking edges with issue counts. */

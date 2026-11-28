@@ -9,8 +9,9 @@ import { test } from 'node:test'
 import L1 from '../enterprise/recipes/linear-roadmap/index.mjs'
 import { validateManifest } from '../enterprise/common/recipes/manifest.mjs'
 import { createVendor } from '../enterprise/server/recipes/vendors/linear/index.mjs'
-import { roadmapLane, quarterOf, collapseBlockers } from '../enterprise/recipes/_linear/workgraph.mjs'
+import { roadmapLane, quarterOf, collapseBlockers, todayIso } from '../enterprise/recipes/_linear/workgraph.mjs'
 import { ORG, P, PROJECTS, TEAMS, NOW } from '../enterprise/recipes/_linear/fixtures/acme.mjs'
+import { projectOf } from '../enterprise/server/recipes/vendors/linear/session.mjs'
 import { fakeLinear } from './fakes/linear-api.mjs'
 import { createRecipeWorld } from './fakes/recipe-world.mjs'
 
@@ -202,4 +203,47 @@ test('more than 24 open projects in one team are split into boards of 24', async
   const { recipe } = await s.start()
   const boards = boardsOf(s.w, await slateOf(s.w, recipe.instanceId, 'roadmap'))
   assert.deepEqual(boards.map((b) => [b.title, b.cards.length]).sort(), [['Web (1)', 24], ['Web (2)', 6]])
+})
+
+const many = (n, { from = 0, status = 'started', target = (k) => `2027-0${1 + (k % 9)}-15` } = {}) => Array.from({ length: n }, (_, k) => ({ ...structuredClone(PROJECTS[0]), id: `00000000-0000-4000-8000-0000000${String(300 + from + k).padStart(5, '0')}`, name: `Project ${from + k + 1}`, targetDate: target(k), state: status, status: { type: status, name: status } }))
+
+test('closed projects are never fetched, so they never push open ones past the 200 cap', async () => {
+  const projects = [...many(180, { status: 'completed' }), ...many(40, { from: 180 })]
+  const s = setup({ fakeOpts: { projects, blockers: [], pageSize: 50 } })
+  const { recipe, first } = await s.start()
+  assert.equal(first.state, 'done')
+  assert.ok(!first.run.log.some((l) => l.code === 'many_projects'))
+  const cards = boardsOf(s.w, await slateOf(s.w, recipe.instanceId, 'roadmap')).flatMap((b) => b.cards)
+  assert.equal(cards.length, 40, 'every open project drawn')
+  assert.ok(s.fake.calls.filter((c) => c.op === 'Projects').length <= 1, 'one page: the 180 closed ones are not read')
+})
+
+test('a 25th project sorting in first never moves the 24 cards (or a person\'s move) to another board', async () => {
+  const projects = many(24, { target: (k) => `2027-02-${String(k + 1).padStart(2, '0')}` })
+  const s = setup({ fakeOpts: { projects, blockers: [] } })
+  const { recipe } = await s.start()
+  const roadmapId = await slateOf(s.w, recipe.instanceId, 'roadmap')
+  const [board] = boardsOf(s.w, roadmapId)
+  const ids = board.cards.map((c) => c.id).sort()
+  const moved = board.cards[0]
+  const later = board.lanes.find((l) => l.label === 'Later').id
+  s.w.slates.personMoveCard(roadmapId, board.key, moved.id, later)
+  await s.again()
+  projects.push(...many(1, { from: 24, target: () => '2026-12-01' }))
+  const out = await s.again()
+  assert.equal(out.state, 'done')
+  const after = boardsOf(s.w, roadmapId)
+  const same = after.find((b) => b.key === board.key)
+  assert.deepEqual(same.cards.map((c) => c.id).sort(), ids)
+  assert.equal(same.cards.find((c) => c.id === moved.id).laneId, later, 'the person\'s move stays')
+  assert.deepEqual(after.filter((b) => b.key !== board.key).map((b) => b.cards.map((c) => c.label.split(' · ').slice(0, 2).join(' · '))), [['Project 25 · Dec 1']])
+})
+
+test('today is the team\'s day: a project due today is not overdue on a Pacific evening', () => {
+  const evening = Date.UTC(2026, 10, 28, 1) // Nov 27, 5 pm in Los Angeles
+  assert.equal(todayIso(evening), '2026-11-28')
+  assert.equal(todayIso(evening, 'America/Los_Angeles'), '2026-11-27')
+  assert.equal(roadmapLane('2026-11-27', todayIso(evening, 'America/Los_Angeles')), 'this-quarter')
+  const p = projectOf({ ...structuredClone(PROJECTS[0]), teams: { nodes: [{ ...TEAMS.WEB, timezone: 'America/Los_Angeles' }, { ...TEAMS.ENG, timezone: 'x"; drop' }] } })
+  assert.deepEqual(p.teams.map((t) => t.timezone), ['America/Los_Angeles', null], 'Linear\'s team zone is read, a malformed one is not')
 })

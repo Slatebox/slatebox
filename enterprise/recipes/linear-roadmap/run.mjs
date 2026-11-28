@@ -8,11 +8,12 @@
 //
 // Between runs the cursor keeps, per project, the target date Linear showed first and last (a slip
 // is today's target past the first one), a short signature (what changed, for the events), and the
-// board keys drawn. A project whose target date changed since the last run is reclaimed: a card a
+// board keys drawn, with where each card and board was drawn (a card stays on its board, a board on
+// its slate). A project whose target date changed since the last run is reclaimed: a card a
 // person moved follows Linear again. The edges seen, for roadmap.new_blocker.
 import { hashOf, plain } from '../_shared/text.mjs'
 import { daysBetween, isClosedProject, quarterOf, nextQuarter, todayIso } from '../_linear/workgraph.mjs'
-import { dependencySlate, healthSlate, roadmapSlates } from './render.mjs'
+import { dependencySlate, healthSlate, roadmapPlacement, roadmapSlates } from './render.mjs'
 
 const SUMMARY_SCHEMA = Object.freeze({ type: 'object', additionalProperties: false, required: ['summary'], properties: { summary: { type: 'string', maxLength: 600 } } })
 const WEEK = 7 * 86400000
@@ -21,7 +22,6 @@ export default async function run(ctx) {
   const config = { groupBy: 'team', blockers: true, staleDays: 14, summary: false, ...ctx.instance.config }
   const linear = ctx.vendor.linear
   const now = ctx.now()
-  const today = todayIso(now)
   const cursor = ctx.instance.cursor || {}
 
   const wantInitiatives = config.groupBy === 'initiative'
@@ -31,8 +31,11 @@ export default async function run(ctx) {
     by = 'team'
     ctx.log('warn', 'no_initiatives', 'Linear shows initiatives only to an admin\'s install for the workspace, so projects are grouped by team.')
   }
-  if (!got.complete) ctx.log('warn', 'many_projects', 'More than 200 projects: the first 200 are drawn.')
+  if (!got.complete) ctx.log('warn', 'many_projects', 'More than 200 open projects: the first 200 are drawn.')
   const projects = got.projects.slice(0, 200)
+  // "Today" (lanes, stale updates) is the day in the first picked team's time zone, as Linear has it.
+  const zone = projects.flatMap((p) => p.teams || []).find((t) => config.teams.includes(t.id) && t.timezone)?.timezone || null
+  const today = todayIso(now, zone)
   // The workspace's URL key (linear.app/<key>/...) names its notes' keys, the same every run.
   const org = cursor.org || projects.map((p) => /^https:\/\/linear\.app\/([a-z0-9-]+)\//i.exec(p.url || '')?.[1]).find(Boolean) || 'ws'
   const open = projects.filter((p) => !isClosedProject(p))
@@ -67,7 +70,7 @@ export default async function run(ctx) {
   const quarter = quarterOf(today)
   const quarterLine = `This quarter is ${quarter.label}; next is ${nextQuarter(quarter).label}.`
   const teamNames = [...new Set(projects.flatMap((p) => p.teams || []).filter((t) => config.teams.includes(t.id)).map((t) => t.key))]
-  const roadmap = roadmapSlates({ org, projects, by, today, now, slips, reclaim, teams: teamNames, groupsBefore: cursor.boards || [], quarterLine })
+  const roadmap = roadmapSlates({ org, projects, by, today, now, slips, reclaim, teams: teamNames, groupsBefore: cursor.boards || [], quarterLine, placed: cursor.placed || {}, slateOfBoard: cursor.slateOfBoard || {} })
   const deps = dependencySlate({ org, projects, blockers: relations, now })
 
   // The weekly summary: once a week at most, over the update excerpts only.
@@ -103,6 +106,7 @@ export default async function run(ctx) {
     lastTarget: Object.fromEntries(open.map((p) => [p.id, p.targetDate || null])),
     sig: signature,
     boards: roadmap.flatMap((s) => s.boards.filter((b) => b.cards.length).map((b) => b.key)),
+    ...roadmapPlacement(roadmap),
     stale: health.stale.map((s) => s.id),
     edges: edgeIds,
     summary,

@@ -137,6 +137,14 @@ export function createFakeSlates({ slates: store = new Map(), onSave = () => {} 
       s.revision += 1
       events.push({ slateId, revision: s.revision, actor: { kind: 'person', userId: 'person' }, properties: [], moves: [{ cardId }] })
     },
+    /** A person renames a card on a board (its label: the card is theirs for good). */
+    personRenameCard(slateId, key, cardId, label) {
+      const b = boards.get(`${slateId}:${key}`)
+      b.cards.find((c) => c.id === cardId).label = label
+      const s = slateOf(slateId)
+      s.revision += 1
+      events.push({ slateId, revision: s.revision, actor: { kind: 'person', userId: 'person' }, properties: [[cardId, 'label']] })
+    },
     keepAll(slateId, userId = 'person') {
       for (const { plan } of waitingBy.get(slateId) || []) {
         const s = slateOf(slateId)
