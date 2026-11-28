@@ -24,6 +24,11 @@
 // sites' generated tool index gained its line (slates.live({shareId}): Watch a slate live); recorded again, no prompt text changed.
 // Photo notes (2026-11-27) gave add_nodes its photo field (a picture the host stored): the three exec sites' plan typings,
 // generated from the engine contract, name it; recorded again, no prompt text changed.
+// Gradient and picture backgrounds (ba3f0046, 2026-11-27) gave update_slate its gradient and picture background, and projects
+// (370990e4, 2026-11-27) added nine projects.* methods and projectId on slates.create, copy, list and importMermaid:
+// the three exec sites' typings and tool index are generated from the registry and the engine contract, and to stay within
+// its budget the index now names the ai and components methods in one line each, inputs in describe; recorded again,
+// no prompt text changed.
 // Every prompt in the registry is asked for by one of those recordings, so every one is proven; and
 // a published version really reaches the request, while no published version (or no snapshot)
 // serves the built-in text. (The recordings no longer carry a provider, model or fallback per call:
