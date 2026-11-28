@@ -18,6 +18,8 @@ import { wearStyledDecks } from './migrations/slate-style-001.mjs'
 import './bootstrap/all'
 import {
   IconPacks,
+  Projects,
+  ProjectAccess,
   Slates,
   SlatePresentations,
   SlateApiTokens,
@@ -436,6 +438,21 @@ Meteor.startup(async () => {
   // it now (the slate IS the presentation). Beside the start, never in its way; idempotent.
   wearStyledDecks({ presentations: SlatePresentations.rawCollection(), slates: Slates.rawCollection(), saveCore: slateSaveCore })
     .catch((error) => console.error('[slate-style-001]', error?.message))
+
+  // Projects (server/projects): a drive's slates newest first, a drive's folders, who owns which,
+  // a team's drives, a drive's grants and a person's or team's, and one drive per link key.
+  await Promise.all([
+    Slates.rawCollection().createIndex({ projectId: 1, lastSaved: -1 }),
+    Projects.rawCollection().createIndex({ rootId: 1 }),
+    Projects.rawCollection().createIndex({ ownerId: 1 }),
+    Projects.rawCollection().createIndex({ orgId: 1 }),
+    ProjectAccess.rawCollection().createIndex({ projectId: 1 }),
+    ProjectAccess.rawCollection().createIndex({ userId: 1 }),
+    ProjectAccess.rawCollection().createIndex({ orgId: 1, kind: 1 }),
+    // Only link rows carry a key (others hold null), so the unique index covers strings only.
+    ProjectAccess.rawCollection().createIndex({ accessKey: 1 }, { unique: true, partialFilterExpression: { accessKey: { $type: 'string' } } }),
+    ProjectAccess.rawCollection().createIndex({ email: 1 }, { partialFilterExpression: { email: { $type: 'string' } } }),
+  ]).catch((error) => console.error('[projects] indexes', error?.message))
 
   await Promise.all([
     SlateApiTokens.rawCollection().createIndex(

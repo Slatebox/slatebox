@@ -32,6 +32,7 @@ const SAVE_CORE = 'the save core records the slate created, copied, renamed or e
 const OWN_ABOUT_YOU = "the person's own About you, not team activity"
 const AI_CONTROL = 'the agent configuration keeps its own audit (ai.audit.list)'
 const START_TILES = "the person's own start page"
+const PROJECTS_CORE = 'the projects core records project.* (server/projects/core.mjs)'
 
 const own = (action, extra = {}) => ({ action, target: slateTarget, ...extra })
 
@@ -128,6 +129,12 @@ export const ACTION_AUDIT = Object.freeze({
   'ai.prompts.test': { off: AI_CONTROL },
   'ai.prompts.publish': { off: AI_CONTROL },
   'ai.prompts.rollback': { off: AI_CONTROL },
+  // Projects: the projects core records each change (project.*) with its project and details
+  'projects.create': { inside: PROJECTS_CORE },
+  'projects.update': { inside: PROJECTS_CORE },
+  'projects.delete': { inside: PROJECTS_CORE },
+  'projects.moveSlate': { inside: PROJECTS_CORE },
+  'projects.share': { inside: PROJECTS_CORE },
   // The activity log itself
   'audit.export': { action: 'audit.exported', target: () => ({ type: 'log' }), scope: (_input, output) => output?.team, details: (input) => ({ format: String(input.format || 'csv').toUpperCase() }) },
   'audit.recordDownload': { inside: 'its handler records export.download' },

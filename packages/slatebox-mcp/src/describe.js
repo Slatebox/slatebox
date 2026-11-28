@@ -20,13 +20,28 @@ function checkInput(input) {
 }
 
 // The start of a summary, what the describe index shows so the index of every method stays within the budget: its
-// first sentence, and the next one too when the first is short (under 60 characters).
+// first sentence, and the next one too when the first is short (under 60 characters), cut at a word to at most
+// INDEX_SUMMARY_MAX characters (a query or methods give the whole summary).
 const SENTENCES = /[^]*?[.!?](?=\s+[A-Z("“]|$)/g;
+export const INDEX_SUMMARY_MAX = 160;
 export function firstSentence(text) {
   const whole = String(text ?? "");
   const [first = whole, second = ""] = whole.match(SENTENCES) ?? [];
-  return (first.length < 60 ? first + second : first).trim();
+  const start = (first.length < 60 ? first + second : first).trim();
+  if (start.length <= INDEX_SUMMARY_MAX) return start;
+  const cut = start.slice(0, INDEX_SUMMARY_MAX);
+  return (cut.lastIndexOf(" ") > 0 ? cut.slice(0, cut.lastIndexOf(" ")) : cut).trimEnd();
 }
+
+// A method's flags. The index leaves out the one its kind already says (a read reads, a write writes); a write
+// that changes nothing still says read.
+const describedFlags = (method, detailed) =>
+  [
+    method.readOnly ? "read" : "write",
+    method.destructive && "destructive",
+    method.openWorld && "openWorld",
+    method.confirm && "confirm",
+  ].filter((flag, index) => Boolean(flag) && (detailed || index > 0 || flag !== method.kind));
 
 // What the describe index gives as a method's index: its inputs, "({kind,text})". The index line
 // ("name({inputs}): title") would say the name and the title again, which the entry already gives.
@@ -63,12 +78,7 @@ export function describeClient(manifest, input = {}, { instance } = {}) {
       // The index (no methods, no query) gives each method's first sentence; a query or methods give the whole summary.
       summary: detailed ? method.summary : firstSentence(method.summary),
       kind: method.kind,
-      flags: [
-        method.readOnly ? "read" : "write",
-        method.destructive && "destructive",
-        method.openWorld && "openWorld",
-        method.confirm && "confirm",
-      ].filter(Boolean),
+      flags: describedFlags(method, detailed),
       scope: method.scope,
       // The index names modes only where a write does more than save (preview); a query or methods always do.
       ...((detailed || method.modes.some((mode) => mode !== "save")) && { modes: method.modes }),

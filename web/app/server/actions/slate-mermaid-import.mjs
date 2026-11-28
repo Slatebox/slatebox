@@ -120,8 +120,11 @@ async function importNew(principal, input, model, { deps, mode, now }) {
   const start = { options: { name, description: '', ...(drawn.mindMap && { mindMapMode: true }) }, nodes: [] }
   const { slate: content } = applyAll(deps, start, drawn.plans)
   if (mode === 'preview') return { status: 200, body: { ...summary(drawn), shareId: null, url: null, revision: 0 } }
+  // A new slate in a project: the person must be an editor of it (server/projects/place.mjs).
+  const placement = input.projectId !== undefined ? await deps.placeSlate(user, input.projectId, { token: principal.kind === 'agent' }) : null
   const shareId = await deps.generateShareId()
-  const row = privateSlateDocument({ content: { options: content.options, nodes: content.nodes }, id: deps.newId(), user, shareId, now: now() })
+  const row = privateSlateDocument({ content: { options: content.options, nodes: content.nodes }, id: deps.newId(), user: placement?.projectId ? { _id: user._id, orgId: placement.orgId } : user, shareId, now: now() })
+  if (placement?.projectId) row.projectId = placement.projectId
   const made = await deps.saveCore.create({ row, actor: principal, source: 'mermaid' })
   return {
     status: 201,
@@ -155,6 +158,7 @@ export default defineAction({
       },
       shareId: { ...shareIdInput, description: 'Add to this slate. Leave out to make a new private slate.' },
       name: { type: 'string', minLength: 1, maxLength: 200, description: 'The new slate\'s name (without shareId).' },
+      projectId: { type: 'string', minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$', description: 'Make the new slate in this project or folder (without shareId; you need to be an editor of it).' },
     },
     required: ['mermaid'],
     additionalProperties: false,
@@ -180,6 +184,8 @@ export default defineAction({
   failure: { code: 'mermaid_import_failed', message: 'The diagram could not be drawn. Retry with the same key.' },
   tool: { name: 'import_mermaid', title: 'Draw a mind map, flowchart or Gantt plan', description: 'Draw an editable mind map, brainstorm, flowchart or project plan (Gantt chart) on a shared slate, from an outline written in Mermaid (flowchart/graph, mindmap or gantt), on a new slate or beside what an existing slate holds. Returns the slate link, where the team edits it live and can present it.' },
   handler(principal, input, ctx) {
+    if (input.shareId !== undefined && input.projectId !== undefined)
+      throw problem(400, 'invalid_request', 'projectId is for a new slate: leave out shareId, or move the slate with projects.moveSlate.')
     let model
     try {
       model = parseMermaid(input.mermaid)

@@ -6,6 +6,7 @@ import { rememberJoinedSlate, rememberInvitedEdit } from './joined-slates'
 import { getSlatesForUser } from './slates'
 import { createGuestAccount, guestLoginToken } from '../common/accounts'
 import { canEditNativeSlate, sharedSaveConditions } from './native-slate-save.mjs'
+import { slateProjectRoleOf } from '../projects/access-meteor'
 import AuthManager from '../../imports/api/common/AuthManager'
 import CONSTANTS from '../../imports/api/common/constants'
 import { Slates, SlateAccess, Permissions, GuestViews } from '../../imports/api/common/models'
@@ -53,6 +54,7 @@ export async function resolvePresentationSlate(shareId, userId, includeNative = 
   const canEdit = Boolean(user && access.accessLevel === edit && await canEditNativeSlate({
     access: SlateAccess.rawCollection(),
     isTeamAdmin: id => AuthManager.userHasClaim(id, [CONSTANTS.claims.admin._id]),
+    projectRoleOf: slateProjectRoleOf,
   }, user, access.slateBase, undefined, shareId))
   let canJoin = false
   if (!userId && access.accessLevel === edit) {

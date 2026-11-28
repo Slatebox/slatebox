@@ -1,0 +1,395 @@
+// The projects core (server/projects/core.mjs) on in-memory collections: making drives and folders
+// (the depth cap), who may move which slate where, deleting a drive (the owner's slates deleted,
+// everyone else's given back), sharing and unsharing a person, a team, an address and the link (and
+// rotating it), team grants, a removed member, invitations claimed at sign-in, and the activity log.
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { projectWorld } from './project-test-stores.mjs'
+import { accessIds } from '../web/app/server/projects/core.mjs'
+import { createProjectsApi } from '../web/app/server/projects/api.mjs'
+import { createProjectsHost } from '../web/app/server/projects/host.mjs'
+
+const refuses = (promise, status, code) => assert.rejects(promise, (error) => error.status === status && (!code || error.code === code))
+
+async function withDrive(w = projectWorld()) {
+  const drive = await w.core.create(w.person('ana'), { name: '  Platform   team ', description: 'Our architecture' })
+  return { w, drive }
+}
+
+test('a person makes a drive: they own it, it is their team\'s, and the log says so', async () => {
+  const { w, drive } = await withDrive()
+  assert.equal(drive.name, 'Platform team')
+  assert.equal(drive.kind, 'drive')
+  assert.equal(drive.role, 'owner')
+  assert.equal(drive.orgId, 't1')
+  assert.equal(drive.driveId, drive.projectId)
+  assert.equal(drive.url, `https://app.example/projects/${drive.projectId}`)
+  assert.deepEqual(w.recorded.map((e) => e.action), ['project.created'])
+  assert.deepEqual(w.recorded[0].target, { type: 'project', id: drive.projectId, name: 'Platform team' })
+  const fay = await w.core.create(w.person('fay'), { name: 'Mine' })
+  assert.equal(fay.orgId, null, 'someone in no team has a personal drive')
+})
+
+test('a guest account cannot make projects; names are checked', async () => {
+  const w = projectWorld()
+  await refuses(w.core.create(w.person('gus'), { name: 'x' }), 403, 'registration_required')
+  await refuses(w.core.create(w.person('ana'), { name: '   ' }), 400)
+  await refuses(w.core.create(w.person('ana'), { name: 'x'.repeat(121) }), 400)
+  await refuses(w.core.create(w.person('ana'), { name: 'ok', color: 99 }), 400)
+})
+
+test('folders nest at most three deep, and only an editor makes them', async () => {
+  const { w, drive } = await withDrive()
+  const a = await w.core.create(w.person('ana'), { name: 'A', parentId: drive.projectId })
+  const b = await w.core.create(w.person('ana'), { name: 'B', parentId: a.projectId })
+  const c = await w.core.create(w.person('ana'), { name: 'C', parentId: b.projectId })
+  assert.deepEqual([a.depth, b.depth, c.depth], [1, 2, 3])
+  assert.equal(c.driveId, drive.projectId)
+  await refuses(w.core.create(w.person('ana'), { name: 'D', parentId: c.projectId }), 400)
+  // no role: as if it did not exist; a viewer: refused
+  await refuses(w.core.create(w.person('ben'), { name: 'x', parentId: drive.projectId }), 404)
+  await w.core.share(w.person('ana'), drive.projectId, { userId: 'ben', role: 'viewer' })
+  await refuses(w.core.create(w.person('ben'), { name: 'x', parentId: drive.projectId }), 403)
+  await w.core.share(w.person('ana'), drive.projectId, { userId: 'ben', role: 'editor' })
+  const byBen = await w.core.create(w.person('ben'), { name: 'Ben\'s', parentId: a.projectId })
+  assert.equal(byBen.role, 'editor')
+  assert.ok(w.recorded.some((e) => e.action === 'project.folder_created'))
+})
+
+test('get answers the way up, the folders in it and its slate count', async () => {
+  const { w, drive } = await withDrive()
+  const a = await w.core.create(w.person('ana'), { name: 'A', parentId: drive.projectId })
+  const b = await w.core.create(w.person('ana'), { name: 'B', parentId: a.projectId })
+  await w.slate('s1', 'ana', b.projectId)
+  const got = await w.core.get(w.person('ana'), b.projectId)
+  assert.deepEqual(got.path.map((p) => p.projectId), [drive.projectId, a.projectId])
+  assert.equal(got.slateCount, 1)
+  assert.equal(got.ownerName, 'Ana Lima')
+  const top = await w.core.get(w.person('ana'), drive.projectId)
+  assert.deepEqual(top.folders.map((f) => f.name), ['A'])
+  await refuses(w.core.get(w.person('ben'), drive.projectId), 404)
+  await refuses(w.core.get(w.person('ana'), 'nope'), 404)
+})
+
+test('list: owned drives first, then shared, each with the caller\'s role; parentId lists folders', async () => {
+  const w = projectWorld()
+  const mine = await w.core.create(w.person('ben'), { name: 'Zeta' })
+  const theirs = await w.core.create(w.person('ana'), { name: 'Alpha' })
+  await w.core.share(w.person('ana'), theirs.projectId, { userId: 'ben', role: 'commenter' })
+  const listed = await w.core.list(w.person('ben'))
+  assert.deepEqual(listed.map((p) => [p.name, p.role]), [['Zeta', 'owner'], ['Alpha', 'commenter']])
+  await w.core.create(w.person('ana'), { name: 'F', parentId: theirs.projectId })
+  assert.deepEqual((await w.core.list(w.person('ben'), { parentId: theirs.projectId })).map((p) => p.name), ['F'])
+  assert.equal(mine.role, 'owner')
+})
+
+test('update: managers rename the drive, editors rename folders, managers move folders within the depth cap', async () => {
+  const { w, drive } = await withDrive()
+  const a = await w.core.create(w.person('ana'), { name: 'A', parentId: drive.projectId })
+  const b = await w.core.create(w.person('ana'), { name: 'B', parentId: a.projectId })
+  const c = await w.core.create(w.person('ana'), { name: 'C', parentId: drive.projectId })
+  await w.core.share(w.person('ana'), drive.projectId, { userId: 'ben', role: 'editor' })
+  await refuses(w.core.update(w.person('ben'), drive.projectId, { name: 'Renamed' }), 403)
+  assert.equal((await w.core.update(w.person('ben'), a.projectId, { name: 'A2' })).name, 'A2')
+  await refuses(w.core.update(w.person('ben'), b.projectId, { parentId: c.projectId }), 403)
+  await w.core.share(w.person('ana'), drive.projectId, { userId: 'ben', role: 'manager' })
+  const renamed = await w.core.update(w.person('ben'), drive.projectId, { name: 'Platform' })
+  assert.equal(renamed.name, 'Platform')
+  assert.ok(w.recorded.some((e) => e.action === 'project.renamed' && e.details.from === 'Platform team' && e.details.to === 'Platform'))
+  // a folder moves with its folders; never into itself, never past the cap, never to another drive
+  const moved = await w.core.update(w.person('ben'), a.projectId, { parentId: c.projectId })
+  assert.equal(moved.depth, 2)
+  assert.equal((await w.projects.findOne({ _id: b.projectId })).depth, 3)
+  await refuses(w.core.update(w.person('ana'), c.projectId, { parentId: b.projectId }), 400)
+  const other = await w.core.create(w.person('ana'), { name: 'Other' })
+  await refuses(w.core.update(w.person('ana'), c.projectId, { parentId: other.projectId }), 400)
+  await refuses(w.core.update(w.person('ana'), drive.projectId, { parentId: other.projectId }), 400)
+  // B is three deep now: nothing more goes under it
+  await refuses(w.core.create(w.person('ana'), { name: 'D', parentId: b.projectId }), 400)
+})
+
+test('update: recipes pause for a whole project, by a manager, in the log', async () => {
+  const { w, drive } = await withDrive()
+  const folder = await w.core.create(w.person('ana'), { name: 'F', parentId: drive.projectId })
+  await w.core.share(w.person('ana'), drive.projectId, { userId: 'ben', role: 'editor' })
+  await refuses(w.core.update(w.person('ben'), drive.projectId, { recipesPaused: true }), 403)
+  await refuses(w.core.update(w.person('ana'), folder.projectId, { recipesPaused: true }), 400)
+  const paused = await w.core.update(w.person('ana'), drive.projectId, { recipesPaused: true })
+  assert.equal(paused.recipesPaused, true)
+  assert.ok(w.recorded.some((e) => e.action === 'project.recipes_paused' && e.details.mode === 'paused'))
+})
+
+test('moving slates: the owner into what they edit, out of anything; a manager within their drive', async () => {
+  const { w, drive } = await withDrive()
+  const other = await w.core.create(w.person('cy'), { name: 'Cy\'s' })
+  const folder = await w.core.create(w.person('ana'), { name: 'F', parentId: drive.projectId })
+  await w.slate('b1', 'ben')
+  // Ben has no role in Ana's drive: he cannot put his slate there
+  await refuses(w.core.moveSlate(w.person('ben'), 's-b1', drive.projectId), 404)
+  await w.core.share(w.person('ana'), drive.projectId, { userId: 'ben', role: 'viewer' })
+  await refuses(w.core.moveSlate(w.person('ben'), 's-b1', drive.projectId), 403)
+  await w.core.share(w.person('ana'), drive.projectId, { userId: 'ben', role: 'editor' })
+  assert.deepEqual(await w.core.moveSlate(w.person('ben'), 's-b1', folder.projectId), { shareId: 's-b1', projectId: folder.projectId, moved: true })
+  const moved = await w.slates.findOne({ _id: 'b1' })
+  assert.equal(moved.projectId, folder.projectId)
+  assert.equal(moved.userId, 'ben', 'putting a slate in a drive never changes its owner')
+  assert.equal(moved.sharingRevision, 1, 'who can open it changed')
+  const entry = w.recorded.find((e) => e.action === 'project.slate_moved')
+  assert.deepEqual(entry.details, { projectId: 'none', targetProjectId: folder.projectId, mode: 'into a project' })
+  // between drives: an editor of both
+  await refuses(w.core.moveSlate(w.person('ben'), 's-b1', other.projectId), 404)
+  await w.core.share(w.person('cy'), other.projectId, { userId: 'ben', role: 'editor' })
+  await w.core.moveSlate(w.person('ben'), 's-b1', other.projectId)
+  assert.equal((await w.slates.findOne({ _id: 'b1' })).projectId, other.projectId)
+  // the owner takes it out even after losing their role
+  await w.core.share(w.person('cy'), other.projectId, { userId: 'ben', role: 'none' })
+  await w.core.moveSlate(w.person('ben'), 's-b1', null)
+  assert.equal((await w.slates.findOne({ _id: 'b1' })).projectId, null)
+  // a manager moves anyone's slate within the drive, or gives it back, but not to another drive
+  await w.slate('e1', 'eve', drive.projectId)
+  await w.core.share(w.person('ana'), drive.projectId, { userId: 'cy', role: 'manager' })
+  await w.core.moveSlate(w.person('cy'), 's-e1', folder.projectId)
+  assert.equal((await w.slates.findOne({ _id: 'e1' })).projectId, folder.projectId)
+  await refuses(w.core.moveSlate(w.person('cy'), 's-e1', other.projectId), 403)
+  await w.core.moveSlate(w.person('cy'), 's-e1', null)
+  assert.equal((await w.slates.findOne({ _id: 'e1' })).projectId, null)
+  // an editor cannot move someone else's slate
+  await w.slate('e2', 'eve', drive.projectId)
+  await refuses(w.core.moveSlate(w.person('ben'), 's-e2', null), 403)
+  // a slate the caller neither owns nor can see in a drive is not found
+  await w.slate('z1', 'eve')
+  await refuses(w.core.moveSlate(w.person('ben'), 's-z1', drive.projectId), 404)
+  assert.deepEqual(await w.core.moveSlate(w.person('ana'), 's-e2', drive.projectId), { shareId: 's-e2', projectId: drive.projectId, moved: false })
+})
+
+test('deleting a drive: the owner only; their slates are deleted, everyone else\'s go back; hooks hear it', async () => {
+  const { w, drive } = await withDrive()
+  const folder = await w.core.create(w.person('ana'), { name: 'F', parentId: drive.projectId })
+  await w.core.share(w.person('ana'), drive.projectId, { userId: 'ben', role: 'manager' })
+  await w.core.share(w.person('ana'), drive.projectId, { link: 'viewer' })
+  await w.slate('a1', 'ana', drive.projectId)
+  await w.slate('a2', 'ana', folder.projectId)
+  await w.slate('b1', 'ben', folder.projectId)
+  await w.slate('a3', 'ana')
+  await refuses(w.core.remove(w.person('ben'), drive.projectId), 403)
+  const preview = await w.core.remove(w.person('ana'), drive.projectId, { preview: true })
+  assert.deepEqual(preview, { projectId: drive.projectId, deleted: false, folders: 1, deletedSlates: 2, returnedSlates: 1 })
+  assert.equal(await w.projects.countDocuments({}), 2, 'a preview changes nothing')
+  const done = await w.core.remove(w.person('ana'), drive.projectId)
+  assert.equal(done.deleted, true)
+  assert.deepEqual([done.deletedSlates, done.returnedSlates], [2, 1])
+  assert.deepEqual(w.deleted.sort(), ['s-a1', 's-a2'])
+  const ben = await w.slates.findOne({ _id: 'b1' })
+  assert.equal(ben.projectId, null)
+  assert.equal(ben.userId, 'ben')
+  assert.ok(await w.slates.findOne({ _id: 'a3' }), 'slates outside the drive stay')
+  assert.equal(await w.projects.countDocuments({}), 0)
+  assert.equal(await w.projectAccess.countDocuments({}), 0)
+  assert.deepEqual(w.hookCalls.deleted, [drive.projectId])
+  assert.ok(w.recorded.some((e) => e.action === 'project.deleted' && e.details.count === 2))
+})
+
+test('deleting a folder: empty by a manager; with contents by the owner, which move up or where named', async () => {
+  const { w, drive } = await withDrive()
+  const a = await w.core.create(w.person('ana'), { name: 'A', parentId: drive.projectId })
+  const b = await w.core.create(w.person('ana'), { name: 'B', parentId: a.projectId })
+  const c = await w.core.create(w.person('ana'), { name: 'C', parentId: b.projectId })
+  const empty = await w.core.create(w.person('ana'), { name: 'Empty', parentId: drive.projectId })
+  await w.slate('s1', 'ana', a.projectId)
+  await w.core.share(w.person('ana'), drive.projectId, { userId: 'ben', role: 'manager' })
+  await refuses(w.core.remove(w.person('ben'), a.projectId), 403)
+  assert.equal((await w.core.remove(w.person('ben'), empty.projectId)).deleted, true)
+  const done = await w.core.remove(w.person('ana'), a.projectId)
+  assert.equal(done.movedSlates, 1)
+  assert.equal((await w.slates.findOne({ _id: 's1' })).projectId, drive.projectId)
+  const bAfter = await w.projects.findOne({ _id: b.projectId })
+  assert.deepEqual([bAfter.parentId, bAfter.depth], [drive.projectId, 1])
+  assert.equal((await w.projects.findOne({ _id: c.projectId })).depth, 2)
+  assert.equal(await w.projects.findOne({ _id: a.projectId }), null)
+  // contents never move into the folder being deleted
+  await refuses(w.core.remove(w.person('ana'), b.projectId, { moveContentsTo: c.projectId }), 400)
+  assert.ok(w.recorded.some((e) => e.action === 'project.folder_deleted'))
+})
+
+test('sharing a person: managers share up to manager; the owner is never granted; none takes it away', async () => {
+  const { w, drive } = await withDrive()
+  const view = await w.core.share(w.person('ana'), drive.projectId, { userId: 'ben', role: 'editor' })
+  assert.deepEqual(view.grants.map((g) => [g.kind, g.userId, g.role, g.name]), [['user', 'ben', 'editor', 'Ben']])
+  assert.equal((await w.projectAccess.findOne({ _id: accessIds.user('ben', drive.projectId) })).role, 'editor')
+  assert.equal((await w.projects.findOne({ _id: drive.projectId })).sharingRevision, 1)
+  // an editor may not share; a manager may, up to manager
+  await refuses(w.core.share(w.person('ben'), drive.projectId, { userId: 'cy', role: 'viewer' }), 403)
+  await w.core.share(w.person('ana'), drive.projectId, { userId: 'ben', role: 'manager' })
+  await w.core.share(w.person('ben'), drive.projectId, { userId: 'cy', role: 'manager' })
+  await refuses(w.core.share(w.person('ben'), drive.projectId, { userId: 'cy', role: 'owner' }), 400)
+  await refuses(w.core.share(w.person('ben'), drive.projectId, { userId: 'ana', role: 'viewer' }), 400)
+  await refuses(w.core.share(w.person('ana'), drive.projectId, { userId: 'gus', role: 'viewer' }), 404)
+  // cross-team people may be invited to a drive
+  await w.core.share(w.person('ana'), drive.projectId, { userId: 'eve', role: 'viewer' })
+  assert.equal(await w.access.roleFor({ _id: 'eve' }, drive.projectId), 'viewer')
+  // unsharing: the grant goes, the hook hears who lost access, the log keeps it
+  await w.core.share(w.person('ana'), drive.projectId, { userId: 'cy', role: 'none' })
+  assert.equal(await w.access.roleFor({ _id: 'cy' }, drive.projectId), null)
+  assert.deepEqual(w.hookCalls.accessLost.at(-1), { projectId: drive.projectId, userId: 'cy', orgId: null })
+  const entries = w.recorded.filter((e) => e.action === 'project.access_changed')
+  assert.deepEqual(entries.at(-1).details, { role: 'none', mode: 'person', projectId: drive.projectId })
+  // lowering an editor to viewer is a loss of access to what ran for them
+  await w.core.share(w.person('ana'), drive.projectId, { userId: 'ben', role: 'viewer' })
+  assert.deepEqual(w.hookCalls.accessLost.at(-1), { projectId: drive.projectId, userId: 'ben', orgId: null })
+})
+
+test('a removed person\'s slates in the drive stay there, and stay theirs', async () => {
+  const { w, drive } = await withDrive()
+  await w.core.share(w.person('ana'), drive.projectId, { userId: 'ben', role: 'editor' })
+  await w.slate('b1', 'ben')
+  await w.core.moveSlate(w.person('ben'), 's-b1', drive.projectId)
+  await w.core.share(w.person('ana'), drive.projectId, { userId: 'ben', role: 'none' })
+  const slate = await w.slates.findOne({ _id: 'b1' })
+  assert.deepEqual([slate.projectId, slate.userId], [drive.projectId, 'ben'])
+})
+
+test('sharing a team: one\'s own team, by an admin or someone who may make team slates; members get it', async () => {
+  const { w, drive } = await withDrive()
+  await refuses(w.core.share(w.person('ana'), drive.projectId, { orgId: 't1', role: 'viewer' }), 403)
+  await w.core.share(w.person('ana'), drive.projectId, { userId: 'ben', role: 'manager' })
+  await refuses(w.core.share(w.person('ben'), drive.projectId, { orgId: 't2', role: 'viewer' }), 403)
+  const view = await w.core.share(w.person('ben'), drive.projectId, { orgId: 't1', role: 'commenter' })
+  assert.deepEqual(view.grants.find((g) => g.kind === 'team'), { kind: 'team', role: 'commenter', userId: null, orgId: 't1', email: null, pending: false, name: 'Acme', granted: '2026-11-27T12:00:00.000Z' })
+  assert.equal(await w.access.roleFor({ _id: 'cy' }, drive.projectId), 'commenter')
+  assert.equal(await w.access.roleFor({ _id: 'eve' }, drive.projectId), null)
+  // a member who leaves the team leaves the team's access with it
+  await w.users.updateOne({ _id: 'cy' }, { $set: { orgId: null } })
+  assert.equal(await w.access.roleFor({ _id: 'cy' }, drive.projectId), null)
+  await w.core.share(w.person('ben'), drive.projectId, { orgId: 't1', role: 'none' })
+  assert.deepEqual(w.hookCalls.accessLost.at(-1), { projectId: drive.projectId, userId: null, orgId: 't1' })
+})
+
+test('the link: a role and a 24-character key; the same key until rotated; none turns it off', async () => {
+  const { w, drive } = await withDrive()
+  const first = await w.core.share(w.person('ana'), drive.projectId, { link: 'viewer' })
+  assert.equal(first.link.role, 'viewer')
+  const key = first.link.url.split('/p/')[1]
+  assert.equal(key.length, 24)
+  assert.deepEqual(await w.core.resolveLink(key), { projectId: drive.projectId, role: 'viewer' })
+  const again = await w.core.share(w.person('ana'), drive.projectId, { link: 'editor' })
+  assert.equal(again.link.url, first.link.url, 'changing the role keeps the link')
+  const rotated = await w.core.share(w.person('ana'), drive.projectId, { link: 'editor', rotate: true })
+  assert.notEqual(rotated.link.url, first.link.url)
+  assert.equal(await w.core.resolveLink(key), null, 'the old key stops working')
+  assert.equal(await w.access.roleFor({ _id: 'zed' }, drive.projectId, { linkKey: key }), null)
+  await refuses(w.core.share(w.person('ana'), drive.projectId, { link: 'manager' }), 400)
+  const off = await w.core.share(w.person('ana'), drive.projectId, { link: 'none' })
+  assert.deepEqual(off.link, { role: 'none', url: null })
+  assert.ok(w.recorded.some((e) => e.action === 'project.link_changed' && e.details.mode === 'link'))
+  await refuses(w.core.share(w.person('ana'), drive.projectId, { link: 'viewer', userId: 'ben', role: 'viewer' }), 400)
+})
+
+test('an address: a person with that address is granted; one with no account gets an invitation, claimed at sign-in', async () => {
+  const { w, drive } = await withDrive()
+  const known = await w.core.share(w.person('ana'), drive.projectId, { email: 'BEN@example.com ', role: 'editor' })
+  assert.equal(known.grants[0].userId, 'ben')
+  const invited = await w.core.share(w.person('ana'), drive.projectId, { email: 'new@example.com', role: 'commenter' })
+  const pending = invited.grants.find((g) => g.pending)
+  assert.deepEqual([pending.email, pending.role, pending.userId], ['new@example.com', 'commenter', null])
+  await refuses(w.core.share(w.person('ana'), drive.projectId, { email: 'not-an-address', role: 'viewer' }), 400)
+  // signing in unverified claims nothing; verified, the invitation becomes a grant
+  await w.users.insertOne({ _id: 'neo', orgId: 't9', emails: [{ address: 'new@example.com', verified: false }] })
+  assert.equal(await w.core.claimInvites(await w.users.findOne({ _id: 'neo' })), 0)
+  await w.users.updateOne({ _id: 'neo' }, { $set: { emails: [{ address: 'New@Example.com', verified: true }] } })
+  assert.equal(await w.core.claimInvites(await w.users.findOne({ _id: 'neo' })), 1)
+  assert.equal(await w.access.roleFor({ _id: 'neo' }, drive.projectId), 'commenter')
+  assert.equal((await w.core.getAccess(w.person('ana'), drive.projectId)).grants.filter((g) => g.pending).length, 0)
+})
+
+test('only managers read who a project is shared with', async () => {
+  const { w, drive } = await withDrive()
+  await w.core.share(w.person('ana'), drive.projectId, { userId: 'ben', role: 'editor' })
+  await refuses(w.core.getAccess(w.person('ben'), drive.projectId), 403)
+  const view = await w.core.getAccess(w.person('ana'), drive.projectId)
+  assert.deepEqual(view.owner, { userId: 'ana', name: 'Ana Lima' })
+})
+
+test('a team admin manages the team\'s drives; a token never does', async () => {
+  const { w, drive } = await withDrive()
+  assert.equal((await w.core.get(w.person('dee'), drive.projectId)).role, 'manager')
+  await w.core.share(w.person('dee'), drive.projectId, { userId: 'cy', role: 'viewer' })
+  await refuses(w.core.get(w.token('dee'), drive.projectId), 404)
+})
+
+test('listing a project\'s slates: nested by default, whoever owns them, filtered by name', async () => {
+  const { w, drive } = await withDrive()
+  const folder = await w.core.create(w.person('ana'), { name: 'F', parentId: drive.projectId })
+  await w.slate('a1', 'ana', drive.projectId, { lastSaved: 3 })
+  await w.slate('b1', 'ben', folder.projectId, { lastSaved: 5, options: { name: 'Service map' } })
+  await w.slate('x1', 'ana', null)
+  await w.core.share(w.person('ana'), drive.projectId, { userId: 'cy', role: 'viewer' })
+  assert.deepEqual((await w.core.listSlates(w.person('cy'), drive.projectId)).map((s) => s._id), ['b1', 'a1'])
+  assert.deepEqual((await w.core.listSlates(w.person('cy'), drive.projectId, { nested: false })).map((s) => s._id), ['a1'])
+  assert.deepEqual((await w.core.listSlates(w.person('cy'), drive.projectId, { q: 'service' })).map((s) => s._id), ['b1'])
+  await refuses(w.core.listSlates(w.person('eve'), drive.projectId), 404)
+})
+
+test('someone who leaves: their drives go by the drive rule, their grants go, the hooks hear it', async () => {
+  const { w, drive } = await withDrive()
+  const bens = await w.core.create(w.person('ben'), { name: 'Ben\'s' })
+  await w.core.share(w.person('ben'), bens.projectId, { userId: 'ana', role: 'editor' })
+  await w.slate('a1', 'ana')
+  await w.core.moveSlate(w.person('ana'), 's-a1', bens.projectId)
+  await w.slate('b1', 'ben', bens.projectId)
+  await w.core.share(w.person('ana'), drive.projectId, { userId: 'ben', role: 'editor' })
+  assert.deepEqual(await w.core.personGone('ben'), { drives: 1 })
+  assert.equal(await w.projects.findOne({ _id: bens.projectId }), null)
+  assert.equal((await w.slates.findOne({ _id: 'a1' })).projectId, null, 'Ana\'s slate went back to her')
+  assert.deepEqual(w.deleted, ['s-b1'])
+  assert.equal(await w.access.roleFor({ _id: 'ben' }, drive.projectId), null)
+  assert.ok(w.hookCalls.deleted.includes(bens.projectId))
+  assert.ok(w.hookCalls.accessLost.some((e) => e.userId === 'ben' && e.projectId === drive.projectId))
+})
+
+test('a team made for someone takes their projects with it', async () => {
+  const w = projectWorld()
+  const drive = await w.core.create(w.person('fay'), { name: 'Fay\'s' })
+  await w.core.create(w.person('fay'), { name: 'F', parentId: drive.projectId })
+  await w.core.ownerJoinedTeam('fay', 'tNew')
+  assert.deepEqual((await w.projects.find({ ownerId: 'fay' }).toArray()).map((p) => p.orgId), ['tNew', 'tNew'])
+})
+
+test('createSlate and ensureFolder (the interface recipes use): private to the drive, owned by the person, the drive\'s team\'s', async () => {
+  const { w, drive } = await withDrive()
+  await w.core.share(w.person('ana'), drive.projectId, { userId: 'eve', role: 'editor' })
+  const api = createProjectsApi(w.core)
+  const folder = await api.ensureFolder('eve', drive.projectId, 'Pull requests')
+  const same = await api.ensureFolder('eve', drive.projectId, 'Pull requests')
+  assert.equal(folder._id, same._id, 'idempotent by parent and name')
+  const made = await api.createSlate('eve', folder._id, { name: 'Service map', source: 'recipe' })
+  const row = await w.slates.findOne({ _id: made.slateId })
+  assert.deepEqual([row.userId, row.orgId, row.projectId, row.options.isPrivate, row.options.name], ['eve', 't1', folder._id, true, 'Service map'])
+  assert.equal(w.created.at(-1).source, 'recipe')
+  assert.equal(await api.roleFor('eve', folder._id), 'editor')
+  assert.equal(await api.roleFor('dee', drive.projectId), null, 'the interface runs as a token: no team admin rights')
+  assert.deepEqual((await api.listSlates(drive.projectId)).map((s) => s.shareId), [made.shareId])
+  await api.moveSlate('eve', made.shareId, drive.projectId)
+  assert.equal((await w.slates.findOne({ _id: made.slateId })).projectId, drive.projectId)
+  assert.equal(await api.isRecipesPaused(folder._id), false)
+  await assert.rejects(api.setRecipesPaused('eve', drive.projectId, true), { status: 403 })
+  await api.setRecipesPaused('ana', drive.projectId, true)
+  assert.equal(await api.isRecipesPaused(folder._id), true)
+  await assert.rejects(api.createSlate('cy', drive.projectId, { name: 'x' }), { status: 404 })
+  assert.equal((await api.get(drive.projectId)).name, 'Platform team')
+})
+
+test('the host: enterprise holds the interface before the core exists; hooks added early are kept', async () => {
+  const host = createProjectsHost()
+  const heard = []
+  host.api.onDeleted((id) => heard.push(id))
+  await assert.rejects(host.api.get('x'), /not ready/)
+  const w = projectWorld()
+  // a core made with the host's hooks, as server/projects/meteor.js makes it
+  const { createProjectsCore } = await import('../web/app/server/projects/core.mjs')
+  const core = createProjectsCore({ stores: { projects: w.projects, projectAccess: w.projectAccess, slates: w.slates, users: w.users }, access: w.access, hooks: host.hooks, newId: (() => { let i = 0; return () => `h${(i += 1)}` })(), generateKey: () => 'k'.repeat(24) })
+  host.bind(core)
+  const drive = await core.create({ kind: 'person', userId: 'ana' }, { name: 'Bound' })
+  assert.equal((await host.api.get(drive.projectId)).name, 'Bound')
+  await core.remove({ kind: 'person', userId: 'ana' }, drive.projectId)
+  assert.deepEqual(heard, [drive.projectId])
+})

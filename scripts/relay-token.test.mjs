@@ -242,9 +242,9 @@ test('the canvas read and the relay share one open rule', async () => {
     if (opened?.slate) assert.equal(access.code, 'ok', `${who} ${key}`)
     else assert.notEqual(access.code, 'ok', `${who} ${key}`)
   }
-  // slates.get answers through openSlateRole.
+  // slates.get answers through openSlateRole (with a drive link's key the address carried, server/projects).
   const source = app('server/methods/slates.js')
-  assert.match(source, /const opened = await openSlateRole\(slateOpenStores, opts\.shareId, user\)/)
+  assert.match(source, /const opened = await openSlateRole\(slateOpenStores, opts\.shareId, user, \{ projectKey: opts\.projectKey \|\| null \}\)/)
   const method = app('server/methods/collaborators.js')
   assert.match(method, /relayAccess\(relayStores/)
   assert.match(method, /\.\.\.slateOpenStores/)

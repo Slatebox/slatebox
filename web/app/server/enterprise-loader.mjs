@@ -16,6 +16,11 @@
 //   api.audit(entry, options)          an entry in the activity log (server/audit/recorder.mjs),
 //                                      for what happens outside an action (its actions are
 //                                      recorded by the registry)
+//   api.onProjectDeleted(fn)           fn(projectId) after a drive is deleted (its slates have gone
+//                                      back to their owners or been deleted by then)
+//   api.onProjectAccessLost(fn)        fn({ projectId, userId, orgId }) after someone loses their
+//                                      role in a drive (unshared, lowered, left the team, deleted)
+// and reads projects (drives of slates) through context.projects (server/projects/api.mjs).
 // On Slatebox Cloud every action, method and route is checked again when it is called, so a Cloud
 // key that ends while the server runs locks them then, not at the next restart (a self-hosted
 // install has no key to end). context.isUnlocked() lets enterprise code check the same for what the
@@ -23,10 +28,11 @@
 import { agentInviteKilled, editionOf } from '../imports/api/common/edition.mjs'
 import { enterpriseAccess, LICENSE_WORDS } from './enterprise-license.mjs'
 import { audit } from './audit/recorder.mjs'
+import { projectsHost } from './projects/host.mjs'
 
 const ROUTE_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
 
-export function createEnterpriseHost() {
+export function createEnterpriseHost({ projectHooks = { deleted: [], accessLost: [] } } = {}) {
   const actions = []
   const methods = {}
   const routes = []
@@ -54,6 +60,14 @@ export function createEnterpriseHost() {
       startups.push(fn)
     },
     audit: (entry, options) => audit.record(entry, options),
+    onProjectDeleted(fn) {
+      if (typeof fn !== 'function') throw new Error('enterprise: onProjectDeleted takes a function')
+      projectHooks.deleted.push(fn)
+    },
+    onProjectAccessLost(fn) {
+      if (typeof fn !== 'function') throw new Error('enterprise: onProjectAccessLost takes a function')
+      projectHooks.accessLost.push(fn)
+    },
   })
   const isEmpty = () => !actions.length && !Object.keys(methods).length && !routes.length && !startups.length
   return { actions, methods, routes, startups, api, isEmpty }
@@ -61,7 +75,7 @@ export function createEnterpriseHost() {
 
 // The server's one host. server/enterprise.js fills it; server/actions/mount.js adds its actions
 // to the app registry. Both run at import time, enterprise.js first (server/main.js).
-export const enterpriseHost = createEnterpriseHost()
+export const enterpriseHost = createEnterpriseHost({ projectHooks: projectsHost.hooks })
 
 const isMissingModule = (error) =>
   error?.code === 'MODULE_NOT_FOUND' || /Cannot find module/.test(String(error?.message || ''))
@@ -114,6 +128,9 @@ function guardedApi(api, current) {
     },
     onStartup: (fn) => api.onStartup(fn),
     audit: guard((entry, options) => api.audit(entry, options)),
+    // A hook does nothing while Cloud's key has ended (it never fails the delete that fires it).
+    onProjectDeleted: (fn) => api.onProjectDeleted((...args) => (current().unlocked ? fn(...args) : undefined)),
+    onProjectAccessLost: (fn) => api.onProjectAccessLost((...args) => (current().unlocked ? fn(...args) : undefined)),
   })
 }
 
@@ -124,13 +141,15 @@ function guardedApi(api, current) {
  * @param {() => object} options.load  returns the enterprise server module (a synchronous require)
  * @param {ReturnType<typeof createEnterpriseHost>} [options.host]
  * @param {(text: string) => void} [options.log]
+ * @param {object} [options.projects]  what enterprise code reads of projects (context.projects;
+ *   server/projects/api.mjs), bound to the core at start
  * @param {(now?: number) => ReturnType<typeof enterpriseAccess>} [options.access]
  *   whether enterprise code is unlocked now (server/enterprise-license.mjs; the install's own
  *   settings, environment and Slatebox LLC's keys by default)
  * @returns {{ edition: 'cloud'|'self-host', loaded: boolean, reason?: string, name?: string,
  *             access: ReturnType<typeof enterpriseAccess>, features: string[] }}
  */
-export function loadEnterprise({ settings, load, host = enterpriseHost, log = () => {}, access = (now) => enterpriseAccess({ settings, env: process.env, now }) }) {
+export function loadEnterprise({ settings, load, host = enterpriseHost, log = () => {}, access = (now) => enterpriseAccess({ settings, env: process.env, now }), projects = projectsHost.api }) {
   const edition = editionOf(settings)
   const first = access()
   if (!first.unlocked) return { edition, loaded: false, reason: 'locked', access: first, features: [] }
@@ -156,6 +175,6 @@ export function loadEnterprise({ settings, load, host = enterpriseHost, log = ()
   }
   const api = guardedApi(host.api, current)
   const isUnlocked = () => current().unlocked === true
-  mod.register(api, { edition, settings, unlocked: true, via: first.via, features, agentInvite: features.includes('agents.invite'), isUnlocked })
+  mod.register(api, { edition, settings, unlocked: true, via: first.via, features, agentInvite: features.includes('agents.invite'), isUnlocked, projects })
   return { edition, loaded: true, name: mod.manifest?.name || 'enterprise', access: first, features }
 }

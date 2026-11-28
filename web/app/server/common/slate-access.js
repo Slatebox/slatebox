@@ -7,8 +7,10 @@ import CONSTANTS from '../../imports/api/common/constants'
 import { GuestViews, SlateAccess, Slates } from '../../imports/api/common/models'
 import { resolveSlateRole, slateVisibility } from '../methods/slate-role.mjs'
 import { canEditNativeSlate } from '../methods/native-slate-save.mjs'
+import { slateProjectRoleOf } from '../projects/access-meteor'
 
-const slateFields = { _id: 1, userId: 1, orgId: 1, shareId: 1, options: 1, sharingRevision: 1 }
+// A slate in a project (projectId) gives the project's people its role on top of its own sharing.
+const slateFields = { _id: 1, userId: 1, orgId: 1, shareId: 1, options: 1, sharingRevision: 1, projectId: 1 }
 const isTeamAdmin = (userId) => AuthManager.userHasClaim(userId, [CONSTANTS.claims.admin._id])
 
 export const isId = (value) => typeof value === 'string' && value.length > 0 && value.length <= 128
@@ -18,6 +20,15 @@ export async function findSlate({ slateId, shareId }) {
   if (isId(shareId)) return Slates.findOneAsync({ shareId }, { fields: slateFields })
   return null
 }
+
+// A slate a caller handed in may have been read without projectId: read it, so a project's people
+// are never refused at one door and admitted at another.
+async function withProjectId(slate) {
+  if (Object.hasOwn(slate, 'projectId') || !isId(slate._id)) return slate
+  const stored = await Slates.findOneAsync({ _id: slate._id }, { fields: { projectId: 1 } })
+  return { ...slate, projectId: stored?.projectId ?? null }
+}
+const projectRoleFor = async (slate, user) => slateProjectRoleOf(await withProjectId(slate), user)
 
 async function viewer(userId) {
   if (!isId(userId)) return null
@@ -36,7 +47,7 @@ export async function canReadSlate(userId, slate) {
   const grants = await SlateAccess.find({ slateId: slate._id, type: slateVisibility(slate) }, {
     fields: { slateId: 1, type: 1, userId: 1, accessKey: 1, slateAccessPermissionId: 1 },
   }).fetchAsync()
-  return Boolean(resolveSlateRole(slate, user, isAdmin, grants))
+  return Boolean(resolveSlateRole(slate, user, isAdmin, grants, undefined, await projectRoleFor(slate, user)))
 }
 
 // Commenting follows the slate's sharing comment role (owner decision 2026-11-23): COMMENT or EDIT,
@@ -51,7 +62,7 @@ export async function canCommentSlate(userId, slate) {
   const grants = await SlateAccess.find({ slateId: slate._id, type: slateVisibility(slate) }, {
     fields: { slateId: 1, type: 1, userId: 1, accessKey: 1, slateAccessPermissionId: 1 },
   }).fetchAsync()
-  return ['COMMENT', 'EDIT'].includes(resolveSlateRole(slate, user, isAdmin, grants))
+  return ['COMMENT', 'EDIT'].includes(resolveSlateRole(slate, user, isAdmin, grants, undefined, await projectRoleFor(slate, user)))
 }
 
 export async function canEditSlate(userId, slate) {
@@ -60,8 +71,8 @@ export async function canEditSlate(userId, slate) {
   const user = await viewer(userId)
   if (!user) return false
   return Boolean(await canEditNativeSlate({
-    access: SlateAccess.rawCollection(), guestViews: GuestViews.rawCollection(), isTeamAdmin,
-  }, user, slate))
+    access: SlateAccess.rawCollection(), guestViews: GuestViews.rawCollection(), isTeamAdmin, projectRoleOf: slateProjectRoleOf,
+  }, user, await withProjectId(slate)))
 }
 
 export async function requireEditableSlate(userId, query) {

@@ -32,12 +32,13 @@ const isKey = (value) => typeof value === 'string' && value.length > 0 && value.
  * canvas was opened at (an invitation's key, the url name or the share id); it decides an
  * invitation's role, as it does for the save. visitor: the canvas's visitor id (a guest's
  * admission). readOnly: the caller asks for read only (a slate's picture never edits).
+ * projectKey: a drive link's key the canvas was opened with (?p=<key>).
  * Returns { code, role?, room?, slateId? }.
  */
-export async function relayAccess(stores, { user, shareId, routeKey, visitor, readOnly = false } = {}) {
+export async function relayAccess(stores, { user, shareId, routeKey, visitor, readOnly = false, projectKey = null } = {}) {
   const key = isKey(routeKey) ? routeKey : isKey(shareId) ? shareId : null
   if (!key) return { code: RELAY_CODES.invalidSlate }
-  const opened = await openSlateRole(stores, key, user || null)
+  const opened = await openSlateRole(stores, key, user || null, { projectKey })
   if (opened && opened.found === false) return { code: RELAY_CODES.notFound }
   if (!opened?.slate) return { code: RELAY_CODES.noAccess }
   const { slate } = opened
@@ -50,7 +51,7 @@ export async function relayAccess(stores, { user, shareId, routeKey, visitor, re
   if (!readOnly && opened.accessLevel === 'EDIT') {
     // The address as the canvas's save sends it (routeKey; the share id when none is named).
     const editable = await canEditNativeSlate(stores, user || null, slate, typeof visitor === 'string' ? visitor : undefined,
-      isKey(routeKey) ? routeKey : slate.shareId)
+      isKey(routeKey) ? routeKey : slate.shareId, { projectKey })
     if (editable && !(hasWorkshop(slate) && !user?._id)) role = 'write'
   }
   return { code: RELAY_CODES.ok, role, room, slateId: slate._id }

@@ -38,6 +38,17 @@ async function slateFilter(opts) {
       }
       break
     }
+    // A project's page: the slates in the projects the caller resolved and may open (projectIds,
+    // checked by getSlatesForUser against the person's role), whoever owns them.
+    case 'project': {
+      queryable.push({ projectId: { $in: Array.isArray(opts.projectIds) ? opts.projectIds : [] } })
+      if (opts.private) {
+        queryable.push({
+          $or: [{ 'options.isPrivate': true }, { 'options.isUnlisted': true }],
+        })
+      }
+      break
+    }
     default: {
       break
     }

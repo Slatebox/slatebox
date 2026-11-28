@@ -10,6 +10,7 @@ import { teamPerson } from '../common/team-person'
 import { removePersonalData } from '../profile/meteor'
 import { audit } from '../audit/recorder.mjs'
 import { personLabel } from '../audit/meteor'
+import { projectsCore } from '../projects/meteor'
 
 // A team member with canRemoveUsers removes another member: the slates that member owns in the
 // team, then the account, in one call. Never the owner, never yourself, and an admin only by an
@@ -36,6 +37,9 @@ Meteor.methods({
     await Comments.removeAsync({ slateId: { $in: ids } })
     await Messages.removeAsync({ slateId: { $in: ids } })
     await Slates.removeAsync({ _id: { $in: ids } })
+    // Their projects go by the project rule (others' slates in them go back to their owners), their
+    // shares in other projects end, and what ran on their behalf there is told (recipes stop).
+    await projectsCore.personGone(memberId)
     await Permissions.removeAsync({ userId: memberId, orgId })
     // About you: every fact they kept and their personalization switches
     await removePersonalData(memberId)

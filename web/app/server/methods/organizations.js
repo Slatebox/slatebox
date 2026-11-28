@@ -25,6 +25,7 @@ import {
 import AuthManager from '../../imports/api/common/AuthManager'
 import { removePersonalData } from '../profile/meteor'
 import { audit } from '../audit/recorder.mjs'
+import { projectsCore } from '../projects/meteor'
 
 const method = {}
 
@@ -49,6 +50,8 @@ export async function createTeamFor(user, teamName) {
     { $set: { isOrgOwner: true, orgId } }
   )
   await Slates.updateAsync({ userId: user._id }, { $set: { orgId } }, { multi: true })
+  // and their projects, the team's now too (server/projects)
+  await projectsCore.ownerJoinedTeam(user._id, orgId)
   await Permissions.insertAsync({ userId: user._id, orgId, claimId: CONSTANTS.claims.admin._id })
   await audit.record({ action: 'team.created', orgId, actor: { kind: 'person', userId: user._id }, target: { type: 'team', id: orgId, name } })
   return orgId
@@ -142,6 +145,9 @@ method[CONSTANTS.methods.organizations.delete] = async function deleteOrganizati
         userId: Meteor.userId(),
         orgId: user.orgId,
       })
+      // The owner's projects go by the project rule: what is left of theirs is deleted, everyone
+      // else's slates go back to them; their shares in other projects end.
+      await projectsCore.personGone(user._id)
 
       await GuestViews.removeAsync({ slateOrgId: user.orgId })
 

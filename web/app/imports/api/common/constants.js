@@ -559,6 +559,8 @@ const CONSTANTS = {
     slateOperationRuns: 'slateOperationRuns',
     transcripts: 'transcripts,',
     organizationSettings: 'organizationSettings',
+    // the drives a person has a role in, with their folders (server/projects/meteor.js)
+    projects: 'projects',
   },
   messageTypes: {
     system: 'system',

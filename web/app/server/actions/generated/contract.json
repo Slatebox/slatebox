@@ -16,7 +16,10 @@
     "library:review",
     "profile:read",
     "profile:write",
-    "audit:read"
+    "audit:read",
+    "projects:read",
+    "projects:write",
+    "projects:share"
   ],
   "errors": {
     "shape": "{\"error\":{\"code\",\"message\",\"details\"?,\"retryAfter\"?}} with the HTTP status",
@@ -1250,7 +1253,7 @@
     {
       "id": "slates.create",
       "title": "Create a slate",
-      "description": "Omitting kind creates a playable decision map from a brief of up to 160 characters. kind diagram makes editable notes and connections from your own steps (up to 1200 characters, connect two steps with → or ->) or from a named source. The token owner owns the new private slate.",
+      "description": "Omitting kind creates a playable decision map from a brief of up to 160 characters. kind diagram makes editable notes and connections from your own steps (up to 1200 characters, connect two steps with → or ->) or from a named source. The token owner owns the new private slate. With projectId it is made in that project or folder, where the project's people can open it.",
       "action": "slates.create",
       "toolset": "slates",
       "readOnly": false,
@@ -1274,7 +1277,8 @@
         "bodyParams": [
           "kind",
           "brief",
-          "source"
+          "source",
+          "projectId"
         ],
         "idempotencyKey": "required"
       },
@@ -1300,6 +1304,13 @@
               "call-status",
               "interview-notes"
             ]
+          },
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Make the slate in this project or folder (you need to be an editor of it)."
           }
         },
         "required": [
@@ -1319,6 +1330,13 @@
                 "maxLength": 160,
                 "pattern": "^[^<>\\x00-\\x1f\\x7f]+$",
                 "example": "Who can approve a customer refund?"
+              },
+              "projectId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "description": "Make the slate in this project or folder (you need to be an editor of it)."
               }
             },
             "required": [
@@ -1346,6 +1364,13 @@
                 "maxLength": 1200,
                 "description": "Plain text, including multiple lines. Connect two named steps using → or ->. Use up to 24 distinct notes including source notes.",
                 "example": "Field report → Support reply"
+              },
+              "projectId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "description": "Make the slate in this project or folder (you need to be an editor of it)."
               }
             },
             "required": [
@@ -8904,7 +8929,7 @@
     {
       "id": "slates.copy",
       "title": "Copy slate",
-      "description": "Make a private copy of a slate you may edit, a public slate, or a slate whose presentation is published publicly. Someone who may only view a private slate cannot copy it. The copy is an ordinary private slate. A published presentation of the slate is copied with it as a private presentation of the copy. To use something from the library, fork it (library.fork).",
+      "description": "Make a private copy of a slate you may edit, a public slate, or a slate whose presentation is published publicly. Someone who may only view a private slate cannot copy it. The copy is an ordinary private slate, in none of your projects unless projectId names one you can edit. A published presentation of the slate is copied with it as a private presentation of the copy. To use something from the library, fork it (library.fork).",
       "action": "slates.copy",
       "toolset": "slates",
       "readOnly": false,
@@ -8930,7 +8955,8 @@
         ],
         "queryParams": [],
         "bodyParams": [
-          "name"
+          "name",
+          "projectId"
         ],
         "idempotencyKey": "optional"
       },
@@ -8948,6 +8974,13 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 200
+          },
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Put the copy in this project or folder (you need to be an editor of it)."
           }
         },
         "required": [
@@ -9157,7 +9190,8 @@
         "bodyParams": [
           "mermaid",
           "shareId",
-          "name"
+          "name",
+          "projectId"
         ],
         "idempotencyKey": "optional"
       },
@@ -9182,6 +9216,13 @@
             "minLength": 1,
             "maxLength": 200,
             "description": "The new slate's name (without shareId)."
+          },
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Make the new slate in this project or folder (without shareId; you need to be an editor of it)."
           },
           "mode": {
             "type": "string",
@@ -17219,7 +17260,7 @@
     {
       "id": "slates.list",
       "title": "List slates",
-      "description": "List your slates, newest first, as your Slates page shows them: your own (scope \"mine\"), or your team's that you may open (scope \"team\": its public slates, and its private slates shared with you, or all of them for a team admin). Filter by name with q.",
+      "description": "List your slates, newest first, as your Slates page shows them: your own (scope \"mine\", wherever they are), your team's that you may open (scope \"team\": its public slates, and its private slates shared with you, or all of them for a team admin), or a project's (scope \"project\" with projectId: every slate in it and its folders, whoever owns it). Filter by name with q.",
       "action": "slates.list",
       "toolset": "slates",
       "readOnly": true,
@@ -17237,6 +17278,7 @@
         "pathParams": [],
         "queryParams": [
           "scope",
+          "projectId",
           "q",
           "limit"
         ],
@@ -17250,9 +17292,17 @@
             "type": "string",
             "enum": [
               "mine",
-              "team"
+              "team",
+              "project"
             ],
             "default": "mine"
+          },
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "With scope \"project\": the project or folder."
           },
           "q": {
             "type": "string",
@@ -17298,8 +17348,13 @@
                   "type": "string",
                   "enum": [
                     "you",
-                    "team"
+                    "team",
+                    "someone"
                   ]
+                },
+                "projectId": {
+                  "type": "string",
+                  "description": "The project or folder the slate is in."
                 },
                 "updated": {
                   "type": [
@@ -17340,7 +17395,7 @@
     {
       "id": "slates.delete",
       "title": "Delete slate",
-      "description": "Delete one of your own slates, with its sharing, comments and messages. Only the slate's owner can. This cannot be undone.",
+      "description": "Delete one of your own slates, with its sharing, comments and messages. Only the slate's owner can, or the owner of the project it is in. This cannot be undone.",
       "action": "slates.delete",
       "toolset": "slates",
       "readOnly": false,
@@ -22983,6 +23038,7 @@
               "exports",
               "publishing",
               "comments",
+              "projects",
               "agents",
               "signin",
               "sso",
@@ -23054,6 +23110,15 @@
               "scim.groupMapped",
               "scim.roleChanged",
               "scim.recipientSet",
+              "project.created",
+              "project.renamed",
+              "project.deleted",
+              "project.folder_created",
+              "project.folder_deleted",
+              "project.slate_moved",
+              "project.access_changed",
+              "project.link_changed",
+              "project.recipes_paused",
               "audit.exported",
               "audit.viewedByStaff",
               "audit.gap"
@@ -23374,6 +23439,7 @@
               "exports",
               "publishing",
               "comments",
+              "projects",
               "agents",
               "signin",
               "sso",
@@ -23445,6 +23511,15 @@
               "scim.groupMapped",
               "scim.roleChanged",
               "scim.recipientSet",
+              "project.created",
+              "project.renamed",
+              "project.deleted",
+              "project.folder_created",
+              "project.folder_deleted",
+              "project.slate_moved",
+              "project.access_changed",
+              "project.link_changed",
+              "project.recipes_paused",
               "audit.exported",
               "audit.viewedByStaff",
               "audit.gap"
@@ -23522,6 +23597,1448 @@
         ]
       },
       "tool": null
+    },
+    {
+      "id": "projects.list",
+      "title": "List projects",
+      "description": "List your projects (shareable drives of slates): the ones you own first, then the ones shared with you, each with your role. With parentId, list the folders in that project or folder instead.",
+      "action": "projects.list",
+      "toolset": "projects",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "scope": "projects:read",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/projects",
+        "pathParams": [],
+        "queryParams": [
+          "parentId"
+        ],
+        "bodyParams": [],
+        "idempotencyKey": "none"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "parentId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "List the folders in this project or folder."
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "projects": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "projectId": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "drive",
+                    "folder"
+                  ],
+                  "description": "A drive is a project; a folder sits in one."
+                },
+                "driveId": {
+                  "type": "string",
+                  "description": "The project this folder is in (the project itself for a drive)."
+                },
+                "parentId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "depth": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 3
+                },
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "color": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "ownerId": {
+                  "type": "string"
+                },
+                "orgId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "owner",
+                    "manager",
+                    "editor",
+                    "commenter",
+                    "viewer"
+                  ],
+                  "description": "Your role in the project."
+                },
+                "recipesPaused": {
+                  "type": "boolean"
+                },
+                "created": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "updated": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "projectId",
+                "kind",
+                "driveId",
+                "name",
+                "role"
+              ]
+            }
+          }
+        },
+        "required": [
+          "projects"
+        ]
+      },
+      "tool": {
+        "name": "list_projects",
+        "title": "List your projects",
+        "description": "List the person's projects (shared drives that hold slates and folders), owned and shared, with their role in each.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "projects.get",
+      "title": "Get project",
+      "description": "Read a project or one of its folders: its name, your role, the folders directly in it, the folders above it and how many slates it holds. A drive link's key (linkKey, the part after /p/) opens a project shared by link.",
+      "action": "projects.get",
+      "toolset": "projects",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "guest",
+        "agent"
+      ],
+      "scope": "projects:read",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/projects/{projectId}",
+        "pathParams": [
+          "projectId"
+        ],
+        "queryParams": [
+          "linkKey"
+        ],
+        "bodyParams": [],
+        "idempotencyKey": "none"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "A project (a drive) or one of its folders."
+          },
+          "linkKey": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The key of a link to the project (/p/<key>). Not used by tokens."
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "drive",
+              "folder"
+            ],
+            "description": "A drive is a project; a folder sits in one."
+          },
+          "driveId": {
+            "type": "string",
+            "description": "The project this folder is in (the project itself for a drive)."
+          },
+          "parentId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "depth": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "color": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "ownerId": {
+            "type": "string"
+          },
+          "orgId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "manager",
+              "editor",
+              "commenter",
+              "viewer"
+            ],
+            "description": "Your role in the project."
+          },
+          "recipesPaused": {
+            "type": "boolean"
+          },
+          "created": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updated": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url": {
+            "type": "string"
+          },
+          "path": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "projectId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "projectId",
+                "name"
+              ]
+            }
+          },
+          "folders": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "projectId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "depth": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "projectId",
+                "name"
+              ]
+            }
+          },
+          "slateCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "ownerName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "kind",
+          "driveId",
+          "name",
+          "role",
+          "path",
+          "folders",
+          "slateCount"
+        ]
+      },
+      "tool": {
+        "name": "get_project",
+        "title": "Read a project",
+        "description": "Read one of the person's projects or folders: its folders, its place in the project and the person's role.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "projects.create",
+      "title": "Create project",
+      "description": "Make a project: a drive of slates you own and can share like a shared drive (your team's when you are in one). With parentId, make a folder in that project or folder instead (an editor of it may; folders go at most 3 levels deep).",
+      "action": "projects.create",
+      "toolset": "projects",
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "scope": "projects:write",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/projects",
+        "pathParams": [],
+        "queryParams": [],
+        "bodyParams": [
+          "name",
+          "description",
+          "color",
+          "parentId"
+        ],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "color": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 11,
+            "description": "A palette index for the project's dot."
+          },
+          "parentId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Make a folder in this project or folder."
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "drive",
+              "folder"
+            ],
+            "description": "A drive is a project; a folder sits in one."
+          },
+          "driveId": {
+            "type": "string",
+            "description": "The project this folder is in (the project itself for a drive)."
+          },
+          "parentId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "depth": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "color": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "ownerId": {
+            "type": "string"
+          },
+          "orgId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "manager",
+              "editor",
+              "commenter",
+              "viewer"
+            ],
+            "description": "Your role in the project."
+          },
+          "recipesPaused": {
+            "type": "boolean"
+          },
+          "created": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updated": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "kind",
+          "driveId",
+          "name",
+          "role"
+        ]
+      },
+      "tool": {
+        "name": "create_project",
+        "title": "Make a project or folder",
+        "description": "Make a project (a shareable drive for slates) or a folder in one, and return its link.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "projects.update",
+      "title": "Update project",
+      "description": "Rename a project or folder, change its description or color, move a folder to another folder of the same project (parentId), or pause and resume the recipes that keep the project's slates up to date (recipesPaused, a whole project only). A project is renamed by its owner and managers; a folder by its editors; folders are moved by managers.",
+      "action": "projects.update",
+      "toolset": "projects",
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "scope": "projects:write",
+      "http": {
+        "method": "PATCH",
+        "path": "/api/v1/projects/{projectId}",
+        "pathParams": [
+          "projectId"
+        ],
+        "queryParams": [],
+        "bodyParams": [
+          "name",
+          "description",
+          "color",
+          "parentId",
+          "recipesPaused"
+        ],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "A project (a drive) or one of its folders."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "color": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 11,
+            "description": "A palette index for the project's dot."
+          },
+          "parentId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Move this folder into that folder (or the project itself)."
+          },
+          "recipesPaused": {
+            "type": "boolean",
+            "description": "Pause (true) or resume (false) every recipe in the project."
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "drive",
+              "folder"
+            ],
+            "description": "A drive is a project; a folder sits in one."
+          },
+          "driveId": {
+            "type": "string",
+            "description": "The project this folder is in (the project itself for a drive)."
+          },
+          "parentId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "depth": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "color": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "ownerId": {
+            "type": "string"
+          },
+          "orgId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "manager",
+              "editor",
+              "commenter",
+              "viewer"
+            ],
+            "description": "Your role in the project."
+          },
+          "recipesPaused": {
+            "type": "boolean"
+          },
+          "created": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updated": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "kind",
+          "driveId",
+          "name",
+          "role"
+        ]
+      },
+      "tool": {
+        "name": "update_project",
+        "title": "Rename or reorganize a project",
+        "description": "Rename a project or folder, move a folder within its project, or pause its recipes.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "projects.delete",
+      "title": "Delete project",
+      "description": "Delete a folder, or a whole project. A folder that holds slates or folders moves them to moveContentsTo (its parent by default) first; a manager deletes only empty folders, the owner any. Deleting a project (its owner only) deletes the slates its owner owns in it, with their sharing and comments, and gives every other slate back to its owner. This cannot be undone. mode \"preview\" says how many slates would be deleted and given back without changing anything.",
+      "action": "projects.delete",
+      "toolset": "projects",
+      "readOnly": false,
+      "destructive": true,
+      "idempotent": false,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "modes": [
+        "save",
+        "preview"
+      ],
+      "idempotency": "optional",
+      "scope": "projects:write",
+      "http": {
+        "method": "DELETE",
+        "path": "/api/v1/projects/{projectId}",
+        "pathParams": [
+          "projectId"
+        ],
+        "queryParams": [
+          "moveContentsTo"
+        ],
+        "bodyParams": [],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "A project (a drive) or one of its folders."
+          },
+          "moveContentsTo": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "For a folder: where its slates and folders go (its parent by default)."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "save",
+              "preview"
+            ],
+            "default": "save",
+            "description": "save (the default) writes; preview returns what would change and saves nothing. The response says which happened."
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "deleted": {
+            "type": "boolean"
+          },
+          "folders": {
+            "type": "integer"
+          },
+          "deletedSlates": {
+            "type": "integer",
+            "description": "Slates of the project's owner that are (or would be) deleted."
+          },
+          "returnedSlates": {
+            "type": "integer",
+            "description": "Slates of other people that go (or would go) back to them."
+          },
+          "movedSlates": {
+            "type": "integer",
+            "description": "For a folder: slates moved to where its contents went."
+          },
+          "mode": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "deleted",
+          "deletedSlates",
+          "returnedSlates"
+        ]
+      },
+      "tool": {
+        "name": "delete_project",
+        "title": "Delete a project or folder",
+        "description": "Delete a folder, or a whole project the person owns (its owner's slates are deleted; everyone else's go back to them). This cannot be undone.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "projects.slates",
+      "title": "List project slates",
+      "description": "List the slates in a project or folder, newest first, with each one's link: the folder's own and, unless nested is false, those in its folders too. Anyone with a role in the project may. Filter by name with q.",
+      "action": "projects.slates",
+      "toolset": "projects",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "guest",
+        "agent"
+      ],
+      "scope": "projects:read",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/projects/{projectId}/slates",
+        "pathParams": [
+          "projectId"
+        ],
+        "queryParams": [
+          "nested",
+          "q",
+          "limit"
+        ],
+        "bodyParams": [],
+        "idempotencyKey": "none"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "A project (a drive) or one of its folders."
+          },
+          "nested": {
+            "type": "boolean",
+            "default": true,
+            "description": "Include the slates in its folders."
+          },
+          "q": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Part of the slate name."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 50
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "slates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "shareId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "visibility": {
+                  "type": "string",
+                  "enum": [
+                    "private",
+                    "unlisted",
+                    "public"
+                  ]
+                },
+                "owner": {
+                  "type": "string",
+                  "enum": [
+                    "you",
+                    "someone"
+                  ]
+                },
+                "projectId": {
+                  "type": "string"
+                },
+                "updated": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "shareId",
+                "name",
+                "owner",
+                "projectId",
+                "url"
+              ]
+            }
+          }
+        },
+        "required": [
+          "slates"
+        ]
+      },
+      "tool": {
+        "name": "list_project_slates",
+        "title": "List the slates in a project",
+        "description": "List the slates in one of the person's projects or folders, newest first, with each one's link.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "projects.moveSlate",
+      "title": "Move slate to project",
+      "description": "Put a slate in a project or folder, move it to another one, or take it out of its project (projectId null), back to its owner's slates. The slate's owner may move it into any project they can edit; a manager of its project may move any slate within that project or give it back to its owner. Everyone in a project can open its slates at their role there.",
+      "action": "projects.moveSlate",
+      "toolset": "projects",
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": false,
+      "confirm": true,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "scope": "projects:write",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/slates/{shareId}/project",
+        "pathParams": [
+          "shareId"
+        ],
+        "queryParams": [],
+        "bodyParams": [
+          "projectId"
+        ],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "shareId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The slate ID from its address: /canvas/<shareId>."
+          },
+          "projectId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The project or folder it goes in; null takes it out of its project."
+          }
+        },
+        "required": [
+          "shareId",
+          "projectId"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "shareId": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "moved": {
+            "type": "boolean"
+          },
+          "mode": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "shareId",
+          "projectId",
+          "moved"
+        ]
+      },
+      "tool": {
+        "name": "move_slate_to_project",
+        "title": "Move a slate into a project",
+        "description": "Put one of the person's slates in a project or folder, move it between them, or take it out of its project.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "projects.access",
+      "title": "Get project sharing",
+      "description": "Who can open a project: its owner, each person and team it is shared with and their role, invitations to addresses with no account yet, and the link's role and address. The project's owner and managers may read it.",
+      "action": "projects.access",
+      "toolset": "projects",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": false,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "scope": "projects:share",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/projects/{projectId}/access",
+        "pathParams": [
+          "projectId"
+        ],
+        "queryParams": [],
+        "bodyParams": [],
+        "idempotencyKey": "none"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "A project (a drive) or one of its folders."
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "object",
+            "properties": {
+              "userId": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "userId"
+            ]
+          },
+          "link": {
+            "type": "object",
+            "properties": {
+              "role": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "viewer",
+                  "commenter",
+                  "editor"
+                ]
+              },
+              "url": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "role",
+              "url"
+            ]
+          },
+          "grants": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "user",
+                    "team"
+                  ]
+                },
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "none",
+                    "viewer",
+                    "commenter",
+                    "editor",
+                    "manager"
+                  ]
+                },
+                "userId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "orgId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "email": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "For an invitation to an address with no account yet."
+                },
+                "pending": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "granted": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "role"
+              ]
+            }
+          },
+          "sharingRevision": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "projectId",
+          "owner",
+          "link",
+          "grants"
+        ]
+      },
+      "tool": {
+        "name": "get_project_sharing",
+        "title": "See who a project is shared with",
+        "description": "See who can open one of the person's projects, with each person's and team's role and the link's.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "id": "projects.share",
+      "title": "Share project",
+      "description": "Share a project, as a shared drive is shared: with one person (userId, or email, which invites an address that has no account yet), with your whole team (orgId, your own team, if you may make team slates), or with anyone who has the link (link). Roles: viewer opens every slate, commenter comments too, editor edits and adds slates and folders, manager also organizes and shares. role \"none\" (or link \"none\") takes access away; rotate makes a new link and turns the old one off. The project's owner and managers may share it.",
+      "action": "projects.share",
+      "toolset": "projects",
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": false,
+      "confirm": true,
+      "principals": [
+        "person",
+        "agent"
+      ],
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "scope": "projects:share",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/projects/{projectId}/access",
+        "pathParams": [
+          "projectId"
+        ],
+        "queryParams": [],
+        "bodyParams": [
+          "userId",
+          "email",
+          "orgId",
+          "role",
+          "link",
+          "rotate"
+        ],
+        "idempotencyKey": "optional"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "A project (a drive) or one of its folders."
+          },
+          "userId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "email": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 320,
+            "format": "email"
+          },
+          "orgId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Your team, to share with everyone in it."
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "none",
+              "viewer",
+              "commenter",
+              "editor",
+              "manager"
+            ],
+            "description": "For a person or a team."
+          },
+          "link": {
+            "type": "string",
+            "enum": [
+              "none",
+              "viewer",
+              "commenter",
+              "editor"
+            ],
+            "description": "What anyone with the link can do."
+          },
+          "rotate": {
+            "type": "boolean",
+            "description": "With link: make a new link address; the old one stops working."
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "object",
+            "properties": {
+              "userId": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "userId"
+            ]
+          },
+          "link": {
+            "type": "object",
+            "properties": {
+              "role": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "viewer",
+                  "commenter",
+                  "editor"
+                ]
+              },
+              "url": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "role",
+              "url"
+            ]
+          },
+          "grants": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "user",
+                    "team"
+                  ]
+                },
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "none",
+                    "viewer",
+                    "commenter",
+                    "editor",
+                    "manager"
+                  ]
+                },
+                "userId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "orgId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "email": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "For an invitation to an address with no account yet."
+                },
+                "pending": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "granted": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "role"
+              ]
+            }
+          },
+          "sharingRevision": {
+            "type": "integer"
+          },
+          "mode": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "owner",
+          "link",
+          "grants"
+        ]
+      },
+      "tool": {
+        "name": "share_project",
+        "title": "Share a project",
+        "description": "Share one of the person's projects with a person, their team or anyone with the link, at a role, or take access away.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
     }
   ]
 }

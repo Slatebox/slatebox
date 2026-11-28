@@ -1,5 +1,6 @@
-// The slates a person sees on their Slates page, for agents: their own ("mine"), or their
-// team's ("team": what the Team tab lists, the rule slateFilter applies there). The query is
+// The slates a person sees on their Slates page, for agents: their own ("mine", wherever they sit,
+// projects included), their team's ("team": what the Team tab lists, the rule slateFilter applies
+// there), or a project's ("project": every slate in it, whoever owns it, for anyone with a role). The query is
 // built here, without Meteor, and run by the store (mount.js).
 import { defineAction } from './registry.mjs'
 import { problem } from './errors.mjs'
@@ -11,10 +12,15 @@ const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
  *   mine  the caller's own slates
  *   team  the team's other slates the caller may see: public ones, and private ones (all of
  *         them for a team admin, otherwise those shared with the caller)
+ *   project  the slates in projectIds (a project and its folders; the caller's role in it is
+ *         checked before, by the store)
  */
-export function slateListSelector({ userId, scope = 'mine', orgId = null, isAdmin = false, grantedIds = [], q }) {
+export function slateListSelector({ userId, scope = 'mine', orgId = null, isAdmin = false, grantedIds = [], projectIds = null, q }) {
   const parts = []
-  if (scope === 'team') {
+  if (scope === 'project') {
+    if (!Array.isArray(projectIds) || !projectIds.length) return null
+    parts.push({ projectId: { $in: projectIds } })
+  } else if (scope === 'team') {
     if (!orgId) return null
     parts.push({
       orgId,
@@ -41,7 +47,8 @@ export function slateListEntry(row, userId, appOrigin) {
     name: options.name || '',
     description: options.description || '',
     visibility: visibilityOf(options),
-    owner: row.userId === userId ? 'you' : 'team',
+    owner: row.userId === userId ? 'you' : row.projectId ? 'someone' : 'team',
+    ...(row.projectId && { projectId: row.projectId }),
     updated: row.lastSaved ? new Date(row.lastSaved).toISOString() : null,
     url: new URL(`/canvas/${row.shareId}`, appOrigin).href,
   }
@@ -51,7 +58,7 @@ export default defineAction({
   id: 'slates.list',
   title: 'List slates',
   description:
-    'List your slates, newest first, as your Slates page shows them: your own (scope "mine"), or your team\'s that you may open (scope "team": its public slates, and its private slates shared with you, or all of them for a team admin). Filter by name with q.',
+    'List your slates, newest first, as your Slates page shows them: your own (scope "mine", wherever they are), your team\'s that you may open (scope "team": its public slates, and its private slates shared with you, or all of them for a team admin), or a project\'s (scope "project" with projectId: every slate in it and its folders, whoever owns it). Filter by name with q.',
   toolset: 'slates',
   kind: 'read',
   scope: 'slates:read',
@@ -60,7 +67,8 @@ export default defineAction({
   input: {
     type: 'object',
     properties: {
-      scope: { type: 'string', enum: ['mine', 'team'], default: 'mine' },
+      scope: { type: 'string', enum: ['mine', 'team', 'project'], default: 'mine' },
+      projectId: { type: 'string', minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$', description: 'With scope "project": the project or folder.' },
       q: { type: 'string', minLength: 1, maxLength: 200, description: 'Part of the slate name.' },
       limit: { type: 'integer', minimum: 1, maximum: 100, default: 25 },
     },
@@ -78,7 +86,8 @@ export default defineAction({
             name: { type: 'string' },
             description: { type: 'string' },
             visibility: { type: 'string', enum: ['private', 'unlisted', 'public'] },
-            owner: { type: 'string', enum: ['you', 'team'] },
+            owner: { type: 'string', enum: ['you', 'team', 'someone'] },
+            projectId: { type: 'string', description: 'The project or folder the slate is in.' },
             updated: { type: ['string', 'null'] },
             url: { type: 'string' },
           },
@@ -92,7 +101,9 @@ export default defineAction({
   async handler(principal, input, { deps }) {
     const user = await deps.loadUser(principal.userId)
     if (!user) throw problem(404, 'not_found', 'This account no longer exists.')
-    const rows = await deps.listSlates({ userId: principal.userId, orgId: user.orgId || null, scope: input.scope, q: input.q, limit: input.limit })
+    if ((input.scope === 'project') !== (input.projectId !== undefined))
+      throw problem(400, 'invalid_request', 'scope "project" takes a projectId, and only it does.')
+    const rows = await deps.listSlates({ userId: principal.userId, orgId: user.orgId || null, scope: input.scope, projectId: input.projectId, q: input.q, limit: input.limit })
     const origin = deps.appOrigin()
     return { slates: rows.map((row) => slateListEntry(row, principal.userId, origin)) }
   },

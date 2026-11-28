@@ -1,4 +1,5 @@
 import { resolveSlateRole, slateVisibility } from './methods/slate-role.mjs'
+import { projectRoleToSlateRole } from './projects/project-role.mjs'
 /* eslint-disable no-underscore-dangle */
 import { createHash, randomBytes } from 'node:crypto'
 
@@ -13,7 +14,13 @@ import { createHash, randomBytes } from 'node:crypto'
 // team:move: move a team here from another Slatebox server (the person owns their team or is in none).
 // library:review: review, refine, publish and unpublish library submissions (administrators).
 // profile:read, profile:write: read, or change, what About you holds about the person (their own facts).
-export const API_TOKEN_SCOPES = ['slates:read', 'slates:write', 'slates:add-photo', 'slates:share', 'slates:delete', 'ai:settings', 'ai:admin', 'ai:admin:read', 'team:export', 'team:import', 'team:move', 'library:review', 'profile:read', 'profile:write', 'audit:read']
+// projects:read, projects:write, projects:share: see, organize (make, rename, move slates into and
+// delete) and share the projects (drives of slates) the person has a role in; what each call may do
+// is still the person's role in that project.
+export const API_TOKEN_SCOPES = [
+  'slates:read', 'slates:write', 'slates:add-photo', 'slates:share', 'slates:delete', 'ai:settings', 'ai:admin', 'ai:admin:read', 'team:export', 'team:import', 'team:move', 'library:review', 'profile:read', 'profile:write', 'audit:read',
+  'projects:read', 'projects:write', 'projects:share',
+]
 export const ACTIVE_TOKEN_LIMIT = 10
 
 export function hashApiToken(token) {
@@ -31,6 +38,9 @@ export function createApiTokenService({
   users,
   slates,
   slateAccess,
+  // (slate, { _id }) -> the account's role in the slate's project (drive) through its own and its
+  // team's grants: never a drive link, never a team admin's rights (server/projects/access-meteor.js)
+  projectRoleOf = null,
   now = Date.now,
   randomBytesImpl = randomBytes,
 }) {
@@ -145,16 +155,21 @@ export function createApiTokenService({
       : null
     const isOwner = Boolean(token.userId) && slate.userId === token.userId
     const member = token.userId ? grants.find((grant) => grant.userId === token.userId) : undefined
+    const projectRole = !isOwner && projectRoleOf && slate.projectId && token.userId
+      ? await projectRoleOf(slate, { _id: token.userId }) : null
     let role
     if (isOwner) role = 'EDIT'
-    // A bearer token identifies an account. It does not carry an unlisted invitation.
-    else if (!member && type !== 'public') role = null
-    else role = resolveSlateRole(slate, token.userId ? { _id: token.userId } : null, false, grants)
-    // New workshop writes require an explicit collaborator; ordinary public canvases
-    // retain their established default role for a signed-in account on the bare URL.
+    // A bearer token identifies an account. It does not carry an unlisted invitation: only the
+    // account's role in the slate's project counts then.
+    else if (!member && type !== 'public') role = resolveSlateRole(slate, token.userId ? { _id: token.userId } : null, false, [], undefined, projectRole)
+    else role = resolveSlateRole(slate, token.userId ? { _id: token.userId } : null, false, grants, undefined, projectRole)
+    // New workshop writes require an explicit collaborator (a grant, or an editor's role in the
+    // slate's project); ordinary public canvases retain their established default role for a
+    // signed-in account on the bare URL.
+    const projectEdits = projectRoleToSlateRole(projectRole) === 'EDIT'
     const canEdit =
       isOwner ||
-      (role === 'EDIT' && Boolean(token.userId) && (slate.creative?.model?.kind !== 'workshop' || Boolean(member)))
+      (role === 'EDIT' && Boolean(token.userId) && (slate.creative?.model?.kind !== 'workshop' || Boolean(member) || projectEdits))
     const access = { role: role || null, canEdit, isOwner, linkRole, grantKey: member?.accessKey ?? null }
     return { slate, authorized: write ? canEdit : Boolean(role), access }
   }

@@ -1,5 +1,5 @@
 // Delete a slate, for agents: the rule the Slates page's Delete follows (slates.remove). Only
-// the slate's owner may. Deleting takes the slate's sharing, comments and messages with it. In an exec script it is held for the person to agree.
+// the slate's owner may, and the owner of the project it sits in (server/projects). Deleting takes the slate's sharing, comments and messages with it. In an exec script it is held for the person to agree.
 import { defineAction } from './registry.mjs'
 import { problem } from './errors.mjs'
 import { loadSlate } from './slate-access.mjs'
@@ -9,7 +9,7 @@ export default defineAction({
   id: 'slates.delete',
   title: 'Delete slate',
   description:
-    'Delete one of your own slates, with its sharing, comments and messages. Only the slate\'s owner can. This cannot be undone.',
+    'Delete one of your own slates, with its sharing, comments and messages. Only the slate\'s owner can, or the owner of the project it is in. This cannot be undone.',
   toolset: 'slates',
   kind: 'write',
   scope: 'slates:delete',
@@ -27,7 +27,11 @@ export default defineAction({
   successStatus: 200,
   async load(principal, input, ctx) {
     const slate = await loadSlate(true)(principal, input, ctx)
-    if (!ctx.access?.isOwner) throw problem(403, 'forbidden', 'Only the slate\'s owner can delete it.')
+    if (ctx.access?.isOwner) return slate
+    const projectRole = slate?.projectId && ctx.deps.projects
+      ? await ctx.deps.projects.access.slateProjectRole(slate, { _id: principal.userId }, { token: principal.kind === 'agent' })
+      : null
+    if (projectRole !== 'owner') throw problem(403, 'forbidden', 'Only the slate\'s owner, or the owner of its project, can delete it.')
     return slate
   },
   tool: { name: 'delete_slate', title: 'Delete a slate', description: 'Delete one of the person\'s own slates. This cannot be undone.' },

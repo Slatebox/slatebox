@@ -9,7 +9,9 @@ import { LIBRARY_LIMITS, libraryError } from '../../imports/api/common/library-m
 // Beyond what a copy leaves behind (slate-copy.mjs): the people and conversations on the slate,
 // its library fields, an import's bookkeeping and the directory flags.
 const PRIVATE_FIELDS = ['comments', 'collaborators', 'chatHistory', 'aiHistory', 'messages', 'conversation', 'nativeConversation',
-  'library', 'libraryOrigin', 'teamImportId', 'importedVisibility', 'importedFrom', 'boardSeq', 'guestEditKey', 'invitationLease']
+  'library', 'libraryOrigin', 'teamImportId', 'importedVisibility', 'importedFrom', 'boardSeq', 'guestEditKey', 'invitationLease',
+  // the project the author's slate sits in (also in sourceOnly; named here so it never depends on it)
+  'projectId']
 // creationBrief is the prompt the person first wrote to make the slate; collabBaseline is the slate as
 // a collaboration session started; the search fields index the author's own copy.
 const PRIVATE_OPTIONS = ['isPrivate', 'isPublic', 'isUnlisted', 'isTemplate', 'templateApproved', 'templateMarkdown', 'templateTags',

@@ -23,19 +23,21 @@ const relayStores = {
 
 const text = (value) => (typeof value === 'string' && value.length > 0 && value.length <= 128 ? value : undefined)
 
-async function accessFor(user, { id, shareId, routeKey, readOnly } = {}) {
+async function accessFor(user, { id, shareId, routeKey, readOnly, projectKey } = {}) {
   return relayAccess(relayStores, {
     user: user || null,
     shareId: text(shareId),
     routeKey: text(routeKey),
     visitor: text(id),
     readOnly: readOnly === true,
+    // a drive link's key the canvas was opened with (?p=<key>; server/projects)
+    projectKey: text(projectKey) || null,
   })
 }
 
 const method = {}
 // A token is a credential: neither method logs its answer.
-method[CONSTANTS.methods.collaborators.init] = async ({ id, shareId, routeKey, readOnly } = {}) => {
+method[CONSTANTS.methods.collaborators.init] = async ({ id, shareId, routeKey, readOnly, projectKey } = {}) => {
   const user = await Meteor.userAsync()
   return collaboratorDetails({
     user,
@@ -44,14 +46,14 @@ method[CONSTANTS.methods.collaborators.init] = async ({ id, shareId, routeKey, r
     shareId,
     settings: Meteor.settings,
     fallbackSecret: PROCESS_SECRET,
-    access: await accessFor(user, { id, shareId, routeKey, readOnly }),
+    access: await accessFor(user, { id, shareId, routeKey, readOnly, projectKey }),
   })
 }
 
 // A fresh room token for the same slate, the access check run again (the engine asks before its
 // token runs out and when the relay refuses it). Only the token: no legacy credential.
-method[CONSTANTS.methods.collaborators.refresh] = async ({ id, shareId, routeKey, readOnly } = {}) => {
-  const access = await accessFor(await Meteor.userAsync(), { id, shareId, routeKey, readOnly })
+method[CONSTANTS.methods.collaborators.refresh] = async ({ id, shareId, routeKey, readOnly, projectKey } = {}) => {
+  const access = await accessFor(await Meteor.userAsync(), { id, shareId, routeKey, readOnly, projectKey })
   const wsParams = relayParams({ settings: Meteor.settings, access, legacy: false })
   return {
     wsParams,

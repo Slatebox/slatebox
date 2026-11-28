@@ -3906,6 +3906,7 @@
                 "exports",
                 "publishing",
                 "comments",
+                "projects",
                 "agents",
                 "signin",
                 "sso",
@@ -3977,6 +3978,15 @@
                 "scim.groupMapped",
                 "scim.roleChanged",
                 "scim.recipientSet",
+                "project.created",
+                "project.renamed",
+                "project.deleted",
+                "project.folder_created",
+                "project.folder_deleted",
+                "project.slate_moved",
+                "project.access_changed",
+                "project.link_changed",
+                "project.recipes_paused",
                 "audit.exported",
                 "audit.viewedByStaff",
                 "audit.gap"
@@ -4255,6 +4265,7 @@
                       "exports",
                       "publishing",
                       "comments",
+                      "projects",
                       "agents",
                       "signin",
                       "sso",
@@ -4326,6 +4337,15 @@
                       "scim.groupMapped",
                       "scim.roleChanged",
                       "scim.recipientSet",
+                      "project.created",
+                      "project.renamed",
+                      "project.deleted",
+                      "project.folder_created",
+                      "project.folder_deleted",
+                      "project.slate_moved",
+                      "project.access_changed",
+                      "project.link_changed",
+                      "project.recipes_paused",
                       "audit.exported",
                       "audit.viewedByStaff",
                       "audit.gap"
@@ -11280,6 +11300,1660 @@
         }
       }
     },
+    "/projects": {
+      "get": {
+        "operationId": "listProjects",
+        "summary": "List projects",
+        "description": "List your projects (shareable drives of slates): the ones you own first, then the ones shared with you, each with your role. With parentId, list the folders in that project or folder instead.",
+        "x-required-scope": "projects:read",
+        "x-slatebox": {
+          "action": "projects.list",
+          "toolset": "projects",
+          "readOnly": true,
+          "destructive": false,
+          "idempotent": true,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ]
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "parentId",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "List the folders in this project or folder."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "projects": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "projectId": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "drive",
+                              "folder"
+                            ],
+                            "description": "A drive is a project; a folder sits in one."
+                          },
+                          "driveId": {
+                            "type": "string",
+                            "description": "The project this folder is in (the project itself for a drive)."
+                          },
+                          "parentId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "depth": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 3
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "color": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "ownerId": {
+                            "type": "string"
+                          },
+                          "orgId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "role": {
+                            "type": "string",
+                            "enum": [
+                              "owner",
+                              "manager",
+                              "editor",
+                              "commenter",
+                              "viewer"
+                            ],
+                            "description": "Your role in the project."
+                          },
+                          "recipesPaused": {
+                            "type": "boolean"
+                          },
+                          "created": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "updated": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "url": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "projectId",
+                          "kind",
+                          "driveId",
+                          "name",
+                          "role"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "projects"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createProject",
+        "summary": "Create project",
+        "description": "Make a project: a drive of slates you own and can share like a shared drive (your team's when you are in one). With parentId, make a folder in that project or folder instead (an editor of it may; folders go at most 3 levels deep).",
+        "x-required-scope": "projects:write",
+        "x-slatebox": {
+          "action": "projects.create",
+          "toolset": "projects",
+          "readOnly": false,
+          "destructive": false,
+          "idempotent": false,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ],
+          "modes": [
+            "save"
+          ],
+          "idempotency": "optional"
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "description": "Reuse the same key with the same token only to retry one intended write. A different request under a used key answers 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[!-~]+$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Slatebox-Confirm",
+            "required": false,
+            "description": "An agent's save that removes something, changes someone else's notes, rewrites many notes' text or widens access answers 409 confirmation_required. Once the person agrees, send the same request again (same Idempotency-Key) with this header set to details.confirmationId. It works once and expires after 10 minutes.",
+            "schema": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "color": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "maximum": 11,
+                    "description": "A palette index for the project's dot."
+                  },
+                  "parentId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "pattern": "^[A-Za-z0-9_-]+$",
+                    "description": "Make a folder in this project or folder."
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A preview, or the answer to a repeated request with the same key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "projectId": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "drive",
+                        "folder"
+                      ],
+                      "description": "A drive is a project; a folder sits in one."
+                    },
+                    "driveId": {
+                      "type": "string",
+                      "description": "The project this folder is in (the project itself for a drive)."
+                    },
+                    "parentId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "depth": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 3
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "color": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "ownerId": {
+                      "type": "string"
+                    },
+                    "orgId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "owner",
+                        "manager",
+                        "editor",
+                        "commenter",
+                        "viewer"
+                      ],
+                      "description": "Your role in the project."
+                    },
+                    "recipesPaused": {
+                      "type": "boolean"
+                    },
+                    "created": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "updated": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "mode": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "projectId",
+                    "kind",
+                    "driveId",
+                    "name",
+                    "role"
+                  ]
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "projectId": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "drive",
+                        "folder"
+                      ],
+                      "description": "A drive is a project; a folder sits in one."
+                    },
+                    "driveId": {
+                      "type": "string",
+                      "description": "The project this folder is in (the project itself for a drive)."
+                    },
+                    "parentId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "depth": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 3
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "color": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "ownerId": {
+                      "type": "string"
+                    },
+                    "orgId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "owner",
+                        "manager",
+                        "editor",
+                        "commenter",
+                        "viewer"
+                      ],
+                      "description": "Your role in the project."
+                    },
+                    "recipesPaused": {
+                      "type": "boolean"
+                    },
+                    "created": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "updated": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "mode": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "projectId",
+                    "kind",
+                    "driveId",
+                    "name",
+                    "role"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{projectId}": {
+      "get": {
+        "operationId": "getProject",
+        "summary": "Get project",
+        "description": "Read a project or one of its folders: its name, your role, the folders directly in it, the folders above it and how many slates it holds. A drive link's key (linkKey, the part after /p/) opens a project shared by link.",
+        "x-required-scope": "projects:read",
+        "x-slatebox": {
+          "action": "projects.get",
+          "toolset": "projects",
+          "readOnly": true,
+          "destructive": false,
+          "idempotent": true,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "guest",
+            "agent"
+          ]
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "A project (a drive) or one of its folders."
+            }
+          },
+          {
+            "in": "query",
+            "name": "linkKey",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "The key of a link to the project (/p/<key>). Not used by tokens."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "projectId": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "drive",
+                        "folder"
+                      ],
+                      "description": "A drive is a project; a folder sits in one."
+                    },
+                    "driveId": {
+                      "type": "string",
+                      "description": "The project this folder is in (the project itself for a drive)."
+                    },
+                    "parentId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "depth": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 3
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "color": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "ownerId": {
+                      "type": "string"
+                    },
+                    "orgId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "owner",
+                        "manager",
+                        "editor",
+                        "commenter",
+                        "viewer"
+                      ],
+                      "description": "Your role in the project."
+                    },
+                    "recipesPaused": {
+                      "type": "boolean"
+                    },
+                    "created": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "updated": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "projectId": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "projectId",
+                          "name"
+                        ]
+                      }
+                    },
+                    "folders": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "projectId": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "depth": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "projectId",
+                          "name"
+                        ]
+                      }
+                    },
+                    "slateCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "ownerName": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "projectId",
+                    "kind",
+                    "driveId",
+                    "name",
+                    "role",
+                    "path",
+                    "folders",
+                    "slateCount"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateProject",
+        "summary": "Update project",
+        "description": "Rename a project or folder, change its description or color, move a folder to another folder of the same project (parentId), or pause and resume the recipes that keep the project's slates up to date (recipesPaused, a whole project only). A project is renamed by its owner and managers; a folder by its editors; folders are moved by managers.",
+        "x-required-scope": "projects:write",
+        "x-slatebox": {
+          "action": "projects.update",
+          "toolset": "projects",
+          "readOnly": false,
+          "destructive": false,
+          "idempotent": false,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ],
+          "modes": [
+            "save"
+          ],
+          "idempotency": "optional"
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "A project (a drive) or one of its folders."
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "description": "Reuse the same key with the same token only to retry one intended write. A different request under a used key answers 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[!-~]+$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Slatebox-Confirm",
+            "required": false,
+            "description": "An agent's save that removes something, changes someone else's notes, rewrites many notes' text or widens access answers 409 confirmation_required. Once the person agrees, send the same request again (same Idempotency-Key) with this header set to details.confirmationId. It works once and expires after 10 minutes.",
+            "schema": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "color": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "maximum": 11,
+                    "description": "A palette index for the project's dot."
+                  },
+                  "parentId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "pattern": "^[A-Za-z0-9_-]+$",
+                    "description": "Move this folder into that folder (or the project itself)."
+                  },
+                  "recipesPaused": {
+                    "type": "boolean",
+                    "description": "Pause (true) or resume (false) every recipe in the project."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A preview, or the answer to a repeated request with the same key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "projectId": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "drive",
+                        "folder"
+                      ],
+                      "description": "A drive is a project; a folder sits in one."
+                    },
+                    "driveId": {
+                      "type": "string",
+                      "description": "The project this folder is in (the project itself for a drive)."
+                    },
+                    "parentId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "depth": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 3
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "color": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "ownerId": {
+                      "type": "string"
+                    },
+                    "orgId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "owner",
+                        "manager",
+                        "editor",
+                        "commenter",
+                        "viewer"
+                      ],
+                      "description": "Your role in the project."
+                    },
+                    "recipesPaused": {
+                      "type": "boolean"
+                    },
+                    "created": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "updated": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "mode": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "projectId",
+                    "kind",
+                    "driveId",
+                    "name",
+                    "role"
+                  ]
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "projectId": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "drive",
+                        "folder"
+                      ],
+                      "description": "A drive is a project; a folder sits in one."
+                    },
+                    "driveId": {
+                      "type": "string",
+                      "description": "The project this folder is in (the project itself for a drive)."
+                    },
+                    "parentId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "depth": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 3
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "color": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "ownerId": {
+                      "type": "string"
+                    },
+                    "orgId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "owner",
+                        "manager",
+                        "editor",
+                        "commenter",
+                        "viewer"
+                      ],
+                      "description": "Your role in the project."
+                    },
+                    "recipesPaused": {
+                      "type": "boolean"
+                    },
+                    "created": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "updated": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "mode": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "projectId",
+                    "kind",
+                    "driveId",
+                    "name",
+                    "role"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteProject",
+        "summary": "Delete project",
+        "description": "Delete a folder, or a whole project. A folder that holds slates or folders moves them to moveContentsTo (its parent by default) first; a manager deletes only empty folders, the owner any. Deleting a project (its owner only) deletes the slates its owner owns in it, with their sharing and comments, and gives every other slate back to its owner. This cannot be undone. mode \"preview\" says how many slates would be deleted and given back without changing anything.",
+        "x-required-scope": "projects:write",
+        "x-slatebox": {
+          "action": "projects.delete",
+          "toolset": "projects",
+          "readOnly": false,
+          "destructive": true,
+          "idempotent": false,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ],
+          "modes": [
+            "save",
+            "preview"
+          ],
+          "idempotency": "optional"
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "A project (a drive) or one of its folders."
+            }
+          },
+          {
+            "in": "query",
+            "name": "moveContentsTo",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "For a folder: where its slates and folders go (its parent by default)."
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "description": "Reuse the same key with the same token only to retry one intended write. A different request under a used key answers 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[!-~]+$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Slatebox-Confirm",
+            "required": false,
+            "description": "An agent's save that removes something, changes someone else's notes, rewrites many notes' text or widens access answers 409 confirmation_required. Once the person agrees, send the same request again (same Idempotency-Key) with this header set to details.confirmationId. It works once and expires after 10 minutes.",
+            "schema": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A preview, or the answer to a repeated request with the same key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "projectId": {
+                      "type": "string"
+                    },
+                    "deleted": {
+                      "type": "boolean"
+                    },
+                    "folders": {
+                      "type": "integer"
+                    },
+                    "deletedSlates": {
+                      "type": "integer",
+                      "description": "Slates of the project's owner that are (or would be) deleted."
+                    },
+                    "returnedSlates": {
+                      "type": "integer",
+                      "description": "Slates of other people that go (or would go) back to them."
+                    },
+                    "movedSlates": {
+                      "type": "integer",
+                      "description": "For a folder: slates moved to where its contents went."
+                    },
+                    "mode": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "projectId",
+                    "deleted",
+                    "deletedSlates",
+                    "returnedSlates"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/access": {
+      "get": {
+        "operationId": "getProjectAccess",
+        "summary": "Get project sharing",
+        "description": "Who can open a project: its owner, each person and team it is shared with and their role, invitations to addresses with no account yet, and the link's role and address. The project's owner and managers may read it.",
+        "x-required-scope": "projects:share",
+        "x-slatebox": {
+          "action": "projects.access",
+          "toolset": "projects",
+          "readOnly": true,
+          "destructive": false,
+          "idempotent": true,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "agent"
+          ]
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "A project (a drive) or one of its folders."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "projectId": {
+                      "type": "string"
+                    },
+                    "owner": {
+                      "type": "object",
+                      "properties": {
+                        "userId": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "userId"
+                      ]
+                    },
+                    "link": {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "viewer",
+                            "commenter",
+                            "editor"
+                          ]
+                        },
+                        "url": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "role",
+                        "url"
+                      ]
+                    },
+                    "grants": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "user",
+                              "team"
+                            ]
+                          },
+                          "role": {
+                            "type": "string",
+                            "enum": [
+                              "none",
+                              "viewer",
+                              "commenter",
+                              "editor",
+                              "manager"
+                            ]
+                          },
+                          "userId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "orgId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "email": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "description": "For an invitation to an address with no account yet."
+                          },
+                          "pending": {
+                            "type": "boolean"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "granted": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "role"
+                        ]
+                      }
+                    },
+                    "sharingRevision": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "projectId",
+                    "owner",
+                    "link",
+                    "grants"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "shareProject",
+        "summary": "Share project",
+        "description": "Share a project, as a shared drive is shared: with one person (userId, or email, which invites an address that has no account yet), with your whole team (orgId, your own team, if you may make team slates), or with anyone who has the link (link). Roles: viewer opens every slate, commenter comments too, editor edits and adds slates and folders, manager also organizes and shares. role \"none\" (or link \"none\") takes access away; rotate makes a new link and turns the old one off. The project's owner and managers may share it.",
+        "x-required-scope": "projects:share",
+        "x-slatebox": {
+          "action": "projects.share",
+          "toolset": "projects",
+          "readOnly": false,
+          "destructive": false,
+          "idempotent": false,
+          "openWorld": false,
+          "confirm": true,
+          "principals": [
+            "person",
+            "agent"
+          ],
+          "modes": [
+            "save"
+          ],
+          "idempotency": "optional"
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "A project (a drive) or one of its folders."
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "description": "Reuse the same key with the same token only to retry one intended write. A different request under a used key answers 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[!-~]+$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Slatebox-Confirm",
+            "required": false,
+            "description": "An agent's save that removes something, changes someone else's notes, rewrites many notes' text or widens access answers 409 confirmation_required. Once the person agrees, send the same request again (same Idempotency-Key) with this header set to details.confirmationId. It works once and expires after 10 minutes.",
+            "schema": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "email": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 320,
+                    "format": "email"
+                  },
+                  "orgId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "description": "Your team, to share with everyone in it."
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "viewer",
+                      "commenter",
+                      "editor",
+                      "manager"
+                    ],
+                    "description": "For a person or a team."
+                  },
+                  "link": {
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "viewer",
+                      "commenter",
+                      "editor"
+                    ],
+                    "description": "What anyone with the link can do."
+                  },
+                  "rotate": {
+                    "type": "boolean",
+                    "description": "With link: make a new link address; the old one stops working."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A preview, or the answer to a repeated request with the same key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "projectId": {
+                      "type": "string"
+                    },
+                    "owner": {
+                      "type": "object",
+                      "properties": {
+                        "userId": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "userId"
+                      ]
+                    },
+                    "link": {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "viewer",
+                            "commenter",
+                            "editor"
+                          ]
+                        },
+                        "url": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "role",
+                        "url"
+                      ]
+                    },
+                    "grants": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "user",
+                              "team"
+                            ]
+                          },
+                          "role": {
+                            "type": "string",
+                            "enum": [
+                              "none",
+                              "viewer",
+                              "commenter",
+                              "editor",
+                              "manager"
+                            ]
+                          },
+                          "userId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "orgId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "email": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "description": "For an invitation to an address with no account yet."
+                          },
+                          "pending": {
+                            "type": "boolean"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "granted": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "role"
+                        ]
+                      }
+                    },
+                    "sharingRevision": {
+                      "type": "integer"
+                    },
+                    "mode": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "projectId",
+                    "owner",
+                    "link",
+                    "grants"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/slates": {
+      "get": {
+        "operationId": "listProjectSlates",
+        "summary": "List project slates",
+        "description": "List the slates in a project or folder, newest first, with each one's link: the folder's own and, unless nested is false, those in its folders too. Anyone with a role in the project may. Filter by name with q.",
+        "x-required-scope": "projects:read",
+        "x-slatebox": {
+          "action": "projects.slates",
+          "toolset": "projects",
+          "readOnly": true,
+          "destructive": false,
+          "idempotent": true,
+          "openWorld": false,
+          "confirm": false,
+          "principals": [
+            "person",
+            "guest",
+            "agent"
+          ]
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "A project (a drive) or one of its folders."
+            }
+          },
+          {
+            "in": "query",
+            "name": "nested",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "description": "Include the slates in its folders."
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Part of the slate name."
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "slates": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "shareId": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "visibility": {
+                            "type": "string",
+                            "enum": [
+                              "private",
+                              "unlisted",
+                              "public"
+                            ]
+                          },
+                          "owner": {
+                            "type": "string",
+                            "enum": [
+                              "you",
+                              "someone"
+                            ]
+                          },
+                          "projectId": {
+                            "type": "string"
+                          },
+                          "updated": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "url": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "shareId",
+                          "name",
+                          "owner",
+                          "projectId",
+                          "url"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "slates"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/shapes": {
       "get": {
         "operationId": "listShapes",
@@ -11843,7 +13517,7 @@
       "post": {
         "operationId": "createSlate",
         "summary": "Create a slate",
-        "description": "Omitting kind creates a playable decision map from a brief of up to 160 characters. kind diagram makes editable notes and connections from your own steps (up to 1200 characters, connect two steps with → or ->) or from a named source. The token owner owns the new private slate.",
+        "description": "Omitting kind creates a playable decision map from a brief of up to 160 characters. kind diagram makes editable notes and connections from your own steps (up to 1200 characters, connect two steps with → or ->) or from a named source. The token owner owns the new private slate. With projectId it is made in that project or folder, where the project's people can open it.",
         "x-required-scope": "slates:write",
         "x-slatebox": {
           "action": "slates.create",
@@ -11903,6 +13577,13 @@
                         "maxLength": 160,
                         "pattern": "^[^<>\\x00-\\x1f\\x7f]+$",
                         "example": "Who can approve a customer refund?"
+                      },
+                      "projectId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64,
+                        "pattern": "^[A-Za-z0-9_-]+$",
+                        "description": "Make the slate in this project or folder (you need to be an editor of it)."
                       }
                     },
                     "required": [
@@ -11930,6 +13611,13 @@
                         "maxLength": 1200,
                         "description": "Plain text, including multiple lines. Connect two named steps using → or ->. Use up to 24 distinct notes including source notes.",
                         "example": "Field report → Support reply"
+                      },
+                      "projectId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64,
+                        "pattern": "^[A-Za-z0-9_-]+$",
+                        "description": "Make the slate in this project or folder (you need to be an editor of it)."
                       }
                     },
                     "required": [
@@ -12061,7 +13749,7 @@
       "get": {
         "operationId": "listSlates",
         "summary": "List slates",
-        "description": "List your slates, newest first, as your Slates page shows them: your own (scope \"mine\"), or your team's that you may open (scope \"team\": its public slates, and its private slates shared with you, or all of them for a team admin). Filter by name with q.",
+        "description": "List your slates, newest first, as your Slates page shows them: your own (scope \"mine\", wherever they are), your team's that you may open (scope \"team\": its public slates, and its private slates shared with you, or all of them for a team admin), or a project's (scope \"project\" with projectId: every slate in it and its folders, whoever owns it). Filter by name with q.",
         "x-required-scope": "slates:read",
         "x-slatebox": {
           "action": "slates.list",
@@ -12084,9 +13772,22 @@
               "type": "string",
               "enum": [
                 "mine",
-                "team"
+                "team",
+                "project"
               ],
               "default": "mine"
+            }
+          },
+          {
+            "in": "query",
+            "name": "projectId",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "With scope \"project\": the project or folder."
             }
           },
           {
@@ -12146,8 +13847,13 @@
                             "type": "string",
                             "enum": [
                               "you",
-                              "team"
+                              "team",
+                              "someone"
                             ]
+                          },
+                          "projectId": {
+                            "type": "string",
+                            "description": "The project or folder the slate is in."
                           },
                           "updated": {
                             "type": [
@@ -12262,6 +13968,13 @@
                     "minLength": 1,
                     "maxLength": 200,
                     "description": "The new slate's name (without shareId)."
+                  },
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "pattern": "^[A-Za-z0-9_-]+$",
+                    "description": "Make the new slate in this project or folder (without shareId; you need to be an editor of it)."
                   },
                   "mode": {
                     "type": "string",
@@ -12618,7 +14331,7 @@
       "delete": {
         "operationId": "deleteSlate",
         "summary": "Delete slate",
-        "description": "Delete one of your own slates, with its sharing, comments and messages. Only the slate's owner can. This cannot be undone.",
+        "description": "Delete one of your own slates, with its sharing, comments and messages. Only the slate's owner can, or the owner of the project it is in. This cannot be undone.",
         "x-required-scope": "slates:delete",
         "x-slatebox": {
           "action": "slates.delete",
@@ -14293,7 +16006,7 @@
       "post": {
         "operationId": "copySlate",
         "summary": "Copy slate",
-        "description": "Make a private copy of a slate you may edit, a public slate, or a slate whose presentation is published publicly. Someone who may only view a private slate cannot copy it. The copy is an ordinary private slate. A published presentation of the slate is copied with it as a private presentation of the copy. To use something from the library, fork it (library.fork).",
+        "description": "Make a private copy of a slate you may edit, a public slate, or a slate whose presentation is published publicly. Someone who may only view a private slate cannot copy it. The copy is an ordinary private slate, in none of your projects unless projectId names one you can edit. A published presentation of the slate is copied with it as a private presentation of the copy. To use something from the library, fork it (library.fork).",
         "x-required-scope": "slates:write",
         "x-slatebox": {
           "action": "slates.copy",
@@ -14360,6 +16073,13 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 200
+                  },
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "pattern": "^[A-Za-z0-9_-]+$",
+                    "description": "Put the copy in this project or folder (you need to be an editor of it)."
                   }
                 },
                 "additionalProperties": false
@@ -17492,6 +19212,137 @@
                     "presentationId",
                     "style",
                     "steps"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Read error.code: 400 invalid_request, 401 unauthorized, 403 insufficient_scope or forbidden, 404 not_found, 409 conflict, 429 rate_limited (see Retry-After).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/slates/{shareId}/project": {
+      "post": {
+        "operationId": "moveSlateToProject",
+        "summary": "Move slate to project",
+        "description": "Put a slate in a project or folder, move it to another one, or take it out of its project (projectId null), back to its owner's slates. The slate's owner may move it into any project they can edit; a manager of its project may move any slate within that project or give it back to its owner. Everyone in a project can open its slates at their role there.",
+        "x-required-scope": "projects:write",
+        "x-slatebox": {
+          "action": "projects.moveSlate",
+          "toolset": "projects",
+          "readOnly": false,
+          "destructive": false,
+          "idempotent": false,
+          "openWorld": false,
+          "confirm": true,
+          "principals": [
+            "person",
+            "agent"
+          ],
+          "modes": [
+            "save"
+          ],
+          "idempotency": "optional"
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "shareId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "The slate ID from its address: /canvas/<shareId>."
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "description": "Reuse the same key with the same token only to retry one intended write. A different request under a used key answers 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[!-~]+$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Slatebox-Confirm",
+            "required": false,
+            "description": "An agent's save that removes something, changes someone else's notes, rewrites many notes' text or widens access answers 409 confirmation_required. Once the person agrees, send the same request again (same Idempotency-Key) with this header set to details.confirmationId. It works once and expires after 10 minutes.",
+            "schema": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "projectId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "pattern": "^[A-Za-z0-9_-]+$",
+                    "description": "The project or folder it goes in; null takes it out of its project."
+                  }
+                },
+                "required": [
+                  "projectId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A preview, or the answer to a repeated request with the same key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "shareId": {
+                      "type": "string"
+                    },
+                    "projectId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "moved": {
+                      "type": "boolean"
+                    },
+                    "mode": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "shareId",
+                    "projectId",
+                    "moved"
                   ]
                 }
               }

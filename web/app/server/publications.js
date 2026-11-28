@@ -270,12 +270,14 @@ Meteor.publish(CONSTANTS.publications.orgUsersForGuest, async function (opts) {
   return null
 })
 
+// Every slate of the team, for its admins (the claim that sees all of them: canViewSlates was retired,
+// and CONSTANTS.claims.canViewSlates no longer exists, so this read the _id of undefined).
 Meteor.publish(CONSTANTS.publications.orgSlates, async function () {
   const user = await Meteor.users.findOneAsync({ _id: this.userId })
   if (
     user?.orgId &&
     (await AuthManager.userHasClaim(user._id, [
-      CONSTANTS.claims.canViewSlates._id,
+      CONSTANTS.claims.admin._id,
     ]))
   ) {
     return Slates.find({ orgId: user.orgId }, { sort: { lastSaved: -1 } })

@@ -63,6 +63,9 @@ import { audit } from '../audit/recorder.mjs'
 import { auditService, mountAuditExport } from '../audit/meteor'
 import { signOutUrl as ssoSignOutUrl, startTry as startSsoTry, teamSso } from '../sso'
 import { teamPerson } from '../common/team-person'
+import { projectsCore } from '../projects/meteor'
+import { projectAccess } from '../projects/access-meteor'
+import { checkPlacement } from '../projects/place.mjs'
 
 const IdempotencyRecords = new Mongo.Collection('apiIdempotencyRecords')
 const RateWindows = new Mongo.Collection('apiRateWindows')
@@ -167,9 +170,15 @@ export const deps = {
     // shapes.generate, shapes.list, shapes.searchIcons, shapes.apply (server/shapes)
     shapes: shapeService,
     // slates.list: the Slates page's lists (imports/api/common/slateFilter.js), for a token's account.
-    async listSlates({ userId, orgId, scope, q, limit }) {
+    async listSlates({ userId, orgId, scope, projectId, q, limit }) {
       let isAdmin = false
       let grantedIds = []
+      let projectIds = null
+      if (scope === 'project') {
+        // A token's account: its own and its team's grants in the project (never a link or admin rights).
+        const role = await projectAccess.roleFor({ _id: userId, orgId }, projectId, { token: true })
+        projectIds = role ? await projectAccess.folderIds(projectId, { nested: true }) : []
+      }
       if (scope === 'team' && orgId) {
         isAdmin = await AuthManager.userHasClaim(userId, [CONSTANTS.claims.admin._id])
         if (!isAdmin) {
@@ -180,10 +189,10 @@ export const deps = {
           grantedIds = grants.map((grant) => grant.slateId)
         }
       }
-      const selector = slateListSelector({ userId, orgId, scope, isAdmin, grantedIds, q })
+      const selector = slateListSelector({ userId, orgId, scope, isAdmin, grantedIds, projectIds, q })
       if (!selector) return []
       return Slates.rawCollection().find(selector, {
-        projection: { shareId: 1, userId: 1, lastSaved: 1, 'options.name': 1, 'options.description': 1, 'options.isPublic': 1, 'options.isUnlisted': 1, 'options.isPrivate': 1 },
+        projection: { shareId: 1, userId: 1, lastSaved: 1, projectId: 1, 'options.name': 1, 'options.description': 1, 'options.isPublic': 1, 'options.isUnlisted': 1, 'options.isPrivate': 1 },
         sort: { lastSaved: -1 },
         limit,
       }).toArray()
@@ -261,6 +270,10 @@ deps.personal = createAppPersonal(deps)
 deps.startTiles = createAppStartTiles(deps)
 // a team's single sign-on (server/sso, actions/team-sso.mjs)
 Object.assign(deps, { teamSso, teamPerson, startSsoTry, ssoSignOutUrl })
+// projects.* (server/projects): drives of slates, their folders and sharing; and where a new slate
+// may go (slates.create, slates.importMermaid, slates.copy with projectId).
+deps.projects = projectsCore
+deps.placeSlate = (user, projectId, options) => checkPlacement({ access: projectAccess }, user, projectId, options)
 
 export const limiter = createRateLimiter({ collection: RateWindows.rawCollection() })
 export const registry = createAppRegistry({ deps, idempotency, limiter, extraActions: enterpriseHost.actions })

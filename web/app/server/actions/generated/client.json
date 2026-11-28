@@ -6716,6 +6716,716 @@
       }
     },
     {
+      "name": "projects.access",
+      "id": "projects.access",
+      "title": "Get project sharing",
+      "summary": "Who can open a project: its owner, each person and team it is shared with and their role, invitations to addresses with no account yet, and the link's role and address. The project's owner and managers may read it.",
+      "kind": "read",
+      "readOnly": true,
+      "destructive": false,
+      "openWorld": false,
+      "confirm": false,
+      "scope": "projects:share",
+      "modes": [],
+      "idempotency": "none",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/projects/{projectId}/access",
+        "pathParams": [
+          "projectId"
+        ],
+        "queryParams": [],
+        "bodyParams": []
+      },
+      "index": "projects.access({projectId}): Get project sharing",
+      "types": [],
+      "dts": "declare namespace slatebox.projects {\n  /** Get project sharing. Who can open a project: its owner, each person and team it is shared with and their role, invitations to addresses with no account yet, and the link's role and address. The project's owner and managers may read it. @scope projects:share */\n  function access(input: {\n    /** A project (a drive) or one of its folders. (1–64 characters) */\n    projectId: string;\n  }): Promise<{\n    projectId: string;\n    owner: {\n      userId: string;\n      name?: string;\n      [key: string]: unknown;\n    };\n    link: {\n      role: \"none\" | \"viewer\" | \"commenter\" | \"editor\";\n      url: string | null;\n      [key: string]: unknown;\n    };\n    grants: Array<{\n      kind: \"user\" | \"team\";\n      role: \"none\" | \"viewer\" | \"commenter\" | \"editor\" | \"manager\";\n      userId?: string | null;\n      orgId?: string | null;\n      /** For an invitation to an address with no account yet. */\n      email?: string | null;\n      pending?: boolean;\n      name?: string;\n      granted?: string | null;\n      [key: string]: unknown;\n    }>;\n    sharingRevision?: number;\n    [key: string]: unknown;\n  }>;\n}",
+      "tool": {
+        "name": "get_project_sharing",
+        "title": "See who a project is shared with",
+        "description": "See who can open one of the person's projects, with each person's and team's role and the link's.\n\nGet project sharing. Who can open a project: its owner, each person and team it is shared with and their role, invitations to addresses with no account yet, and the link's role and address. The project's owner and managers may read it.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "projectId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "A project (a drive) or one of its folders."
+            }
+          },
+          "required": [
+            "projectId"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "title": "See who a project is shared with",
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "name": "projects.create",
+      "id": "projects.create",
+      "title": "Create project",
+      "summary": "Make a project: a drive of slates you own and can share like a shared drive (your team's when you are in one). With parentId, make a folder in that project or folder instead (an editor of it may; folders go at most 3 levels deep).",
+      "kind": "write",
+      "readOnly": false,
+      "destructive": false,
+      "openWorld": false,
+      "confirm": false,
+      "scope": "projects:write",
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/projects",
+        "pathParams": [],
+        "queryParams": [],
+        "bodyParams": [
+          "name",
+          "description",
+          "color",
+          "parentId"
+        ]
+      },
+      "index": "projects.create({name,description?,color?,parentId?}): Create project",
+      "types": [],
+      "dts": "declare namespace slatebox.projects {\n  /** Create project. Make a project: a drive of slates you own and can share like a shared drive (your team's when you are in one). With parentId, make a folder in that project or folder instead (an editor of it may; folders go at most 3 levels deep). @scope projects:write */\n  function create(input: {\n    /** (1–120 characters) */\n    name: string;\n    /** (at most 2000 characters) */\n    description?: string;\n    /** A palette index for the project's dot. (0 to 11) */\n    color?: number | null;\n    /** Make a folder in this project or folder. (1–64 characters) */\n    parentId?: string;\n  }): Promise<({\n    projectId: string;\n    /** A drive is a project; a folder sits in one. */\n    kind: \"drive\" | \"folder\";\n    /** The project this folder is in (the project itself for a drive). */\n    driveId: string;\n    parentId?: string | null;\n    /** (0 to 3) */\n    depth?: number;\n    name: string;\n    description?: string;\n    color?: number | null;\n    ownerId?: string;\n    orgId?: string | null;\n    /** Your role in the project. */\n    role: \"owner\" | \"manager\" | \"editor\" | \"commenter\" | \"viewer\";\n    recipesPaused?: boolean;\n    created?: string | null;\n    updated?: string | null;\n    url?: string;\n    mode?: string;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "tool": {
+        "name": "create_project",
+        "title": "Make a project or folder",
+        "description": "Make a project (a shareable drive for slates) or a folder in one, and return its link.\n\nCreate project. Make a project: a drive of slates you own and can share like a shared drive (your team's when you are in one). With parentId, make a folder in that project or folder instead (an editor of it may; folders go at most 3 levels deep).",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "description": {
+              "type": "string",
+              "maxLength": 2000
+            },
+            "color": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 11,
+              "description": "A palette index for the project's dot."
+            },
+            "parentId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Make a folder in this project or folder."
+            },
+            "confirm": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$",
+              "description": "The confirmation id from a confirmation_required result, once the person agreed."
+            },
+            "idempotencyKey": {
+              "type": "string",
+              "pattern": "^[!-~]{1,128}$",
+              "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "title": "Make a project or folder",
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "name": "projects.delete",
+      "id": "projects.delete",
+      "title": "Delete project",
+      "summary": "Delete a folder, or a whole project. A folder that holds slates or folders moves them to moveContentsTo (its parent by default) first; a manager deletes only empty folders, the owner any. Deleting a project (its owner only) deletes the slates its owner owns in it, with their sharing and comments, and gives every other slate back to its owner. This cannot be undone. mode \"preview\" says how many slates would be deleted and given back without changing anything.",
+      "kind": "write",
+      "readOnly": false,
+      "destructive": true,
+      "openWorld": false,
+      "confirm": false,
+      "scope": "projects:write",
+      "modes": [
+        "save",
+        "preview"
+      ],
+      "idempotency": "optional",
+      "http": {
+        "method": "DELETE",
+        "path": "/api/v1/projects/{projectId}",
+        "pathParams": [
+          "projectId"
+        ],
+        "queryParams": [
+          "moveContentsTo"
+        ],
+        "bodyParams": []
+      },
+      "index": "projects.delete({projectId,moveContentsTo?}): Delete project",
+      "types": [],
+      "dts": "declare namespace slatebox.projects {\n  /** Delete project. Delete a folder, or a whole project. A folder that holds slates or folders moves them to moveContentsTo (its parent by default) first; a manager deletes only empty folders, the owner any. Deleting a project (its owner only) deletes the slates its owner owns in it, with their sharing and comments, and gives every other slate back to its owner. This cannot be undone. mode \"preview\" says how many slates would be deleted and given back without changing anything. @scope projects:write @modes save|preview @destructive */\n  function delete(input: {\n    /** A project (a drive) or one of its folders. (1–64 characters) */\n    projectId: string;\n    /** For a folder: where its slates and folders go (its parent by default). (1–64 characters) */\n    moveContentsTo?: string;\n    /** preview returns what would change and saves nothing. (default \"save\") */\n    mode?: \"save\" | \"preview\";\n  }): Promise<({\n    projectId: string;\n    deleted: boolean;\n    folders?: number;\n    /** Slates of the project's owner that are (or would be) deleted. */\n    deletedSlates: number;\n    /** Slates of other people that go (or would go) back to them. */\n    returnedSlates: number;\n    /** For a folder: slates moved to where its contents went. */\n    movedSlates?: number;\n    mode?: string;\n    [key: string]: unknown;\n  }) & { mode: \"save\" | \"preview\" }>;\n}",
+      "tool": {
+        "name": "delete_project",
+        "title": "Delete a project or folder",
+        "description": "Delete a folder, or a whole project the person owns (its owner's slates are deleted; everyone else's go back to them). This cannot be undone.\n\nDelete project. Delete a folder, or a whole project. A folder that holds slates or folders moves them to moveContentsTo (its parent by default) first; a manager deletes only empty folders, the owner any. Deleting a project (its owner only) deletes the slates its owner owns in it, with their sharing and comments, and gives every other slate back to its owner. This cannot be undone. mode \"preview\" says how many slates would be deleted and given back without changing anything.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "projectId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "A project (a drive) or one of its folders."
+            },
+            "moveContentsTo": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "For a folder: where its slates and folders go (its parent by default)."
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "save",
+                "preview"
+              ],
+              "default": "save",
+              "description": "save (the default) writes; preview returns what would change and saves nothing. The response says which happened."
+            },
+            "confirm": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$",
+              "description": "The confirmation id from a confirmation_required result, once the person agreed."
+            },
+            "idempotencyKey": {
+              "type": "string",
+              "pattern": "^[!-~]{1,128}$",
+              "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+            }
+          },
+          "required": [
+            "projectId"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "title": "Delete a project or folder",
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "name": "projects.get",
+      "id": "projects.get",
+      "title": "Get project",
+      "summary": "Read a project or one of its folders: its name, your role, the folders directly in it, the folders above it and how many slates it holds. A drive link's key (linkKey, the part after /p/) opens a project shared by link.",
+      "kind": "read",
+      "readOnly": true,
+      "destructive": false,
+      "openWorld": false,
+      "confirm": false,
+      "scope": "projects:read",
+      "modes": [],
+      "idempotency": "none",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/projects/{projectId}",
+        "pathParams": [
+          "projectId"
+        ],
+        "queryParams": [
+          "linkKey"
+        ],
+        "bodyParams": []
+      },
+      "index": "projects.get({projectId,linkKey?}): Get project",
+      "types": [],
+      "dts": "declare namespace slatebox.projects {\n  /** Get project. Read a project or one of its folders: its name, your role, the folders directly in it, the folders above it and how many slates it holds. A drive link's key (linkKey, the part after /p/) opens a project shared by link. @scope projects:read */\n  function get(input: {\n    /** A project (a drive) or one of its folders. (1–64 characters) */\n    projectId: string;\n    /** The key of a link to the project (/p/<key>). Not used by tokens. (16–64 characters) */\n    linkKey?: string;\n  }): Promise<{\n    projectId: string;\n    /** A drive is a project; a folder sits in one. */\n    kind: \"drive\" | \"folder\";\n    /** The project this folder is in (the project itself for a drive). */\n    driveId: string;\n    parentId?: string | null;\n    /** (0 to 3) */\n    depth?: number;\n    name: string;\n    description?: string;\n    color?: number | null;\n    ownerId?: string;\n    orgId?: string | null;\n    /** Your role in the project. */\n    role: \"owner\" | \"manager\" | \"editor\" | \"commenter\" | \"viewer\";\n    recipesPaused?: boolean;\n    created?: string | null;\n    updated?: string | null;\n    url?: string;\n    path: Array<{\n      projectId: string;\n      name: string;\n      [key: string]: unknown;\n    }>;\n    folders: Array<{\n      projectId: string;\n      name: string;\n      depth?: number;\n      [key: string]: unknown;\n    }>;\n    /** (at least 0) */\n    slateCount: number;\n    ownerName?: string;\n    [key: string]: unknown;\n  }>;\n}",
+      "tool": {
+        "name": "get_project",
+        "title": "Read a project",
+        "description": "Read one of the person's projects or folders: its folders, its place in the project and the person's role.\n\nGet project. Read a project or one of its folders: its name, your role, the folders directly in it, the folders above it and how many slates it holds. A drive link's key (linkKey, the part after /p/) opens a project shared by link.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "projectId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "A project (a drive) or one of its folders."
+            },
+            "linkKey": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "The key of a link to the project (/p/<key>). Not used by tokens."
+            }
+          },
+          "required": [
+            "projectId"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "title": "Read a project",
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "name": "projects.list",
+      "id": "projects.list",
+      "title": "List projects",
+      "summary": "List your projects (shareable drives of slates): the ones you own first, then the ones shared with you, each with your role. With parentId, list the folders in that project or folder instead.",
+      "kind": "read",
+      "readOnly": true,
+      "destructive": false,
+      "openWorld": false,
+      "confirm": false,
+      "scope": "projects:read",
+      "modes": [],
+      "idempotency": "none",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/projects",
+        "pathParams": [],
+        "queryParams": [
+          "parentId"
+        ],
+        "bodyParams": []
+      },
+      "index": "projects.list({parentId?}): List projects",
+      "types": [],
+      "dts": "declare namespace slatebox.projects {\n  /** List projects. List your projects (shareable drives of slates): the ones you own first, then the ones shared with you, each with your role. With parentId, list the folders in that project or folder instead. @scope projects:read */\n  function list(input: {\n    /** List the folders in this project or folder. (1–64 characters) */\n    parentId?: string;\n  }): Promise<{\n    projects: Array<{\n      projectId: string;\n      /** A drive is a project; a folder sits in one. */\n      kind: \"drive\" | \"folder\";\n      /** The project this folder is in (the project itself for a drive). */\n      driveId: string;\n      parentId?: string | null;\n      /** (0 to 3) */\n      depth?: number;\n      name: string;\n      description?: string;\n      color?: number | null;\n      ownerId?: string;\n      orgId?: string | null;\n      /** Your role in the project. */\n      role: \"owner\" | \"manager\" | \"editor\" | \"commenter\" | \"viewer\";\n      recipesPaused?: boolean;\n      created?: string | null;\n      updated?: string | null;\n      url?: string;\n      [key: string]: unknown;\n    }>;\n    [key: string]: unknown;\n  }>;\n}",
+      "tool": {
+        "name": "list_projects",
+        "title": "List your projects",
+        "description": "List the person's projects (shared drives that hold slates and folders), owned and shared, with their role in each.\n\nList projects. List your projects (shareable drives of slates): the ones you own first, then the ones shared with you, each with your role. With parentId, list the folders in that project or folder instead.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "parentId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "List the folders in this project or folder."
+            }
+          },
+          "additionalProperties": false
+        },
+        "annotations": {
+          "title": "List your projects",
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "name": "projects.moveSlate",
+      "id": "projects.moveSlate",
+      "title": "Move slate to project",
+      "summary": "Put a slate in a project or folder, move it to another one, or take it out of its project (projectId null), back to its owner's slates. The slate's owner may move it into any project they can edit; a manager of its project may move any slate within that project or give it back to its owner. Everyone in a project can open its slates at their role there.",
+      "kind": "write",
+      "readOnly": false,
+      "destructive": false,
+      "openWorld": false,
+      "confirm": true,
+      "scope": "projects:write",
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/slates/{shareId}/project",
+        "pathParams": [
+          "shareId"
+        ],
+        "queryParams": [],
+        "bodyParams": [
+          "projectId"
+        ]
+      },
+      "index": "projects.moveSlate({shareId,projectId}): Move slate to project",
+      "types": [],
+      "dts": "declare namespace slatebox.projects {\n  /** Move slate to project. Put a slate in a project or folder, move it to another one, or take it out of its project (projectId null), back to its owner's slates. The slate's owner may move it into any project they can edit; a manager of its project may move any slate within that project or give it back to its owner. Everyone in a project can open its slates at their role there. @scope projects:write @confirm */\n  function moveSlate(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n    /** The project or folder it goes in; null takes it out of its project. (1–64 characters) */\n    projectId: string | null;\n  }): Promise<({\n    shareId: string;\n    projectId: string | null;\n    moved: boolean;\n    mode?: string;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "tool": {
+        "name": "move_slate_to_project",
+        "title": "Move a slate into a project",
+        "description": "Put one of the person's slates in a project or folder, move it between them, or take it out of its project.\n\nMove slate to project. Put a slate in a project or folder, move it to another one, or take it out of its project (projectId null), back to its owner's slates. The slate's owner may move it into any project they can edit; a manager of its project may move any slate within that project or give it back to its owner. Everyone in a project can open its slates at their role there.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "shareId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "The slate ID from its address: /canvas/<shareId>."
+            },
+            "projectId": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "The project or folder it goes in; null takes it out of its project."
+            },
+            "confirm": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$",
+              "description": "The confirmation id from a confirmation_required result, once the person agreed."
+            },
+            "idempotencyKey": {
+              "type": "string",
+              "pattern": "^[!-~]{1,128}$",
+              "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+            }
+          },
+          "required": [
+            "shareId",
+            "projectId"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "title": "Move a slate into a project",
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "name": "projects.share",
+      "id": "projects.share",
+      "title": "Share project",
+      "summary": "Share a project, as a shared drive is shared: with one person (userId, or email, which invites an address that has no account yet), with your whole team (orgId, your own team, if you may make team slates), or with anyone who has the link (link). Roles: viewer opens every slate, commenter comments too, editor edits and adds slates and folders, manager also organizes and shares. role \"none\" (or link \"none\") takes access away; rotate makes a new link and turns the old one off. The project's owner and managers may share it.",
+      "kind": "write",
+      "readOnly": false,
+      "destructive": false,
+      "openWorld": false,
+      "confirm": true,
+      "scope": "projects:share",
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/projects/{projectId}/access",
+        "pathParams": [
+          "projectId"
+        ],
+        "queryParams": [],
+        "bodyParams": [
+          "userId",
+          "email",
+          "orgId",
+          "role",
+          "link",
+          "rotate"
+        ]
+      },
+      "index": "projects.share({projectId,userId?,email?,orgId?,…}): Share project",
+      "types": [],
+      "dts": "declare namespace slatebox.projects {\n  /** Share project. Share a project, as a shared drive is shared: with one person (userId, or email, which invites an address that has no account yet), with your whole team (orgId, your own team, if you may make team slates), or with anyone who has the link (link). Roles: viewer opens every slate, commenter comments too, editor edits and adds slates and folders, manager also organizes and shares. role \"none\" (or link \"none\") takes access away; rotate makes a new link and turns the old one off. The project's owner and managers may share it. @scope projects:share @confirm */\n  function share(input: {\n    /** A project (a drive) or one of its folders. (1–64 characters) */\n    projectId: string;\n    /** (1–128 characters) */\n    userId?: string;\n    /** (3–320 characters) */\n    email?: string;\n    /** Your team, to share with everyone in it. (1–128 characters) */\n    orgId?: string;\n    /** For a person or a team. */\n    role?: \"none\" | \"viewer\" | \"commenter\" | \"editor\" | \"manager\";\n    /** What anyone with the link can do. */\n    link?: \"none\" | \"viewer\" | \"commenter\" | \"editor\";\n    /** With link: make a new link address; the old one stops working. */\n    rotate?: boolean;\n  }): Promise<({\n    projectId: string;\n    owner: {\n      userId: string;\n      name?: string;\n      [key: string]: unknown;\n    };\n    link: {\n      role: \"none\" | \"viewer\" | \"commenter\" | \"editor\";\n      url: string | null;\n      [key: string]: unknown;\n    };\n    grants: Array<{\n      kind: \"user\" | \"team\";\n      role: \"none\" | \"viewer\" | \"commenter\" | \"editor\" | \"manager\";\n      userId?: string | null;\n      orgId?: string | null;\n      /** For an invitation to an address with no account yet. */\n      email?: string | null;\n      pending?: boolean;\n      name?: string;\n      granted?: string | null;\n      [key: string]: unknown;\n    }>;\n    sharingRevision?: number;\n    mode?: string;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "tool": {
+        "name": "share_project",
+        "title": "Share a project",
+        "description": "Share one of the person's projects with a person, their team or anyone with the link, at a role, or take access away.\n\nShare project. Share a project, as a shared drive is shared: with one person (userId, or email, which invites an address that has no account yet), with your whole team (orgId, your own team, if you may make team slates), or with anyone who has the link (link). Roles: viewer opens every slate, commenter comments too, editor edits and adds slates and folders, manager also organizes and shares. role \"none\" (or link \"none\") takes access away; rotate makes a new link and turns the old one off. The project's owner and managers may share it.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "projectId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "A project (a drive) or one of its folders."
+            },
+            "userId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "email": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 320,
+              "format": "email"
+            },
+            "orgId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Your team, to share with everyone in it."
+            },
+            "role": {
+              "type": "string",
+              "enum": [
+                "none",
+                "viewer",
+                "commenter",
+                "editor",
+                "manager"
+              ],
+              "description": "For a person or a team."
+            },
+            "link": {
+              "type": "string",
+              "enum": [
+                "none",
+                "viewer",
+                "commenter",
+                "editor"
+              ],
+              "description": "What anyone with the link can do."
+            },
+            "rotate": {
+              "type": "boolean",
+              "description": "With link: make a new link address; the old one stops working."
+            },
+            "confirm": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$",
+              "description": "The confirmation id from a confirmation_required result, once the person agreed."
+            },
+            "idempotencyKey": {
+              "type": "string",
+              "pattern": "^[!-~]{1,128}$",
+              "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+            }
+          },
+          "required": [
+            "projectId"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "title": "Share a project",
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "name": "projects.slates",
+      "id": "projects.slates",
+      "title": "List project slates",
+      "summary": "List the slates in a project or folder, newest first, with each one's link: the folder's own and, unless nested is false, those in its folders too. Anyone with a role in the project may. Filter by name with q.",
+      "kind": "read",
+      "readOnly": true,
+      "destructive": false,
+      "openWorld": false,
+      "confirm": false,
+      "scope": "projects:read",
+      "modes": [],
+      "idempotency": "none",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/projects/{projectId}/slates",
+        "pathParams": [
+          "projectId"
+        ],
+        "queryParams": [
+          "nested",
+          "q",
+          "limit"
+        ],
+        "bodyParams": []
+      },
+      "index": "projects.slates({projectId,nested?,q?,limit?}): List project slates",
+      "types": [],
+      "dts": "declare namespace slatebox.projects {\n  /** List project slates. List the slates in a project or folder, newest first, with each one's link: the folder's own and, unless nested is false, those in its folders too. Anyone with a role in the project may. Filter by name with q. @scope projects:read */\n  function slates(input: {\n    /** A project (a drive) or one of its folders. (1–64 characters) */\n    projectId: string;\n    /** Include the slates in its folders. (default true) */\n    nested?: boolean;\n    /** Part of the slate name. (1–200 characters) */\n    q?: string;\n    /** (1 to 100, default 50) */\n    limit?: number;\n  }): Promise<{\n    slates: Array<{\n      shareId: string;\n      name: string;\n      description?: string;\n      visibility?: \"private\" | \"unlisted\" | \"public\";\n      owner: \"you\" | \"someone\";\n      projectId: string;\n      updated?: string | null;\n      url: string;\n      [key: string]: unknown;\n    }>;\n    [key: string]: unknown;\n  }>;\n}",
+      "tool": {
+        "name": "list_project_slates",
+        "title": "List the slates in a project",
+        "description": "List the slates in one of the person's projects or folders, newest first, with each one's link.\n\nList project slates. List the slates in a project or folder, newest first, with each one's link: the folder's own and, unless nested is false, those in its folders too. Anyone with a role in the project may. Filter by name with q.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "projectId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "A project (a drive) or one of its folders."
+            },
+            "nested": {
+              "type": "boolean",
+              "default": true,
+              "description": "Include the slates in its folders."
+            },
+            "q": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Part of the slate name."
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          "required": [
+            "projectId"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "title": "List the slates in a project",
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
+      "name": "projects.update",
+      "id": "projects.update",
+      "title": "Update project",
+      "summary": "Rename a project or folder, change its description or color, move a folder to another folder of the same project (parentId), or pause and resume the recipes that keep the project's slates up to date (recipesPaused, a whole project only). A project is renamed by its owner and managers; a folder by its editors; folders are moved by managers.",
+      "kind": "write",
+      "readOnly": false,
+      "destructive": false,
+      "openWorld": false,
+      "confirm": false,
+      "scope": "projects:write",
+      "modes": [
+        "save"
+      ],
+      "idempotency": "optional",
+      "http": {
+        "method": "PATCH",
+        "path": "/api/v1/projects/{projectId}",
+        "pathParams": [
+          "projectId"
+        ],
+        "queryParams": [],
+        "bodyParams": [
+          "name",
+          "description",
+          "color",
+          "parentId",
+          "recipesPaused"
+        ]
+      },
+      "index": "projects.update({projectId,name?,description?,color?,…}): Update project",
+      "types": [],
+      "dts": "declare namespace slatebox.projects {\n  /** Update project. Rename a project or folder, change its description or color, move a folder to another folder of the same project (parentId), or pause and resume the recipes that keep the project's slates up to date (recipesPaused, a whole project only). A project is renamed by its owner and managers; a folder by its editors; folders are moved by managers. @scope projects:write */\n  function update(input: {\n    /** A project (a drive) or one of its folders. (1–64 characters) */\n    projectId: string;\n    /** (1–120 characters) */\n    name?: string;\n    /** (at most 2000 characters) */\n    description?: string;\n    /** A palette index for the project's dot. (0 to 11) */\n    color?: number | null;\n    /** Move this folder into that folder (or the project itself). (1–64 characters) */\n    parentId?: string;\n    /** Pause (true) or resume (false) every recipe in the project. */\n    recipesPaused?: boolean;\n  }): Promise<({\n    projectId: string;\n    /** A drive is a project; a folder sits in one. */\n    kind: \"drive\" | \"folder\";\n    /** The project this folder is in (the project itself for a drive). */\n    driveId: string;\n    parentId?: string | null;\n    /** (0 to 3) */\n    depth?: number;\n    name: string;\n    description?: string;\n    color?: number | null;\n    ownerId?: string;\n    orgId?: string | null;\n    /** Your role in the project. */\n    role: \"owner\" | \"manager\" | \"editor\" | \"commenter\" | \"viewer\";\n    recipesPaused?: boolean;\n    created?: string | null;\n    updated?: string | null;\n    url?: string;\n    mode?: string;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "tool": {
+        "name": "update_project",
+        "title": "Rename or reorganize a project",
+        "description": "Rename a project or folder, move a folder within its project, or pause its recipes.\n\nUpdate project. Rename a project or folder, change its description or color, move a folder to another folder of the same project (parentId), or pause and resume the recipes that keep the project's slates up to date (recipesPaused, a whole project only). A project is renamed by its owner and managers; a folder by its editors; folders are moved by managers.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "projectId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "A project (a drive) or one of its folders."
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "description": {
+              "type": "string",
+              "maxLength": 2000
+            },
+            "color": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 11,
+              "description": "A palette index for the project's dot."
+            },
+            "parentId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Move this folder into that folder (or the project itself)."
+            },
+            "recipesPaused": {
+              "type": "boolean",
+              "description": "Pause (true) or resume (false) every recipe in the project."
+            },
+            "confirm": {
+              "type": "string",
+              "pattern": "^cf_[A-Za-z0-9]{24}$",
+              "description": "The confirmation id from a confirmation_required result, once the person agreed."
+            },
+            "idempotencyKey": {
+              "type": "string",
+              "pattern": "^[!-~]{1,128}$",
+              "description": "Send with confirm: the idempotencyKey from the confirmation_required result."
+            }
+          },
+          "required": [
+            "projectId"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "title": "Rename or reorganize a project",
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      }
+    },
+    {
       "name": "shapes.apply",
       "id": "shapes.apply",
       "title": "Shape notes",
@@ -7323,7 +8033,7 @@
       "name": "slates.copy",
       "id": "slates.copy",
       "title": "Copy slate",
-      "summary": "Make a private copy of a slate you may edit, a public slate, or a slate whose presentation is published publicly. Someone who may only view a private slate cannot copy it. The copy is an ordinary private slate. A published presentation of the slate is copied with it as a private presentation of the copy. To use something from the library, fork it (library.fork).",
+      "summary": "Make a private copy of a slate you may edit, a public slate, or a slate whose presentation is published publicly. Someone who may only view a private slate cannot copy it. The copy is an ordinary private slate, in none of your projects unless projectId names one you can edit. A published presentation of the slate is copied with it as a private presentation of the copy. To use something from the library, fork it (library.fork).",
       "kind": "write",
       "readOnly": false,
       "destructive": false,
@@ -7342,16 +8052,17 @@
         ],
         "queryParams": [],
         "bodyParams": [
-          "name"
+          "name",
+          "projectId"
         ]
       },
-      "index": "slates.copy({shareId,name?}): Copy slate",
+      "index": "slates.copy({shareId,name?,projectId?}): Copy slate",
       "types": [],
-      "dts": "declare namespace slatebox.slates {\n  /** Copy slate. Make a private copy of a slate you may edit, a public slate, or a slate whose presentation is published publicly. Someone who may only view a private slate cannot copy it. The copy is an ordinary private slate. A published presentation of the slate is copied with it as a private presentation of the copy. To use something from the library, fork it (library.fork). @scope slates:write */\n  function copy(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n    /** (1–200 characters) */\n    name?: string;\n  }): Promise<({\n    shareId: string;\n    /** (at least 1) */\n    revision: number;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "dts": "declare namespace slatebox.slates {\n  /** Copy slate. Make a private copy of a slate you may edit, a public slate, or a slate whose presentation is published publicly. Someone who may only view a private slate cannot copy it. The copy is an ordinary private slate, in none of your projects unless projectId names one you can edit. A published presentation of the slate is copied with it as a private presentation of the copy. To use something from the library, fork it (library.fork). @scope slates:write */\n  function copy(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n    /** (1–200 characters) */\n    name?: string;\n    /** Put the copy in this project or folder (you need to be an editor of it). (1–64 characters) */\n    projectId?: string;\n  }): Promise<({\n    shareId: string;\n    /** (at least 1) */\n    revision: number;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
       "tool": {
         "name": "copy_slate",
         "title": "Copy a slate",
-        "description": "Make a private copy of a slate the person may edit, or of a public slate (such as a template to start from), and return the copy's id.\n\nCopy slate. Make a private copy of a slate you may edit, a public slate, or a slate whose presentation is published publicly. Someone who may only view a private slate cannot copy it. The copy is an ordinary private slate. A published presentation of the slate is copied with it as a private presentation of the copy. To use something from the library, fork it (library.fork).",
+        "description": "Make a private copy of a slate the person may edit, or of a public slate (such as a template to start from), and return the copy's id.\n\nCopy slate. Make a private copy of a slate you may edit, a public slate, or a slate whose presentation is published publicly. Someone who may only view a private slate cannot copy it. The copy is an ordinary private slate, in none of your projects unless projectId names one you can edit. A published presentation of the slate is copied with it as a private presentation of the copy. To use something from the library, fork it (library.fork).",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -7366,6 +8077,13 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 200
+            },
+            "projectId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Put the copy in this project or folder (you need to be an editor of it)."
             },
             "confirm": {
               "type": "string",
@@ -7396,7 +8114,7 @@
       "name": "slates.create",
       "id": "slates.create",
       "title": "Create a slate",
-      "summary": "Omitting kind creates a playable decision map from a brief of up to 160 characters. kind diagram makes editable notes and connections from your own steps (up to 1200 characters, connect two steps with → or ->) or from a named source. The token owner owns the new private slate.",
+      "summary": "Omitting kind creates a playable decision map from a brief of up to 160 characters. kind diagram makes editable notes and connections from your own steps (up to 1200 characters, connect two steps with → or ->) or from a named source. The token owner owns the new private slate. With projectId it is made in that project or folder, where the project's people can open it.",
       "kind": "write",
       "readOnly": false,
       "destructive": false,
@@ -7415,19 +8133,20 @@
         "bodyParams": [
           "kind",
           "brief",
-          "source"
+          "source",
+          "projectId"
         ]
       },
-      "index": "slates.create({kind?,brief,source?}): Create a slate",
+      "index": "slates.create({kind?,brief,source?,projectId?}): Create a slate",
       "types": [
         "DiagramSummary",
         "Workshop"
       ],
-      "dts": "declare namespace slatebox.slates {\n  /** Create a slate. Omitting kind creates a playable decision map from a brief of up to 160 characters. kind diagram makes editable notes and connections from your own steps (up to 1200 characters, connect two steps with → or ->) or from a named source. The token owner owns the new private slate. @scope slates:write */\n  function create(input: {\n    kind?: \"map\";\n    /** (1–160 characters) */\n    brief: string;\n  } | {\n    kind: \"diagram\";\n    source?: \"sign-in-outage\" | \"call-status\" | \"interview-notes\";\n    /** Plain text, including multiple lines. Connect two named steps using → or ->. Use up to 24 distinct notes including source notes. (1–1200 characters) */\n    brief: string;\n  }): Promise<({\n    shareId: string;\n    url: string;\n    workshop: Workshop;\n    [key: string]: unknown;\n  } | {\n    shareId: string;\n    url: string;\n    diagram: DiagramSummary;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "dts": "declare namespace slatebox.slates {\n  /** Create a slate. Omitting kind creates a playable decision map from a brief of up to 160 characters. kind diagram makes editable notes and connections from your own steps (up to 1200 characters, connect two steps with → or ->) or from a named source. The token owner owns the new private slate. With projectId it is made in that project or folder, where the project's people can open it. @scope slates:write */\n  function create(input: {\n    kind?: \"map\";\n    /** (1–160 characters) */\n    brief: string;\n    /** Make the slate in this project or folder (you need to be an editor of it). (1–64 characters) */\n    projectId?: string;\n  } | {\n    kind: \"diagram\";\n    source?: \"sign-in-outage\" | \"call-status\" | \"interview-notes\";\n    /** Plain text, including multiple lines. Connect two named steps using → or ->. Use up to 24 distinct notes including source notes. (1–1200 characters) */\n    brief: string;\n    /** Make the slate in this project or folder (you need to be an editor of it). (1–64 characters) */\n    projectId?: string;\n  }): Promise<({\n    shareId: string;\n    url: string;\n    workshop: Workshop;\n    [key: string]: unknown;\n  } | {\n    shareId: string;\n    url: string;\n    diagram: DiagramSummary;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
       "tool": {
         "name": "create_slate",
         "title": "Draw a flowchart, diagram or decision map",
-        "description": "Draw a flowchart, process diagram or decision map on a new private slate (a canvas the team can edit live) and return its link: steps written as \"A -> B\" (kind \"diagram\"), or a decision map from a one-line question. Mind maps and Gantt project plans are drawn from Mermaid by import_mermaid.\n\nCreate a slate. Omitting kind creates a playable decision map from a brief of up to 160 characters. kind diagram makes editable notes and connections from your own steps (up to 1200 characters, connect two steps with → or ->) or from a named source. The token owner owns the new private slate.",
+        "description": "Draw a flowchart, process diagram or decision map on a new private slate (a canvas the team can edit live) and return its link: steps written as \"A -> B\" (kind \"diagram\"), or a decision map from a one-line question. Mind maps and Gantt project plans are drawn from Mermaid by import_mermaid.\n\nCreate a slate. Omitting kind creates a playable decision map from a brief of up to 160 characters. kind diagram makes editable notes and connections from your own steps (up to 1200 characters, connect two steps with → or ->) or from a named source. The token owner owns the new private slate. With projectId it is made in that project or folder, where the project's people can open it.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -7450,6 +8169,13 @@
                 "call-status",
                 "interview-notes"
               ]
+            },
+            "projectId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Make the slate in this project or folder (you need to be an editor of it)."
             },
             "confirm": {
               "type": "string",
@@ -7480,7 +8206,7 @@
       "name": "slates.delete",
       "id": "slates.delete",
       "title": "Delete slate",
-      "summary": "Delete one of your own slates, with its sharing, comments and messages. Only the slate's owner can. This cannot be undone.",
+      "summary": "Delete one of your own slates, with its sharing, comments and messages. Only the slate's owner can, or the owner of the project it is in. This cannot be undone.",
       "kind": "write",
       "readOnly": false,
       "destructive": true,
@@ -7502,11 +8228,11 @@
       },
       "index": "slates.delete({shareId}): Delete slate",
       "types": [],
-      "dts": "declare namespace slatebox.slates {\n  /** Delete slate. Delete one of your own slates, with its sharing, comments and messages. Only the slate's owner can. This cannot be undone. @scope slates:delete @destructive */\n  function delete(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n  }): Promise<({\n    shareId: string;\n    deleted: boolean;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
+      "dts": "declare namespace slatebox.slates {\n  /** Delete slate. Delete one of your own slates, with its sharing, comments and messages. Only the slate's owner can, or the owner of the project it is in. This cannot be undone. @scope slates:delete @destructive */\n  function delete(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n  }): Promise<({\n    shareId: string;\n    deleted: boolean;\n    [key: string]: unknown;\n  }) & { mode: \"save\" }>;\n}",
       "tool": {
         "name": "delete_slate",
         "title": "Delete a slate",
-        "description": "Delete one of the person's own slates. This cannot be undone.\n\nDelete slate. Delete one of your own slates, with its sharing, comments and messages. Only the slate's owner can. This cannot be undone.",
+        "description": "Delete one of the person's own slates. This cannot be undone.\n\nDelete slate. Delete one of your own slates, with its sharing, comments and messages. Only the slate's owner can, or the owner of the project it is in. This cannot be undone.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -7765,12 +8491,13 @@
         "bodyParams": [
           "mermaid",
           "shareId",
-          "name"
+          "name",
+          "projectId"
         ]
       },
-      "index": "slates.importMermaid({mermaid,shareId?,name?}): Draw Mermaid",
+      "index": "slates.importMermaid({mermaid,shareId?,name?,projectId?}): Draw Mermaid",
       "types": [],
-      "dts": "declare namespace slatebox.slates {\n  /** Draw Mermaid. Draw a Mermaid flowchart, mind map or Gantt chart as real notes and lines, laid out in the diagram's direction (subgraphs and Gantt sections become frames). With shareId the diagram is added beside what that slate holds (it needs edit access; everyone on the slate sees it drawn); without, it becomes a new private slate of yours named name (or the diagram's title). Mermaid in a Markdown ```mermaid block is read too. Another kind of diagram is refused with 422 mermaid_unsupported; a mistake with 400 mermaid_invalid naming its line; a diagram past a slate's limits (1,000 notes counting frames, 5,000 lines, frames 50 deep, or a subgraph too big for one frame) with 422 mermaid_too_large. mode \"preview\" shows what would be drawn without saving. @scope slates:write @modes save|preview */\n  function importMermaid(input: {\n    /** Mermaid source (flowchart/graph, mindmap or gantt), or Markdown holding a ```mermaid block. (1–100000 characters) */\n    mermaid: string;\n    /** Add to this slate. Leave out to make a new private slate. (1–80 characters) */\n    shareId?: string;\n    /** The new slate's name (without shareId). (1–200 characters) */\n    name?: string;\n    /** preview returns what would change and saves nothing. (default \"save\") */\n    mode?: \"save\" | \"preview\";\n  }): Promise<({\n    ok: boolean;\n    mode: \"save\" | \"preview\";\n    shareId: string | null;\n    url?: string | null;\n    /** (at least 0) */\n    revision?: number;\n    kind: \"flowchart\" | \"mindmap\" | \"gantt\";\n    notes: number;\n    frames?: number;\n    lines: number;\n    /** The ids of the notes drawn (frames first). */\n    created?: string[];\n    warnings?: string[];\n    message: string;\n    [key: string]: unknown;\n  }) & { mode: \"save\" | \"preview\" }>;\n}",
+      "dts": "declare namespace slatebox.slates {\n  /** Draw Mermaid. Draw a Mermaid flowchart, mind map or Gantt chart as real notes and lines, laid out in the diagram's direction (subgraphs and Gantt sections become frames). With shareId the diagram is added beside what that slate holds (it needs edit access; everyone on the slate sees it drawn); without, it becomes a new private slate of yours named name (or the diagram's title). Mermaid in a Markdown ```mermaid block is read too. Another kind of diagram is refused with 422 mermaid_unsupported; a mistake with 400 mermaid_invalid naming its line; a diagram past a slate's limits (1,000 notes counting frames, 5,000 lines, frames 50 deep, or a subgraph too big for one frame) with 422 mermaid_too_large. mode \"preview\" shows what would be drawn without saving. @scope slates:write @modes save|preview */\n  function importMermaid(input: {\n    /** Mermaid source (flowchart/graph, mindmap or gantt), or Markdown holding a ```mermaid block. (1–100000 characters) */\n    mermaid: string;\n    /** Add to this slate. Leave out to make a new private slate. (1–80 characters) */\n    shareId?: string;\n    /** The new slate's name (without shareId). (1–200 characters) */\n    name?: string;\n    /** Make the new slate in this project or folder (without shareId; you need to be an editor of it). (1–64 characters) */\n    projectId?: string;\n    /** preview returns what would change and saves nothing. (default \"save\") */\n    mode?: \"save\" | \"preview\";\n  }): Promise<({\n    ok: boolean;\n    mode: \"save\" | \"preview\";\n    shareId: string | null;\n    url?: string | null;\n    /** (at least 0) */\n    revision?: number;\n    kind: \"flowchart\" | \"mindmap\" | \"gantt\";\n    notes: number;\n    frames?: number;\n    lines: number;\n    /** The ids of the notes drawn (frames first). */\n    created?: string[];\n    warnings?: string[];\n    message: string;\n    [key: string]: unknown;\n  }) & { mode: \"save\" | \"preview\" }>;\n}",
       "tool": {
         "name": "import_mermaid",
         "title": "Draw a mind map, flowchart or Gantt plan",
@@ -7796,6 +8523,13 @@
               "minLength": 1,
               "maxLength": 200,
               "description": "The new slate's name (without shareId)."
+            },
+            "projectId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Make the new slate in this project or folder (without shareId; you need to be an editor of it)."
             },
             "mode": {
               "type": "string",
@@ -7914,7 +8648,7 @@
       "name": "slates.list",
       "id": "slates.list",
       "title": "List slates",
-      "summary": "List your slates, newest first, as your Slates page shows them: your own (scope \"mine\"), or your team's that you may open (scope \"team\": its public slates, and its private slates shared with you, or all of them for a team admin). Filter by name with q.",
+      "summary": "List your slates, newest first, as your Slates page shows them: your own (scope \"mine\", wherever they are), your team's that you may open (scope \"team\": its public slates, and its private slates shared with you, or all of them for a team admin), or a project's (scope \"project\" with projectId: every slate in it and its folders, whoever owns it). Filter by name with q.",
       "kind": "read",
       "readOnly": true,
       "destructive": false,
@@ -7929,18 +8663,19 @@
         "pathParams": [],
         "queryParams": [
           "scope",
+          "projectId",
           "q",
           "limit"
         ],
         "bodyParams": []
       },
-      "index": "slates.list({scope?,q?,limit?}): List slates",
+      "index": "slates.list({scope?,projectId?,q?,limit?}): List slates",
       "types": [],
-      "dts": "declare namespace slatebox.slates {\n  /** List slates. List your slates, newest first, as your Slates page shows them: your own (scope \"mine\"), or your team's that you may open (scope \"team\": its public slates, and its private slates shared with you, or all of them for a team admin). Filter by name with q. @scope slates:read */\n  function list(input: {\n    /** (default \"mine\") */\n    scope?: \"mine\" | \"team\";\n    /** Part of the slate name. (1–200 characters) */\n    q?: string;\n    /** (1 to 100, default 25) */\n    limit?: number;\n  }): Promise<{\n    slates: Array<{\n      shareId: string;\n      name: string;\n      description?: string;\n      visibility: \"private\" | \"unlisted\" | \"public\";\n      owner: \"you\" | \"team\";\n      updated?: string | null;\n      url: string;\n      [key: string]: unknown;\n    }>;\n    [key: string]: unknown;\n  }>;\n}",
+      "dts": "declare namespace slatebox.slates {\n  /** List slates. List your slates, newest first, as your Slates page shows them: your own (scope \"mine\", wherever they are), your team's that you may open (scope \"team\": its public slates, and its private slates shared with you, or all of them for a team admin), or a project's (scope \"project\" with projectId: every slate in it and its folders, whoever owns it). Filter by name with q. @scope slates:read */\n  function list(input: {\n    /** (default \"mine\") */\n    scope?: \"mine\" | \"team\" | \"project\";\n    /** With scope \"project\": the project or folder. (1–64 characters) */\n    projectId?: string;\n    /** Part of the slate name. (1–200 characters) */\n    q?: string;\n    /** (1 to 100, default 25) */\n    limit?: number;\n  }): Promise<{\n    slates: Array<{\n      shareId: string;\n      name: string;\n      description?: string;\n      visibility: \"private\" | \"unlisted\" | \"public\";\n      owner: \"you\" | \"team\" | \"someone\";\n      /** The project or folder the slate is in. */\n      projectId?: string;\n      updated?: string | null;\n      url: string;\n      [key: string]: unknown;\n    }>;\n    [key: string]: unknown;\n  }>;\n}",
       "tool": {
         "name": "list_slates",
         "title": "List your slates",
-        "description": "List the person's slates (diagrams, mind maps, plans, boards), or their team's, newest first, with each one's link. Filter by name.\n\nList slates. List your slates, newest first, as your Slates page shows them: your own (scope \"mine\"), or your team's that you may open (scope \"team\": its public slates, and its private slates shared with you, or all of them for a team admin). Filter by name with q.",
+        "description": "List the person's slates (diagrams, mind maps, plans, boards), or their team's, newest first, with each one's link. Filter by name.\n\nList slates. List your slates, newest first, as your Slates page shows them: your own (scope \"mine\", wherever they are), your team's that you may open (scope \"team\": its public slates, and its private slates shared with you, or all of them for a team admin), or a project's (scope \"project\" with projectId: every slate in it and its folders, whoever owns it). Filter by name with q.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -7948,9 +8683,17 @@
               "type": "string",
               "enum": [
                 "mine",
-                "team"
+                "team",
+                "project"
               ],
               "default": "mine"
+            },
+            "projectId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "With scope \"project\": the project or folder."
             },
             "q": {
               "type": "string",
