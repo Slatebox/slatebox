@@ -36,6 +36,7 @@ import { audit } from '../audit/recorder.mjs'
 import { projectAccess, slateProjectRoleOf } from '../projects/access-meteor'
 import { checkPlacement } from '../projects/place.mjs'
 import { projectCan } from '../../imports/api/common/project-roles.mjs'
+import { withAuthorNames } from '../common/slate-authors.mjs'
 
 // Where published board pictures are served from: the instance itself when self-hosted.
 export const embedViewerOrigin = () =>
@@ -233,7 +234,12 @@ export async function getSlatesForUser(opts, user) {
       opts.limit
     )
     // console.log('duration to get both', (new Date().valueOf() - start) / 1000)
-    return { slates, counts: { total: cnt } }
+    // Each card names the slate's owner, not the viewer (a shared project lists other people's slates).
+    const named = await withAuthorNames(slates, {
+      viewerId: user._id,
+      findUsers: (ids, fields) => Meteor.users.find({ _id: { $in: ids } }, { fields }).fetchAsync(),
+    })
+    return { slates: named, counts: { total: cnt } }
   }
   return null
 }

@@ -45,6 +45,7 @@ import {
 import { Slates } from '../../api/common/models'
 import { Box } from '@mui/material'
 import { slatePathInProject } from './projects/projectsModel.mjs'
+import { slateAuthorLabel } from './slateAuthorLabel.mjs'
 import AppPage, { PAGE_SPACE } from '../common/AppPage'
 
 export default function DisplaySlates({
@@ -158,19 +159,6 @@ export default function DisplaySlates({
       getSlates()
     }
   }, [invokeRerender])
-
-  // eslint-disable-next-line react/no-unstable-nested-components
-  function UserName({ slateUserId }) {
-    const [userName, setUserName] = React.useState('loading')
-    useEffect(() => {
-      const getData = async () => {
-        const u = getUserName(slateUserId)
-        setUserName(u)
-      }
-      getData()
-    }, [])
-    return <span>{userName}</span>
-  }
 
   let sf = null
   const filterSlates = (val) => {
@@ -431,6 +419,8 @@ export default function DisplaySlates({
           >
             {slates.map((slate, i) => {
               const name = slate.options?.name || t('slates.defaultNewSlateName')
+              // The slate's owner, never the viewer: a shared project lists other people's slates.
+              const author = slate.options?.userNameOverride || slateAuthorLabel(slate, Meteor.userId(), getUserName)
               function openSlate() {
                 setMainDrawerOpen(false)
                 history(type === 'project' ? slatePathInProject(slate.shareId, linkKey) : `/canvas/${slate.shareId}`)
@@ -454,8 +444,8 @@ export default function DisplaySlates({
                         sx={{ display: 'block', maxWidth: '100%', p: 0, border: 0, background: 'none', color: 'text.primary', fontWeight: 650, cursor: 'pointer', textAlign: 'left' }}>
                         {name}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {slate.options?.userNameOverride || <UserName slateUserId={slate.userId} />}
+                      <Typography variant="caption" color="text.secondary" noWrap component="p" title={author}>
+                        {author}
                       </Typography>
                     </Box>
                     {/* A phone views slates: no Delete, privacy or selection on its cards (phoneView.mjs). */}
