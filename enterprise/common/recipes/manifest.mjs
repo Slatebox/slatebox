@@ -10,7 +10,10 @@ import { COMMON_EVENT_NAMES, EVENT_NAME } from './events.mjs'
 
 export const RECIPE_ID = /^[a-z][a-z0-9-]{2,40}$/
 export const INTEGRATIONS = Object.freeze(['github', 'slack', 'google'])
-export const TRIGGER_KINDS = Object.freeze(['vendor', 'schedule', 'manual', 'inbound'])
+// slate_saved: a person saved a slate in the recipe's sync map (config.maps), debounced per slate
+// from that slate's last save. recipe_event: another recipe in the project sent `event` after a run
+// that changed a slate in the sync map. Both need a sync map (the instance's watchSlates).
+export const TRIGGER_KINDS = Object.freeze(['vendor', 'schedule', 'manual', 'inbound', 'slate_saved', 'recipe_event'])
 export const OUTPUT_KINDS = Object.freeze(['diagram', 'board', 'index', 'presentation'])
 // Changes outside Slatebox a recipe may propose. Each needs a standing permission per recipe
 // (enterprise/server/recipes/permissions.mjs) or a person's approval on an action card.
@@ -56,6 +59,7 @@ export function validateManifest(m) {
       if (!m.integration) return `triggers[${k}] is a vendor event, but the recipe has no integration`
       if (typeof t.event !== 'string' || !t.event.startsWith(m.integration + '.')) return `triggers[${k}].event starts with ${m.integration}.`
     }
+    if (t.kind === 'recipe_event' && (typeof t.event !== 'string' || !EVENT_NAME.test(t.event) || COMMON_EVENT_NAMES.includes(t.event))) return `triggers[${k}].event names another recipe's own event`
     if (t.kind === 'schedule') {
       if (!isValidCron(t.cron)) return `triggers[${k}].cron is not a five-field schedule`
       if (shortestGapMinutes(t.cron, 'UTC', Date.UTC(2026, 0, 5)) < MIN_SCHEDULE_MINUTES) return `triggers[${k}] runs more often than every ${MIN_SCHEDULE_MINUTES} minutes`
@@ -113,6 +117,8 @@ export function defaultTriggers(manifest, tz = 'UTC') {
     kind: t.kind,
     ...(t.kind === 'schedule' && { cron: t.cron, tz }),
     ...(t.kind === 'vendor' && { event: t.event, debounceMs: t.debounceMs ?? 0 }),
+    ...(t.kind === 'slate_saved' && { debounceMs: t.debounceMs ?? 0 }),
+    ...(t.kind === 'recipe_event' && { event: t.event }),
   }))
 }
 

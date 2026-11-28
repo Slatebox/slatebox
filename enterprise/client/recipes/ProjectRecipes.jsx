@@ -3,8 +3,10 @@
 //
 // A project's Recipes tab (slot project.recipes) and its two small pieces: the tab itself
 // (project.recipesTab) and "Add a recipe" on an empty project (project.addRecipe). Each instance card
-// says which agent runs it and for whom, its state, its last and next run, and offers Run now,
-// Pause or Resume, and a menu with Settings, Runs, Webhooks, Changes outside Slatebox and Delete.
+// says which agent runs it and for whom, its state, its last and next run, and offers Run now (and,
+// for a recipe that keeps slates in a repository, Save to repo now), Pause or Resume, and a menu
+// with Settings, Runs, Webhooks, Changes outside Slatebox and Delete. Changes outside Slatebox lists
+// the changes waiting for approval: approve or decline, and a pull request's files to download.
 // Managers pause every recipe in the project at once; a manager takes over a recipe whose owner
 // lost access. Where recipes are off, a server admin sees the one switch and everyone else nothing.
 import React, { useState } from 'react'
@@ -43,8 +45,63 @@ import RecipePermissions from './RecipePermissions'
 import ConfigForm from './ConfigForm'
 import { RecipesOffSwitch } from './RecipesAdmin'
 import {
-  INTEGRATION_WORDS, canPause, canResume, instanceChip, formatTokens, groupCatalog, lastRunLine, nextRunLine, outputsLine, recipeErrorWords, runsFor, validateConfig,
+  INTEGRATION_WORDS, canPause, canResume, downloadName, grantsOf, instanceChip, formatTokens, groupCatalog, lastRunLine, nextRunLine, outputsLine, recipeErrorWords, runsFor, validateConfig, withoutEmptyMaps,
+  writePermissionText,
 } from './recipesModel.mjs'
+
+/** A recipe that keeps slates in step with files (a sync map): it offers Save to repo now. */
+const syncsSlates = (manifest) => (manifest?.triggers || []).some((t) => t.kind === 'slate_saved')
+
+function download(path, content) {
+  const url = URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = downloadName(path)
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+// Changes waiting for the owner's approval: what each is, approve or decline, its files to download.
+function WaitingChanges({ instance, waiting, onChanged }) {
+  const mine = instance.ownerId === Meteor.userId()
+  const [busy, setBusy] = useState(null)
+  const [note, setNote] = useState('')
+  if (!waiting?.length) return null
+  async function decide(cardId, decision) {
+    setBusy(cardId); setNote('')
+    try {
+      const done = await recipesApi.decideWrite({ cardId, decision })
+      setNote(decision === 'approve' ? (done?.state === 'done' ? 'Done: the change was made.' : 'It could not be made. See Runs.') : 'Declined.')
+      await onChanged()
+    } catch (e) { setNote(recipeErrorWords(e)) } finally { setBusy(null) }
+  }
+  return (
+    <Box component="section" sx={{ display: 'grid', gap: 1.5, mb: 2 }} data-recipe-waiting="">
+      <Typography fontWeight={650}>Waiting for approval</Typography>
+      {waiting.map((c) => (
+        <Box key={c.cardId} sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5, display: 'grid', gap: 1 }}>
+          <Typography variant="body2">{writePermissionText(c.kind, { repos: c.target?.repo ? [c.target.repo] : [], paths: (c.files || []).map((f) => f.path) })}</Typography>
+          {(c.files || []).length > 0 && (
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              {c.files.map((f) => <Button key={f.path} size="small" onClick={() => download(f.path, f.content)}>Download {downloadName(f.path)}</Button>)}
+            </Box>
+          )}
+          {mine
+            ? (
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Button size="small" variant="contained" disableElevation disabled={busy !== null} onClick={() => decide(c.cardId, 'approve')}>Approve</Button>
+                <Button size="small" disabled={busy !== null} onClick={() => decide(c.cardId, 'decline')}>Decline</Button>
+              </Box>
+            )
+            : <Typography variant="caption" color="text.secondary">The person this recipe runs for approves it.</Typography>}
+        </Box>
+      ))}
+      {note && <Typography role="status" variant="body2">{note}</Typography>}
+    </Box>
+  )
+}
 
 const atLeast = (role, wanted) => (ROLE_RANK[role] ?? 0) >= ROLE_RANK[wanted]
 
@@ -79,11 +136,14 @@ function RecipeDetails({ instance, manifest, canEdit, initial, onClose }) {
   const [note, setNote] = useState('')
   const load = () => recipesApi.get({ instanceId: instance._id }).then(setGot, () => setGot({}))
   React.useEffect(() => { load() }, [instance._id]) // eslint-disable-line react-hooks/exhaustive-deps
+  // The live list carries no settings: they come with recipes.get.
+  React.useEffect(() => { if (got?.recipe?.config && !Object.keys(config || {}).length) setConfig(got.recipe.config) }, [got]) // eslint-disable-line react-hooks/exhaustive-deps
   async function saveSettings() {
-    const check = validateConfig(manifest?.configSchema, config)
+    const sent = withoutEmptyMaps(config)
+    const check = validateConfig(manifest?.configSchema, sent)
     setErrors(check.errors)
     if (!check.ok) return
-    try { await recipesApi.update({ instanceId: instance._id, config }); setNote('Saved. The next run uses these settings.') } catch (e) { setNote(recipeErrorWords(e)) }
+    try { await recipesApi.update({ instanceId: instance._id, config: sent }); setNote('Saved. The next run uses these settings.') } catch (e) { setNote(recipeErrorWords(e)) }
   }
   const tabs = DETAIL_TABS.filter(([id]) => (id !== 'outside' || (manifest?.writes || []).length) && (id === 'runs' || canEdit))
   return (
@@ -97,14 +157,19 @@ function RecipeDetails({ instance, manifest, canEdit, initial, onClose }) {
           {tab === 'runs' && <RecipeRunsTable instance={instance} canEdit={canEdit} />}
           {tab === 'settings' && (
             <Box sx={{ display: 'grid', gap: 2, maxWidth: 640 }}>
-              <ConfigForm schema={manifest?.configSchema} recipeId={instance.recipeId} value={config} onChange={setConfig} errors={errors} />
+              <ConfigForm schema={manifest?.configSchema} recipeId={instance.recipeId} projectId={instance.projectId} value={config} onChange={setConfig} errors={errors} />
               <Button variant="contained" disableElevation sx={{ justifySelf: 'start' }} onClick={saveSettings}>Save settings</Button>
               {note && <Typography role="status" variant="body2">{note}</Typography>}
             </Box>
           )}
           {tab === 'hooks' && <RecipeHooks instance={instance} manifest={manifest} />}
           {tab === 'outside' && (got
-            ? <RecipePermissions instanceId={instance._id} manifest={manifest} config={instance.config} grants={got.grants || []} onChanged={load} />
+            ? (
+              <>
+                <WaitingChanges instance={instance} waiting={got.waiting} onChanged={load} />
+                <RecipePermissions instanceId={instance._id} manifest={manifest} config={got.recipe?.config || instance.config} grants={grantsOf(got)} onChanged={load} />
+              </>
+            )
             : <CircularProgress size={20} aria-label="Finding permissions" />)}
         </Box>
       </DialogContent>
@@ -122,6 +187,7 @@ function InstanceCard({ instance, manifest, role, onSetUp, onOpen }) {
   // waits for a computer or tablet.
   const phone = usePhoneView()
   const canEdit = !phone && (mine || manager)
+  const editor = !phone && atLeast(role, 'editor')
   const canStop = mine || manager
   const [menu, setMenu] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -155,6 +221,10 @@ function InstanceCard({ instance, manifest, role, onSetUp, onOpen }) {
       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
         {instance.state === 'draft' && canEdit && <Button size="small" variant="contained" disableElevation onClick={() => onSetUp(instance)}>Finish setting up</Button>}
         {instance.state === 'active' && canEdit && <Button size="small" variant="outlined" disabled={busy} onClick={() => act(() => recipesApi.run({ instanceId: instance._id, reason: 'Run now' }), 'Started. It shows in Runs.')}>Run now</Button>}
+        {instance.state === 'active' && editor && syncsSlates(manifest) && (
+          <Button size="small" variant="outlined" disabled={busy} data-recipe-save-now={instance._id}
+            onClick={() => act(() => recipesApi.saveNow({ instanceId: instance._id }), 'Saving to the repository now. It shows in Runs.')}>Save to repo now</Button>
+        )}
         {canPause(instance.state) && canStop && <Button size="small" disabled={busy} onClick={() => act(() => recipesApi.pause({ instanceId: instance._id }))}>Pause</Button>}
         {canResume(instance.state) && canEdit && <Button size="small" disabled={busy} onClick={() => act(() => recipesApi.resume({ instanceId: instance._id }))}>Resume</Button>}
         {instance.state === 'needs_sign_in' && mine && <Button size="small" component={Link} to="/integrations">Sign in again</Button>}

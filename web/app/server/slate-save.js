@@ -8,6 +8,7 @@ import { growthStep } from './growth/meteor'
 import { audit } from './audit/recorder.mjs'
 import { slateWriteEntries } from './audit/slate-entries.mjs'
 import { releaseUploads } from './upload-removal'
+import { recipeHooks } from './recipes-hooks.mjs'
 
 // One row per save: { _id: slateId:revision, slateId, revision, at, source, actor, notes, fields }.
 export const SlateEvents = new Mongo.Collection('slateEvents')
@@ -19,6 +20,9 @@ const logSlateWrite = (change) => {
   for (const [entry, options] of slateWriteEntries(change)) {
     audit.record(entry, { ...options, deferred: Boolean(change.session) })
   }
+  // Recipes that keep this slate in step with a file hear of the save (not awaited; a slate no
+  // recipe watches costs a cached lookup).
+  if (change.kind === 'saved' && change.slate?.shareId) recipeHooks.slateSaved({ shareId: change.slate.shareId, actor: change.actor || null })
 }
 
 // A slate a person or guest made counts towards the growth funnel's "first slate" (server/growth,

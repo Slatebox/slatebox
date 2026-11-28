@@ -6,6 +6,8 @@
 //   board / addBoard / boardEdits   a small lanes board
 //   mermaidHash(slateId)
 // Test helpers: personEdit(slateId, ops) (a person's save), keepAll(slateId), discardAll(slateId), pause(slateId)
+// onSave({ slateId, shareId, actor }) is told of every save, as the app's save core tells recipes
+// (web/app/server/recipes-hooks.mjs slateSaved).
 import { applyPlanToJSON } from 'slateboxjs/operations'
 import { createHash } from 'node:crypto'
 
@@ -27,7 +29,7 @@ function diff(before, after) {
   return properties
 }
 
-export function createFakeSlates({ slates: store = new Map() } = {}) {
+export function createFakeSlates({ slates: store = new Map(), onSave = () => {} } = {}) {
   const events = []
   const waitingBy = new Map() // slateId → [{ plan, principal }]
   const comments = []
@@ -48,6 +50,7 @@ export function createFakeSlates({ slates: store = new Map() } = {}) {
     s.nodes = next.nodes
     s.revision += 1
     events.push({ slateId, revision: s.revision, actor, properties })
+    helpers.saves.push(Promise.resolve(onSave({ slateId, shareId: s.shareId, actor })))
     return s.revision
   }
   const adapter = {
@@ -113,6 +116,9 @@ export function createFakeSlates({ slates: store = new Map() } = {}) {
     },
   }
   const helpers = {
+    saves: [],
+    /** The save hooks told so far, done. */
+    settle: () => Promise.all(helpers.saves.splice(0)),
     events,
     comments,
     applied,

@@ -12,10 +12,15 @@
 //   7 slates     each desired slate made if missing (in the project, its folder), reconciled
 //                (reconcile.mjs) and saved through slates.applyOperations as the recipe: saved
 //                directly on its own slates once the owner chose auto, else suggestions; the
-//                named cursor walks where it works (presence)
+//                named cursor walks where it works (presence). A mapped slate (desired.slateId: one
+//                a person put in the recipe's sync map, watchSlates) takes the recipe's own plans
+//                as they are, saved directly on the revision the recipe read (a person mapping a
+//                slate to a file is their say that the file's merged edits land on it), then its
+//                notes (legend, conflicts) reconciled as on any slate
 //   8 outside    proposed writes: a standing permission makes them, else an action card waits
 //   9 finish     the status slate, webhooks (run.finished, slate.updated, diagram.changed, the
-//                recipe's own), the activity log, queue.finish
+//                recipe's own), the activity log, queue.finish; then the project's recipes that run
+//                after this one's events (recipe_event) on a slate it saved are queued
 // Preview (mode preview) does 1–6 and reconciles in memory: nothing is saved anywhere.
 import { budgetLimits, createBudget, BudgetExceeded } from './budgets.mjs'
 import { createRecipeContext } from './context.mjs'
@@ -77,7 +82,7 @@ export function createRunner(deps) {
 
   /** Stops an instance until a person acts (and says why, to its owner and to hooks). */
   async function stopInstance(instance, state, reason, run = null) {
-    await setInstance(instance._id, { state, pausedReason: reason, pausedBy: null, nextDueAt: null, debounceUntil: null, pendingTrigger: null })
+    await setInstance(instance._id, { state, pausedReason: reason, pausedBy: null, nextDueAt: null, debounceUntil: null, pendingTrigger: null, slateSaves: [], savesDueAt: null })
     // A run of it under way stops too: its signal aborts at the next heartbeat (the run itself, when
     // it is the one stopping the instance, ends on its own).
     await store.runs.updateMany({ instanceId: instance._id, state: 'running', ...(run?._id && { _id: { $ne: run._id } }) }, { $set: { cancelRequested: true, cancelledBy: null } })
@@ -133,8 +138,38 @@ export function createRunner(deps) {
     return out
   }
 
-  // The slate a desired entry lands on: the instance's own, else a new one in the project (its folder).
+  // The project's slates, read once per run (a mapped slate must be one of them).
+  const listed = new WeakMap()
+  async function projectSlates(instance) {
+    if (!listed.has(instance)) listed.set(instance, projects.listSlates(instance.projectId, { folders: true }).catch(() => []))
+    return listed.get(instance)
+  }
+
+  /** A slate of the project a recipe reads by its shareId (ctx.slates.read({ shareId })): what it
+   * holds, its revision, and the recipe's own notes on it (metaNoteIds: its legend, its conflicts). */
+  async function readProjectSlate(instance, { shareId } = {}) {
+    if (typeof shareId !== 'string') return null
+    const hit = (await projectSlates(instance)).find((s) => s.shareId === shareId)
+    if (!hit) return null
+    const read = await slates.read(hit._id)
+    if (!read) return null
+    const rows = await store.notes.find({ instanceId: instance._id, slateId: hit._id }).toArray()
+    const name = read.name ?? hit.name ?? 'Untitled slate'
+    return { slate: { ...read.slate, shareId, options: { ...(read.slate.options || {}), name } }, revision: read.revision, slateId: hit._id, shareId, name, metaNoteIds: rows.map((r) => r.noteId) }
+  }
+
+  /** The slate a mapped entry names, when it is in the project and in the instance's sync map; else null. */
+  async function mappedTarget(instance, desired) {
+    const hit = (await projectSlates(instance)).find((s) => s._id === desired.slateId)
+    if (!hit || !(instance.watchSlates || []).includes(hit.shareId)) return null
+    const read = await slates.read(hit._id)
+    return read ? { slateId: hit._id, roleKey: roleKeyOf(desired), ...read, shareId: read.shareId || hit.shareId, made: false, mapped: true } : null
+  }
+
+  // The slate a desired entry lands on: a mapped slate (desired.slateId), the instance's own, else a
+  // new one in the project (its folder).
   async function slateFor(instance, desired, { create }) {
+    if (desired.slateId) return mappedTarget(instance, desired)
     const roleKey = roleKeyOf(desired)
     const known = instance.slateMap?.[roleKey]
     if (known) {
@@ -168,15 +203,46 @@ export function createRunner(deps) {
    */
   async function applySlate({ instance, manifest, run, principal, desired, gone, sourceLine, log, budget, revisionBySlate, statusSlate = false }) {
     let target = await slateFor(instance, desired, { create: true })
+    if (!target) {
+      log('warn', 'not_mapped', 'A slate the recipe keeps in step is no longer in this project or its sync map; it is left as it is.')
+      return { slateId: desired.slateId, shareId: null, stats: null, changes: [], skipped: 'not_mapped', revision: null }
+    }
     if (await slates.paused(target.slateId)) {
-      log('warn', 'agents_paused', `${desired.name}: people paused agents on it.`)
+      log('warn', 'agents_paused', `${desired.name || target.name || 'A slate'}: people paused agents on it.`)
       return { slateId: target.slateId, shareId: target.shareId, stats: null, changes: [], skipped: 'agents_paused', revision: target.revision }
     }
     const principalFor = (direct) => ({ ...principal, direct })
+    // A mapped slate first takes the recipe's own plans, on the revision the recipe read. A slate that
+    // changed since is not guessed at: the run fails (retryable) before anything outside Slatebox,
+    // and its cursor is not kept, so the next attempt reads the slate and the file again.
+    const mappedChanges = []
+    const mappedStats = { added: 0, updated: 0, removed: 0 }
+    if (target.mapped && desired.plans?.length) {
+      let revision = Number.isInteger(desired.expectedRevision) ? desired.expectedRevision : target.revision
+      for (const plan of desired.plans) {
+        budget.spend('ops', plan.operations?.length || 0)
+        let saved
+        try {
+          saved = await slates.apply(principalFor(true), target.slateId, plan, revision, { runId: run._id })
+        } catch (error) {
+          if (error?.code === 'slate_changed') throw Object.assign(new Error('The slate changed while the recipe worked.'), { name: 'SlateChanged', code: 'slate_changed', status: 409 })
+          throw error
+        }
+        if (saved.outcome === 'saved') revision = saved.revision
+        mappedChanges.push({ slateId: target.slateId, operationRunId: saved.operationRunId || null, actionId: saved.actionId || null, outcome: saved.outcome })
+        for (const op of plan.operations || []) {
+          const n = Array.isArray(op.ids) ? op.ids.length : Number.isInteger(op.count) ? op.count : 1
+          if (['add_nodes', 'connect_nodes'].includes(op.kind)) mappedStats.added += n
+          else if (['delete_nodes', 'disconnect_nodes'].includes(op.kind)) mappedStats.removed += n
+          else mappedStats.updated += 1
+        }
+      }
+      target = { ...target, ...(await slates.read(target.slateId)) }
+    }
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const owned = await ownedNotes(instance._id, target.slateId)
       const before = new Map([...owned].map(([id, row]) => [id, { ...row }]))
-      const since = instance.lastRun?.revisionBySlate?.[target.slateId] ?? (target.fresh ? target.revision : -1)
+      const since = instance.lastRun?.revisionBySlate?.[target.slateId] ?? (target.fresh || target.mapped ? target.revision : -1)
       const events = await slates.events(target.slateId, since)
       const touched = touchedSince(events, target.slateId, since, principal.tokenId)
       const waiting = await slates.waiting(target.slateId, principal)
@@ -188,10 +254,10 @@ export function createRunner(deps) {
       // build too large to review as suggestions is saved as one undoable action (the person saw it in Preview).
       const ownSlate = Object.values(instance.slateMap || {}).includes(target.slateId)
       const large = !instance.firstRunKept && ownSlate && result.ops > FIRST_RUN_DIRECT_ITEMS
-      const direct = statusSlate || savesDirectly(instance, target.slateId) || large
+      const direct = statusSlate || target.mapped || savesDirectly(instance, target.slateId) || large
       if (large) log('info', 'first_run_direct', `${desired.name}: ${result.ops} changes are saved as one action you can undo.`)
       let revision = target.revision
-      const changes = []
+      const changes = [...mappedChanges]
       let conflict = false
       try {
         if (presence && result.plans.length && !statusSlate) await presence.plan(principalFor(direct), { _id: target.slateId, shareId: target.shareId }, [result.stats.added ? `Adding ${result.stats.added}` : 'Updating', 'Connecting', 'Done'].slice(0, 3)).catch(() => {})
@@ -201,7 +267,7 @@ export function createRunner(deps) {
           changes.push({ slateId: target.slateId, operationRunId: saved.operationRunId || null, actionId: saved.actionId || null, outcome: saved.outcome })
         }
       } catch (error) {
-        if (error?.code !== 'slate_changed' || changes.length) throw error
+        if (error?.code !== 'slate_changed' || changes.length > mappedChanges.length) throw error
         conflict = true
       }
       if (conflict) {
@@ -233,6 +299,7 @@ export function createRunner(deps) {
       }
       revisionBySlate[target.slateId] = revision
       const stats = { ...result.stats }
+      for (const key of Object.keys(mappedStats)) stats[key] = (stats[key] || 0) + mappedStats[key]
       for (const key of Object.keys(boardStats)) stats[key] = (stats[key] || 0) + boardStats[key]
       return { slateId: target.slateId, shareId: target.shareId, stats, changes, kept, revision, roleKey: target.roleKey, name: desired.name }
     }
@@ -355,6 +422,7 @@ export function createRunner(deps) {
     const { ctx, log: recipeLog, emitted, cursor, cursorChanged } = createRecipeContext({
       instance, run, manifest, signal, clock, budget, vendors: vendorSessions, ai, store, quarantine,
       readSlate: async (role, key = '') => {
+        if (role && typeof role === 'object') return readProjectSlate(instance, role)
         const id = instance.slateMap?.[key ? `${role}/${key}` : role]
         return id ? slates.read(id) : null
       },
@@ -392,9 +460,11 @@ export function createRunner(deps) {
       const preview = []
       for (const entryDesired of desired.slates) {
         const target = await slateFor(instance, entryDesired, { create: false })
-        const owned = target.slateId ? await ownedNotes(instance._id, target.slateId) : new Map()
-        const result = reconcileSlate({ desired: entryDesired, current: target.slate, owned, prefix: manifest.idPrefix, instanceId: instance._id, slateId: target.slateId || 'preview', now: new Date(clock()) })
+        if (!target) continue
         let slate = target.slate
+        for (const plan of target.mapped ? entryDesired.plans || [] : []) slate = slates.applyPreview(slate, plan)
+        const owned = target.slateId ? await ownedNotes(instance._id, target.slateId) : new Map()
+        const result = reconcileSlate({ desired: entryDesired, current: slate, owned, prefix: manifest.idPrefix, instanceId: instance._id, slateId: target.slateId || 'preview', now: new Date(clock()) })
         for (const plan of result.plans) slate = slates.applyPreview(slate, plan)
         preview.push({ role: entryDesired.role, key: entryDesired.key || '', name: entryDesired.name, slate, counts: result.stats })
         for (const key of ['added', 'updated', 'removed', 'keptByPerson']) stats[key] += result.stats[key]
@@ -428,6 +498,17 @@ export function createRunner(deps) {
       }))),
     }
 
+    // A mapped slate with plans that cannot take them (agents paused on it): nothing is saved or sent
+    // and the cursor stays, so the import is read again on a run after people resume agents there.
+    for (const entryDesired of desired.slates) {
+      if (!entryDesired.slateId || !entryDesired.plans?.length) continue
+      const target = await mappedTarget(instance, entryDesired)
+      if (target && (await slates.paused(target.slateId))) {
+        say('warn', 'agents_paused', `${target.name || 'A synced slate'}: people paused agents on it, so the file's changes wait.`)
+        finalize({})
+        return { state: 'skipped', stats, changes: [], writes: [], changed: [], emitted: [], revisionBySlate: instance.lastRun?.revisionBySlate || {}, cursor: undefined, skippedReason: 'agents_paused', summary: '' }
+      }
+    }
     const revisionBySlate = { ...(instance.lastRun?.revisionBySlate || {}) }
     const changes = []
     const changed = []
@@ -506,6 +587,23 @@ export function createRunner(deps) {
     }
     for (const event of outcome.emitted || []) await emitSafe({ type: event.type, instance, run, data: event.data, manifest })
     await audit({ action: 'recipe.run', instance, coalesce: true, details: { instanceId: instance._id, recipeId: instance.recipeId, runId: run._id, outcome: finished.state, count: outcome.stats.slatesChanged.length } })
+    await afterEvents({ instance, run, outcome }).catch(() => {})
+  }
+
+  // The project's recipes that run after this one's events (recipe_event), on a slate this run saved
+  // that is in their sync map: one run each, at once, named after this run (so never twice).
+  async function afterEvents({ instance, run, outcome }) {
+    const types = new Set((outcome.emitted || []).map((e) => e.type))
+    const saved = (outcome.changed || []).filter((c) => c.shareId && (c.changes || []).some((x) => x.outcome === 'saved')).map((c) => c.shareId)
+    if (!types.size || !saved.length) return
+    const rows = await store.instances.find({ projectId: instance.projectId, state: 'active', watchSlates: { $in: saved } }, { limit: 50 }).toArray()
+    for (const other of rows) {
+      if (other._id === instance._id) continue
+      const spec = (other.triggers || []).find((t) => t.kind === 'recipe_event' && types.has(t.event))
+      if (!spec) continue
+      const shareIds = saved.filter((id) => (other.watchSlates || []).includes(id))
+      await queue.enqueue(other, { kind: 'recipe_event', event: spec.event, from: instance._id, fromRun: run._id, shareIds }, { id: `${other._id}:re:${run._id}` })
+    }
   }
 
   return { runOne, execute, applySlate, stopInstance }

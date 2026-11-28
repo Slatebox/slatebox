@@ -109,6 +109,7 @@ your messages or files):
 | Recipe | Events |
 |---|---|
 | Living architecture | `architecture.updated` (`repo`, `sha`, `modulesAdded`, `edgesAdded`, `servicesAdded`, `endpointsAdded`, `…Removed`), `architecture.new_dependency` (`repo`, `from`, `to`), `architecture.cycle_detected`, `architecture.renamed` |
+| Diagrams as code | `mermaid.sync.pr_opened`, `mermaid.sync.pr_updated` (`repo`, `number`, `files`, `commit`), `mermaid.sync.imported` (`file`, `slateId`, `added`, `changed`, `removed`), `mermaid.sync.conflict` (`file`, `elements`) |
 | Pull request impact | `pr_impact.ready` (`repo`, `number`, `headSha`, counts), `pr_impact.new_dependency`, `pr_impact.service_changed` |
 | Decision log | `decision.recorded`, `decision.revisited`, `decision.reversed` |
 | Project timeline | `timeline.date_changed`, `timeline.slipped`, `timeline.done` |

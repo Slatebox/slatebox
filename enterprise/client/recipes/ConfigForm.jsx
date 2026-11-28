@@ -3,8 +3,9 @@
 //
 // The settings form a recipe's configSchema makes (recipesModel.mjs configFields): text, numbers,
 // yes/no, choices, and the pickers: the GitHub repos the Slatebox app is installed on, the Slack
-// channels the person is in (recipes.pickerOptions), Google files (the Google Picker) and schedules
-// (presets, or a custom five-part schedule).
+// channels the person is in (recipes.pickerOptions), Google files (the Google Picker), schedules
+// (presets, or a custom five-part schedule) and a sync map (slates of the project, each with the
+// file it is kept as).
 import React, { useEffect, useState } from 'react'
 import PropTypes from 'prop-types'
 import { Meteor } from 'meteor/meteor'
@@ -17,20 +18,55 @@ import Switch from '@mui/material/Switch'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Autocomplete from '@mui/material/Autocomplete'
 import Typography from '@mui/material/Typography'
+import IconButton from '@mui/material/IconButton'
+import CloseIcon from '@mui/icons-material/Close'
 import { googleStatus } from '../GoogleIntegration'
 import { pickFiles, preloadGoogle } from '../google'
 import { CRON_PRESETS, configFields, validateCron } from './recipesModel.mjs'
 
-function usePickerOptions(recipeId, picker) {
+function usePickerOptions(recipeId, picker, projectId = null) {
   const [options, setOptions] = useState(null)
   useEffect(() => {
-    if (!['repos', 'channels'].includes(picker)) return undefined
+    if (!['repos', 'channels', 'slates'].includes(picker)) return undefined
     let live = true
-    Meteor.callAsync('recipes.pickerOptions', { recipeId, picker })
+    Meteor.callAsync('recipes.pickerOptions', { recipeId, picker, ...(picker === 'slates' && projectId && { projectId }) })
       .then((a) => { if (live) setOptions(Array.isArray(a?.options) ? a.options : []) }, () => { if (live) setOptions([]) })
     return () => { live = false }
-  }, [recipeId, picker])
+  }, [recipeId, picker, projectId])
   return options
+}
+
+// Which slates of the project are kept as which files: a slate picker and a file name per row.
+function SlateMapsField({ field, recipeId, projectId, value, onChange, error }) {
+  const options = usePickerOptions(recipeId, 'slates', projectId)
+  const rows = Array.isArray(value) ? value : []
+  const byValue = new Map((options || []).map((o) => [o.value, o]))
+  const taken = new Set(rows.map((r) => r.shareId))
+  const setRow = (k, next) => onChange(rows.map((r, i) => (i === k ? Object.fromEntries(Object.entries({ ...r, ...next }).filter(([, v]) => v !== '' && v !== null && v !== undefined)) : r)))
+  return (
+    <Box sx={{ display: 'grid', gap: 1 }} data-recipe-slate-maps="">
+      <Typography variant="body2" fontWeight={650}>{field.label}{field.required ? ' *' : ''}</Typography>
+      {rows.map((row, k) => (
+        <Box key={row.shareId || k} sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) auto', gap: 1, alignItems: 'start' }}>
+          <Autocomplete options={(options || []).filter((o) => o.value === row.shareId || !taken.has(o.value))} loading={options === null}
+            value={row.shareId ? byValue.get(row.shareId) || { value: row.shareId, label: row.shareId } : null}
+            getOptionLabel={(o) => o.label || o.value} isOptionEqualToValue={(a, b) => a.value === b.value}
+            onChange={(e, next) => setRow(k, { shareId: next?.value ?? '' })}
+            renderInput={(params) => <TextField {...params} label="Slate" size="small" />} />
+          <TextField label="File" size="small" value={row.file || ''} placeholder="Named after the slate"
+            onChange={(e) => setRow(k, { file: e.target.value.trim() })} slotProps={{ htmlInput: { spellCheck: false, maxLength: 300 } }} />
+          <IconButton aria-label="Remove this slate" onClick={() => onChange(rows.filter((_, i) => i !== k))}><CloseIcon /></IconButton>
+        </Box>
+      ))}
+      <Button size="small" variant="outlined" sx={{ justifySelf: 'start' }} disabled={rows.length >= (field.max ?? 40) || (options !== null && taken.size >= options.length)}
+        onClick={() => onChange([...rows, { shareId: '' }].filter((r, i, all) => r.shareId || i === all.length - 1))}>Add a slate</Button>
+      {(error || field.help || options?.length === 0) && (
+        <Typography variant="caption" color={error ? 'error' : 'text.secondary'}>
+          {error || (options?.length === 0 ? 'This project has no slates yet. Add one, then pick it here.' : field.help)}
+        </Typography>
+      )}
+    </Box>
+  )
 }
 
 function PickerField({ field, recipeId, value, onChange, error }) {
@@ -95,7 +131,7 @@ function CronField({ field, value, onChange, error }) {
   )
 }
 
-export default function ConfigForm({ schema, recipeId, value, onChange, errors = {} }) {
+export default function ConfigForm({ schema, recipeId, projectId = null, value, onChange, errors = {} }) {
   const fields = configFields(schema)
   const set = (key, v) => onChange({ ...value, [key]: v })
   if (!fields.length) return <Typography color="text.secondary">This recipe has no settings.</Typography>
@@ -105,6 +141,7 @@ export default function ConfigForm({ schema, recipeId, value, onChange, errors =
         const v = value?.[f.key]
         const error = errors[f.key]
         if (f.kind === 'repos' || f.kind === 'channels') return <PickerField key={f.key} field={f} recipeId={recipeId} value={v} onChange={(x) => set(f.key, x)} error={error} />
+        if (f.kind === 'slatemaps') return <SlateMapsField key={f.key} field={f} recipeId={recipeId} projectId={projectId} value={v} onChange={(x) => set(f.key, x)} error={error} />
         if (f.kind === 'files') return <FilesField key={f.key} field={f} value={v} onChange={(x) => set(f.key, x)} error={error} />
         if (f.kind === 'cron') return <CronField key={f.key} field={f} value={v} onChange={(x) => set(f.key, x)} error={error} />
         if (f.kind === 'boolean') {
@@ -151,6 +188,7 @@ export default function ConfigForm({ schema, recipeId, value, onChange, errors =
 ConfigForm.propTypes = {
   schema: PropTypes.object,
   recipeId: PropTypes.string.isRequired,
+  projectId: PropTypes.string,
   value: PropTypes.object,
   onChange: PropTypes.func.isRequired,
   errors: PropTypes.object,

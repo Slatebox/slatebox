@@ -33,8 +33,8 @@ import recipesApi from './recipesApi'
 import ConfigForm from './ConfigForm'
 import RecipePermissions from './RecipePermissions'
 import {
-  COST_WORDS, INTEGRATION_WORDS, addRecipeSteps, defaultConfig, defaultTriggers, groupCatalog, instanceName, needsConnection,
-  optionalTriggers, outputsLine, previewSummary, recipeErrorWords, triggerKey, triggerWords, validateConfig,
+  COST_WORDS, INTEGRATION_WORDS, addRecipeSteps, createdInstance, defaultConfig, defaultTriggers, grantsOf, groupCatalog, instanceName, needsConnection,
+  optionalTriggers, outputsLine, previewSummary, recipeErrorWords, triggerFrom, triggerKey, triggerWords, validateConfig, withoutEmptyMaps,
 } from './recipesModel.mjs'
 
 const tz = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' } catch { return 'UTC' } }
@@ -135,27 +135,28 @@ export default function AddRecipeDialog({ open, projectId, draft = null, onClose
   const on = (key) => triggers.some((t) => triggerKey(t) === key)
   function toggleTrigger(t, checked) {
     setTriggers((had) => (checked
-      ? [...had.filter((x) => triggerKey(x) !== triggerKey(t)), t.kind === 'schedule' ? { kind: 'schedule', cron: t.cron, tz: tz() } : { kind: 'vendor', event: t.event, ...(t.debounceMs && { debounceMs: t.debounceMs }) }]
+      ? [...had.filter((x) => triggerKey(x) !== triggerKey(t)), triggerFrom(t, tz())]
       : had.filter((x) => triggerKey(x) !== triggerKey(t))))
   }
 
   async function toPreview() {
-    const check = validateConfig(current.configSchema, config)
+    const sent = withoutEmptyMaps(config)
+    const check = validateConfig(current.configSchema, sent)
     setErrors(check.errors)
     if (!check.ok) return
     setBusy(true); setError('')
     try {
       const withManual = triggers.some((t) => t.kind === 'manual') ? triggers : [...triggers, { kind: 'manual' }]
-      const input = { config, triggers: withManual, name: name.trim() || instanceName(current, config) }
+      const input = { config: sent, triggers: withManual, name: name.trim() || instanceName(current, sent) }
       let made = instance
       if (made) await recipesApi.update({ instanceId: made._id, ...input })
-      else made = (await recipesApi.create({ projectId, recipeId: current.id, ...input }))?.instance
+      else made = createdInstance(await recipesApi.create({ projectId, recipeId: current.id, ...input }))
       setInstance(made)
       setStep('preview')
       setPreview(null)
       const [shown, got] = await Promise.all([recipesApi.preview({ instanceId: made._id }), recipesApi.get({ instanceId: made._id })])
       setPreview(shown)
-      setGrants(got?.grants || [])
+      setGrants(grantsOf(got))
     } catch (e) {
       setError(recipeErrorWords(e))
       if (e?.details?.errors) setErrors(e.details.errors)
@@ -188,7 +189,7 @@ export default function AddRecipeDialog({ open, projectId, draft = null, onClose
         {step === 'configure' && current && (
           <Box sx={{ display: 'grid', gap: 2 }}>
             <TextField label="Name" value={name} placeholder={instanceName(current, config)} onChange={(e) => setName(e.target.value)} helperText="Shown on the project page and in the run history." />
-            <ConfigForm schema={current.configSchema} recipeId={current.id} value={config} onChange={setConfig} errors={errors} />
+            <ConfigForm schema={current.configSchema} recipeId={current.id} projectId={projectId} value={config} onChange={setConfig} errors={errors} />
             {optional.length > 0 && (
               <Box sx={{ display: 'grid' }}>
                 <Typography fontWeight={650}>When it runs</Typography>
@@ -224,7 +225,7 @@ export default function AddRecipeDialog({ open, projectId, draft = null, onClose
                   The first run suggests its notes on each slate: keep them all or one by one. After you keep a first run you can let it apply updates by itself.
                 </Typography>
                 {instance && <RecipePermissions instanceId={instance._id} manifest={current} config={config} grants={grants} disabled={busy}
-                  onChanged={async () => setGrants((await recipesApi.get({ instanceId: instance._id }))?.grants || [])} />}
+                  onChanged={async () => setGrants(grantsOf(await recipesApi.get({ instanceId: instance._id })))} />}
               </>
             )}
           </Box>

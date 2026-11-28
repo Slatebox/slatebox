@@ -9,7 +9,11 @@
 //   vendor    queue.trigger() folds events into the instance's pendingTrigger and pushes
 //             debounceUntil out; the tick turns a quiet instance into one run (ten pushes in two
 //             minutes are one run).
-//   manual, inbound   enqueued at once.
+//   saves     queue.slateSaved() keeps one due time per slate in the instance's slateSaves, each
+//             pushed out by that slate's own saves (a person editing one slate all afternoon does
+//             not hold back another's export); the tick turns the slates that went quiet into one
+//             slate_saved run naming them.
+//   manual, inbound, recipe_event   enqueued at once.
 //   claim     a queued run is taken with one findOneAndUpdate (queued → running, with a lease), then
 //             the instance's lock (one run at a time per instance); no lock puts it back for 30 s.
 //             An owner with RECIPE_LIMITS.concurrentPerOwner runs going is skipped. With P servers
@@ -131,6 +135,41 @@ export function createRecipeQueue({ store, clock = Date.now, worker = 'w', limit
       const changed = await instances.updateOne(
         { _id: instanceId, rev: instance.rev ?? 0 },
         { $set: { pendingTrigger: merged, debounceUntil: until }, $inc: { rev: 1 } }
+      )
+      if (changed.modifiedCount) return true
+    }
+    return false
+  }
+
+  /**
+   * A person saved a slate in the instance's sync map: that slate's run is due debounceMs after its
+   * last save. One compare-and-set on the instance; false when it is not on.
+   */
+  async function slateSaved(instanceId, shareId, { debounceMs = 0 } = {}) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const instance = await instances.findOne({ _id: instanceId })
+      if (!instance || instance.state !== LIVE_INSTANCE) return false
+      const until = clock() + debounceMs
+      const saves = [...(instance.slateSaves || []).filter((s) => s.shareId !== shareId), { shareId, until: asDate(until), count: ((instance.slateSaves || []).find((s) => s.shareId === shareId)?.count || 0) + 1 }].slice(-100)
+      const changed = await instances.updateOne(
+        { _id: instanceId, rev: instance.rev ?? 0 },
+        { $set: { slateSaves: saves, savesDueAt: asDate(Math.min(...saves.map((s) => new Date(s.until).getTime()))) }, $inc: { rev: 1 } }
+      )
+      if (changed.modifiedCount) return true
+    }
+    return false
+  }
+
+  /** The saves waiting on these slates are dropped (a run that exports them now is queued instead). */
+  async function clearSaves(instanceId, shareIds) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const instance = await instances.findOne({ _id: instanceId })
+      if (!instance) return false
+      const saves = (instance.slateSaves || []).filter((s) => !shareIds.includes(s.shareId))
+      if (saves.length === (instance.slateSaves || []).length) return true
+      const changed = await instances.updateOne(
+        { _id: instanceId, rev: instance.rev ?? 0 },
+        { $set: { slateSaves: saves, savesDueAt: saves.length ? asDate(Math.min(...saves.map((s) => new Date(s.until).getTime()))) : null }, $inc: { rev: 1 } }
       )
       if (changed.modifiedCount) return true
     }
@@ -262,7 +301,7 @@ export function createRecipeQueue({ store, clock = Date.now, worker = 'w', limit
     return back
   }
 
-  return { enqueue, trigger, claim, heartbeat, finish, cancel, reclaim, runningHere: () => running.size }
+  return { enqueue, trigger, slateSaved, clearSaves, claim, heartbeat, finish, cancel, reclaim, runningHere: () => running.size }
 }
 
 /**
@@ -294,6 +333,21 @@ export function createScheduler({ store, clock = Date.now, queue, limits = RECIP
       if (!taken?.pendingTrigger) continue
       const at = new Date(taken.debounceUntil).toISOString()
       await queue.enqueue(taken, taken.pendingTrigger, { id: `${instance._id}:v:${at}` })
+      made += 1
+    }
+    // Slates in a sync map that went quiet: one run for all of them, the rest keep waiting.
+    const saved = await instances.find({ state: LIVE_INSTANCE, savesDueAt: { $lte: asDate(now) } }, { sort: { savesDueAt: 1 }, limit: limits.tickBatch }).toArray()
+    for (const instance of saved) {
+      const saves = instance.slateSaves || []
+      const due = saves.filter((s) => new Date(s.until).getTime() <= now)
+      const rest = saves.filter((s) => new Date(s.until).getTime() > now)
+      const won = await instances.updateOne(
+        { _id: instance._id, rev: instance.rev ?? 0 },
+        { $set: { slateSaves: rest, savesDueAt: rest.length ? asDate(Math.min(...rest.map((s) => new Date(s.until).getTime()))) : null }, $inc: { rev: 1 } }
+      )
+      if (!won.modifiedCount || !due.length) continue
+      const at = new Date(instance.savesDueAt).toISOString()
+      await queue.enqueue(instance, { kind: 'slate_saved', shareIds: due.map((s) => s.shareId), count: due.reduce((n, s) => n + (s.count || 1), 0) }, { id: `${instance._id}:s:${at}` })
       made += 1
     }
     return made

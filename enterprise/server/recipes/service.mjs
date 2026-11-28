@@ -62,8 +62,24 @@ export function checkTriggers(manifest, triggers) {
       const debounceMs = Number.isInteger(t.debounceMs) ? Math.max(0, Math.min(6 * 3600e3, t.debounceMs)) : spec.debounceMs ?? 0
       return { kind: 'vendor', event: spec.event, debounceMs }
     }
+    if (t.kind === 'slate_saved') {
+      const debounceMs = Number.isInteger(t.debounceMs) ? Math.max(0, Math.min(6 * 3600e3, t.debounceMs)) : offered[0].debounceMs ?? 0
+      return { kind: 'slate_saved', debounceMs }
+    }
+    if (t.kind === 'recipe_event') {
+      const spec = offered.find((m) => m.event === t.event) || (t.event ? null : offered[0])
+      if (!spec) refuse(400, 'bad_triggers', 'This recipe does not run after that.', { field: `triggers[${k}].event` })
+      return { kind: 'recipe_event', event: spec.event }
+    }
     return { kind: t.kind }
   })
+}
+
+/** The slates an instance keeps in step (its sync map, config.maps): the shareIds its save and
+ * recipe-event triggers watch. Empty for a recipe without such triggers. */
+export function watchSlatesFor(manifest, config) {
+  if (!(manifest?.triggers || []).some((t) => t.kind === 'slate_saved' || t.kind === 'recipe_event')) return []
+  return [...new Set((config?.maps || []).map((m) => m?.shareId).filter((id) => typeof id === 'string'))].slice(0, 100)
 }
 
 /**
@@ -85,6 +101,17 @@ export function createRecipeService(deps) {
   const newId = deps.randomId || (() => Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10))
   const { instances, runs, hooks, deliveries, notes, grants, cards } = store
   const resolveMatch = deps.resolveMatch || (async (_manifest, match) => match)
+  const syncMapChanged = deps.syncMapChanged || (() => {})
+
+  // A sync map names only slates in the recipe's own project (a slate elsewhere is refused by name).
+  async function checkWatched(manifest, config, projectId) {
+    const watch = watchSlatesFor(manifest, config)
+    if (!watch.length) return watch
+    const inProject = new Set((await projects.listSlates(projectId, { folders: true })).map((s) => s.shareId))
+    const outside = watch.findIndex((id) => !inProject.has(id))
+    if (outside >= 0) refuse(400, 'bad_config', 'Pick slates from this project.', { pointer: `/maps/${(config.maps || []).findIndex((m) => m?.shareId === watch[outside])}/shareId` })
+    return watch
+  }
 
   async function requireOn(orgId = null) {
     if ((await switches.serverOff()) || !(await switches.installEnabled())) refuse(409, 'recipes_off', RECIPES_OFF)
@@ -169,7 +196,12 @@ export function createRecipeService(deps) {
         recipe: await publicInstance(instance, principal.userId),
         permissions: live.map((g) => ({ grantId: g._id, kind: g.kind, scope: g.scope, describe: g.describe, grantedAt: new Date(g.grantedAt).toISOString(), expiresAt: g.expiresAt ? new Date(g.expiresAt).toISOString() : null })),
         hooks: hookRows.map((row) => publicHook(row, { full: managing || row.ownerId === principal.userId })),
-        waiting: waiting.map((c) => ({ cardId: c._id, kind: c.kind, target: c.target, created: new Date(c.created).toISOString() })),
+        // A waiting pull request carries its files (Mermaid the project's readers can already see),
+        // so they can be downloaded without the permission.
+        waiting: waiting.map((c) => ({
+          cardId: c._id, kind: c.kind, target: c.target, created: new Date(c.created).toISOString(),
+          ...(c.kind === 'github.pull_request' && Array.isArray(c.body?.files) && { files: c.body.files.slice(0, 40).map((f) => ({ path: String(f.path), content: String(f.content ?? '') })), summary: String(c.body.body || '').slice(0, 4000) }),
+        })),
       }
     },
 
@@ -182,16 +214,18 @@ export function createRecipeService(deps) {
       if ((await instances.countDocuments({ ownerId: principal.userId })) >= RECIPE_LIMITS.instancesPerOwner) refuse(409, 'too_many', `A person runs at most ${RECIPE_LIMITS.instancesPerOwner} recipes.`)
       const { manifest } = entry
       const checked = checkConfig(manifest, config)
+      const watchSlates = await checkWatched(manifest, checked, projectId)
       const now = new Date(clock())
       const doc = {
         _id: newId(), recipeId, recipeVersion: manifest.version, projectId, ownerId: principal.userId, orgId: project?.orgId ?? null,
         name: String(name || defaultName(manifest, checked)).replace(/\s+/g, ' ').trim().slice(0, 120),
         config: checked, triggers: triggers ? checkTriggers(manifest, triggers) : defaultTriggers(manifest),
         match: await resolveMatch(manifest, matchFor(manifest, checked), principal.userId), state: 'draft', pausedBy: null, pausedReason: null, applyMode: 'suggest', firstRunKept: false,
-        nextDueAt: null, debounceUntil: null, pendingTrigger: null, lock: null, cursor: {}, slateMap: {}, failures: 0, lastRun: null,
+        nextDueAt: null, debounceUntil: null, pendingTrigger: null, watchSlates, slateSaves: [], savesDueAt: null, lock: null, cursor: {}, slateMap: {}, failures: 0, lastRun: null,
         colorIndex: (await instances.countDocuments({ projectId })) % PALETTE, created: now, updated: now, rev: 0,
       }
       await instances.insertOne(doc)
+      if (watchSlates.length) syncMapChanged(watchSlates)
       await record('recipe.created', doc)
       return { recipe: await publicInstance(doc, principal.userId) }
     },
@@ -204,6 +238,7 @@ export function createRecipeService(deps) {
       if (config !== undefined) {
         set.config = checkConfig(manifest, config)
         set.match = await resolveMatch(manifest, matchFor(manifest, set.config), instance.ownerId)
+        set.watchSlates = await checkWatched(manifest, set.config, instance.projectId)
       }
       if (triggers !== undefined) set.triggers = checkTriggers(manifest, triggers)
       if (name !== undefined) set.name = String(name).replace(/\s+/g, ' ').trim().slice(0, 120) || instance.name
@@ -213,6 +248,7 @@ export function createRecipeService(deps) {
       }
       if (instance.state === 'active' && set.triggers) set.nextDueAt = nextDueFor(set.triggers, clock())
       await instances.updateOne({ _id: instance._id }, { $set: { ...set, updated: new Date(clock()) }, $inc: { rev: 1 } })
+      if (set.watchSlates) syncMapChanged([...(instance.watchSlates || []), ...set.watchSlates])
       await record('recipe.updated', instance, { outcome: Object.keys(set).join(',').slice(0, 60) })
       return { recipe: await publicInstance({ ...instance, ...set }, principal.userId) }
     },
@@ -267,11 +303,51 @@ export function createRecipeService(deps) {
       return { runId: run._id, state: run.state }
     },
 
+    /**
+     * "Save to repo now", on a synced slate or on the recipe's card: the export runs at once instead
+     * of 10 minutes after the last save. Editors of the project; counted with Run now (30 an hour).
+     */
+    async saveNow(principal, instanceId, { shareId = null } = {}) {
+      const { instance } = await instanceFor(principal, instanceId, 'editor', 'save its slates to the repository')
+      await requireOn(instance.orgId)
+      if (instance.state !== 'active') refuse(409, 'recipe_not_on', 'Turn this recipe on first.')
+      if (!(instance.watchSlates || []).length) refuse(400, 'not_synced', 'This recipe keeps no slates in a repository.')
+      if (shareId !== null && !(instance.watchSlates || []).includes(shareId)) refuse(404, 'not_synced', 'This slate is not synced by that recipe.')
+      const lastHour = await runs.countDocuments({ instanceId: instance._id, 'trigger.kind': { $in: ['manual', 'inbound'] }, created: { $gt: new Date(clock() - 3600e3) } })
+      if (lastHour >= RECIPE_LIMITS.manualPerHourPerInstance) refuse(429, 'rate_limited', `A recipe runs on request at most ${RECIPE_LIMITS.manualPerHourPerInstance} times an hour.`)
+      const shareIds = shareId ? [shareId] : [...instance.watchSlates]
+      // the saves waiting on these slates are part of this export
+      await queue.clearSaves(instance._id, shareIds)
+      const run = await queue.enqueue(instance, { kind: 'manual', by: principal.userId, reason: 'Save to repo now', shareIds })
+      return { runId: run._id, state: run.state }
+    },
+
+    /** The synced recipes on a slate, for its "Synced with acme/api docs/…/x.mmd @ abc1234" line. */
+    async syncedOn(principal, shareId) {
+      const slate = await slateIdFor(principal, shareId)
+      if (!slate?.canRead) refuse(404, 'not_found', 'That slate is not there, or it is not shared with you.')
+      const rows = await instances.find({ watchSlates: shareId, state: { $nin: ['deleted'] } }, { limit: 10 }).toArray()
+      const out = []
+      for (const instance of rows) {
+        const role = await roleIn(principal, instance.projectId)
+        if (!role) continue
+        const files = Object.entries(instance.cursor?.files || {}).filter(([, e]) => e?.shareId === shareId)
+        const map = (instance.config?.maps || []).find((m) => m.shareId === shareId)
+        const [path, entry] = files[0] || [map?.file || null, null]
+        out.push({
+          instanceId: instance._id, name: instance.name, state: instance.state, repo: instance.config?.repo || null, path,
+          commit: entry?.commit || null, pending: Boolean(entry?.proposed?.length), canSave: rank(role) >= rank('editor') && instance.state === 'active',
+          savesDueAt: (instance.slateSaves || []).find((s) => s.shareId === shareId)?.until ? new Date(instance.slateSaves.find((s) => s.shareId === shareId).until).toISOString() : null,
+        })
+      }
+      return { synced: out }
+    },
+
     async pause(principal, instanceId) {
       const { instance, role } = await instanceFor(principal, instanceId)
       ownerOrManager(principal, instance, role, 'pause it')
       if (instance.state === 'paused') return { recipe: await publicInstance(instance, principal.userId) }
-      const set = { state: 'paused', pausedBy: principal.userId, pausedReason: 'person', nextDueAt: null, debounceUntil: null, pendingTrigger: null }
+      const set = { state: 'paused', pausedBy: principal.userId, pausedReason: 'person', nextDueAt: null, debounceUntil: null, pendingTrigger: null, slateSaves: [], savesDueAt: null }
       await instances.updateOne({ _id: instance._id }, { $set: { ...set, updated: new Date(clock()) }, $inc: { rev: 1 } })
       await runs.updateMany({ instanceId: instance._id, state: 'queued' }, { $set: { state: 'cancelled', finishedAt: new Date(clock()), cancelledBy: principal.userId } })
       await record('recipe.paused', instance, { reason: 'person' })
@@ -547,9 +623,16 @@ export function createRecipeService(deps) {
     },
 
     /** The choices a config picker offers the caller: GitHub repositories the App sees, Slack channels. */
-    async pickerOptions(principal, recipeId, picker) {
+    async pickerOptions(principal, recipeId, picker, projectId = null) {
       const manifest = manifestOf(recipeId)
       if (!manifest) refuse(404, 'unknown_recipe', 'There is no such recipe.')
+      if (picker === 'slates') {
+        // A sync map's choices: the slates of the project the recipe goes in, for an editor of it.
+        if (typeof projectId !== 'string') refuse(400, 'invalid_request', 'Name the project.')
+        await needRole(principal, projectId, 'editor', 'add recipes')
+        const listed = await projects.listSlates(projectId, { folders: true })
+        return { options: listed.slice(0, 500).map((s) => ({ value: s.shareId, label: s.name || 'Untitled slate' })) }
+      }
       const options = deps.pickerOptions ? await deps.pickerOptions(principal.userId, manifest, picker) : []
       return { options: (options || []).slice(0, 500) }
     },

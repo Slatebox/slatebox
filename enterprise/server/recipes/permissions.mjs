@@ -65,6 +65,14 @@ export function scopeCovers(scope, target = {}) {
   return true
 }
 
+/** What a grant's scope is checked against: the target, and for a pull request the paths of the
+ * files it writes (the files are the change, whatever the target says). */
+export function coveredTarget(write) {
+  if (write?.kind !== 'github.pull_request') return write?.target || {}
+  const paths = (Array.isArray(write.body?.files) ? write.body.files : []).map((f) => f?.path).filter((p) => typeof p === 'string')
+  return { ...(write.target || {}), paths: [...new Set([...(write.target?.paths || []), ...paths])] }
+}
+
 /** The hard limit a write breaks, or null. vendorLimit: the vendor's own (vendor.checkHardLimits). */
 export function hardLimit(write, grant = null, vendorLimit = null) {
   const vendor = String(write.kind).split('.')[0]
@@ -130,7 +138,7 @@ export function createPermissions({ store, clock = Date.now, audit = async () =>
     if (!WRITE_KINDS.includes(write?.kind) || !writeSpec(instance, write.kind)) return { decision: 'refused', reason: 'not_offered' }
     const vendor = vendorOf(write.kind)
     const live = (await liveGrants(instance._id)).filter((g) => g.kind === write.kind)
-    const covering = live.find((g) => scopeCovers(g.scope, write.target))
+    const covering = live.find((g) => scopeCovers(g.scope, coveredTarget(write)))
     if (hardLimit(write, covering || null, vendor?.checkHardLimits ? (w) => vendor.checkHardLimits(w) : null)) return { decision: 'refused', reason: 'hard_limit' }
     if (covering) return { decision: 'allow', grant: covering }
     return { decision: 'card' }
@@ -171,7 +179,14 @@ export function createPermissions({ store, clock = Date.now, audit = async () =>
     const { ref = null } = answer
     await audit({ action: 'recipe.outside_write', instance, details: { kind: write.kind, instanceId: instance._id, runId: run?._id, outcome: via } })
     await emit({ type: 'writeback.done', instance, run, data: { kind: write.kind, target: targetLine(write.target), ...(ref && { ref: String(ref).slice(0, 300) }) } }).catch(() => {})
-    return { ref }
+    // The recipe's own events for this write (G3: mermaid.sync.pr_opened, .pr_updated), named in its
+    // manifest: opened when the vendor opened one, updated when it added a commit to an open one.
+    const own = answer.opened ? write.events?.opened : answer.commit ? write.events?.updated : null
+    const manifest = own ? manifestOf(instance.recipeId) : null
+    if (own && manifest?.events?.includes(own)) {
+      await emit({ type: own, instance, run, manifest, data: { repo: String(write.target?.repo || '').slice(0, 200), number: Number.parseInt(ref, 10) || 0, files: (answer.files || []).map((f) => String(f).slice(0, 300)).slice(0, 40), ...(answer.commit && { commit: String(answer.commit).slice(0, 40) }) } }).catch(() => {})
+    }
+    return { ref, ...(answer.commit && { commit: String(answer.commit).slice(0, 40) }) }
   }
 
   /** One proposed write, decided and done. → the run's writes[] entry. */
@@ -198,9 +213,12 @@ export function createPermissions({ store, clock = Date.now, audit = async () =>
       }
     }
     if (decision === 'allow') {
-      const { ref, refused } = await make(instance, { ...write, body }, { grant: decided.grant, run, signal })
+      const { ref, refused, commit } = await make(instance, { ...write, body }, { grant: decided.grant, run, signal })
       if (refused) return { kind: write.kind, target: targetLine(write.target), state: 'refused' }
-      return { kind: write.kind, target: targetLine(write.target), state: 'done', ...(ref && { ref }) }
+      // A card still waiting for the same change (proposed before the permission was given) is done
+      // with: this write carries the newer body.
+      if (write.key) await cards.updateMany({ instanceId: instance._id, key: write.key, state: 'waiting' }, { $set: { state: 'superseded', updated: new Date(clock()), runId: run?._id ?? null } })
+      return { kind: write.kind, target: targetLine(write.target), state: 'done', ...(ref && { ref }), ...(commit && { commit }) }
     }
     const card = await propose(instance, { ...write, body }, run)
     if (card.state === 'waiting') await emit({ type: 'approval.needed', instance, run, data: { cardId: card._id, kind: write.kind, target: targetLine(write.target) } }).catch(() => {})

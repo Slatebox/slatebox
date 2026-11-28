@@ -39,6 +39,7 @@ import { addCredentialUser } from '../credential-users.mjs'
 import { COLLECTIONS, createRecipeStore } from './store.mjs'
 import { createRecipeQueue, createScheduler, RECIPE_LIMITS } from './queue.mjs'
 import { createRunner } from './runner.mjs'
+import { createSlateSaveListener } from './slate-saves.mjs'
 import { createPermissions } from './permissions.mjs'
 import { createOutbound } from './webhooks/outbound.mjs'
 import { createInbound } from './webhooks/inbound.mjs'
@@ -247,8 +248,11 @@ export function startRecipes({ via = null, isUnlocked = () => true, projects, re
     budgetOverrides: () => Meteor.settings.selfHosted?.recipes?.budgets || null,
     onUnexpected: (error, where) => console.warn('[recipes] run failed', where.recipeId, where.runId, String(error?.stack || error).split('\n').slice(0, 6).join(' | ')),
   })
+  // Slate saves, for the recipes that keep a slate in step with a file (slate_saved triggers).
+  const slateSaves = createSlateSaveListener({ store, queue, clock })
   const service = createRecipeService({
     store, queue, runner, clock, randomId, recipeOf, catalog, projects, switches, permissions, outbound, sealer, checkHookUrl,
+    syncMapChanged: (shareIds) => slateSaves.forget(shareIds),
     slateIdFor: async (principal, shareId) => {
       const opened = await resolvePresentationSlate(shareId, principal.userId)
       if (!opened?.slateBase) return null
@@ -365,5 +369,5 @@ export function startRecipes({ via = null, isUnlocked = () => true, projects, re
     for (const instance of matched) await runner.stopInstance(instance, state, state === 'blocked_access' ? 'access' : 'sign_in')
     return matched.length
   }
-  return { service, inbound, vendors, store, queue, runner, trigger, pause }
+  return { service, inbound, vendors, store, queue, runner, trigger, pause, slateSaves: { slateSaved: async (save) => ((await on()) ? slateSaves.slateSaved(save) : 0) } }
 }

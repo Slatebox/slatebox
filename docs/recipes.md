@@ -21,6 +21,7 @@ install). Projects, which recipes run in, are MIT core: see [projects.md](projec
 | Recipe | Agent | Runs on | Keeps |
 |---|---|---|---|
 | Living architecture (`github-architecture`) | GitHub architect | every push to the default branch (2-minute quiet time), 03:00 daily, Run now, inbound data | A service map, a module graph and an API surface per repository, a "What changed" board. Extracts compose, k8s, Helm, Terraform, serverless, JS/TS, Python, Go, Java, Rust, Ruby, OpenAPI, GraphQL, proto, routes, CODEOWNERS and cycles. |
+| Diagrams as code (`github-mermaid-sync`) | Diagram keeper | someone edits a synced slate (10 minutes after that slate's last edit), Living architecture changing a synced slate, a push to the default branch that touches a synced file, Run now, Save to repo now | The slates you map, kept in step with Mermaid files in the repository: canvas changes go to one pull request on `slatebox/architecture`, merged file edits update the slates in place. |
 | Pull request impact (`github-pr-impact`) | PR reviewer | pull requests opened, updated, reopened, ready, closed | One slate per pull request in the Pull requests folder: what it adds, removes and touches. Can keep one diagram comment on the pull request (with your permission). |
 | Decision log (`slack-decision-log`) | Decision keeper | new messages in your channels (folded every 30 minutes), 18:00 daily | A board of Decided, Revisited, Reversed and Maybe, each card linked to its thread. |
 | Project timeline (`slack-timeline`) | Timeline keeper | new messages | A launch plan with owners and dates, and a board of every commitment. A moved date shows the slip. |
@@ -31,10 +32,35 @@ install). Projects, which recipes run in, are MIT core: see [projects.md](projec
 | Render from a webhook (`webhook-render`) | Webhook renderer | inbound data, Run now with data | A slate drawn from the graph, Mermaid, board or prose your systems post. |
 | Project index (`project-index`) | Project librarian | hourly | One slate listing every slate in the project and which agent keeps it. |
 
-Diagrams as code (`github-mermaid-sync`: the mapped slates kept as Mermaid files in the repository,
-both ways, through one pull request on a `slatebox/` branch) is built and tested
-(`scripts/recipe-github-mermaid-sync.test.mjs`) but not offered yet: it needs the runtime to accept
-the `slate_saved` and `recipe_event` triggers and pre-built plans for slates it does not own.
+### Diagrams as code
+
+Set it up with the repository, a folder (default `docs/architecture/`), which slates of the project
+are kept as which files (any slate: the agent's own or one you made; leave the file empty to name
+it after the slate), and the branch (default `slatebox/architecture`). Then:
+
+- **Edits go to the repository by themselves.** Ten minutes after the last edit to a synced slate
+  (per slate: a slate you keep editing never holds back another), the slate is written as Mermaid
+  and committed to the one open pull request on the branch. Moving notes changes nothing (the file
+  lists notes by id, not by position), so it makes no commit. A person's commit on the branch is
+  kept: the next commit goes on top, never a force-push. Nothing is ever pushed to the default
+  branch or merged by Slatebox.
+- **Save to repo now** on the synced slate (beside "Synced with acme/api
+  docs/architecture/checkout.mmd @ 1a2b3c4") and on the recipe's card exports at once.
+- **After Living architecture** changes a synced slate, the export runs straight after its run.
+- **Merged edits to the file** (a push to the default branch) update the slate in place: new
+  notes and lines, changed labels and shapes; nothing moves, and people's own notes stay. Our own
+  merged pull request is recognized by its content and changes nothing.
+- **Changed in both places:** the canvas version is kept, a note on the slate says what the file
+  had, and the pull request lists the element, until the canvas version is merged.
+- **Without the permission** to open pull requests, each change waits as an approval card in the
+  recipe's Changes outside Slatebox, with its `.mmd` files to download.
+- Its webhooks still send `mermaid.sync.pr_opened`, `mermaid.sync.pr_updated`,
+  `mermaid.sync.imported` and `mermaid.sync.conflict`, for developers.
+
+Under the hood: the app tells recipes of every slate save (`web/app/server/recipes-hooks.mjs`
+`slateSaved`); `enterprise/server/recipes/slate-saves.mjs` keeps that cheap (a slate no recipe
+watches is one cached lookup; a watched one is folded per slate into the instance's due time), and
+the scheduler turns quiet slates into one `slate_saved` run. A recipe's own saves never count.
 
 ## How a run works
 
@@ -129,6 +155,8 @@ The `recipes.*` actions are on `/api/v1` and over DDP (scopes `recipes:read`, `r
 | `recipes.preview` | `POST /recipes/{instanceId}/preview` (what it would make, nothing saved) |
 | `recipes.activate` | `POST /recipes/{instanceId}/activate` |
 | `recipes.run` | `POST /recipes/{instanceId}/run` (`{ reason?, data? }`, 30 an hour) |
+| `recipes.saveNow` | `POST /recipes/{instanceId}/save-now` (`{ shareId? }`: a synced slate to its repository now; counted with Run now) |
+| `recipes.syncedOn` | `GET /slates/{shareId}/recipe-sync` (the repository, file and commit a slate is synced with) |
 | `recipes.pause`, `recipes.resume` | `POST /recipes/{instanceId}/pause`, `/resume` |
 | `recipes.runs` | `GET /recipes/{instanceId}/runs` |
 | `recipes.undoRun` | `POST /recipe-runs/{runId}/undo` |

@@ -25,13 +25,14 @@ import webhookRender from '../../recipes/webhook-render/index.mjs'
 import projectIndex from '../../recipes/project-index/index.mjs'
 import githubArchitecture from '../../recipes/github-architecture/index.mjs'
 import githubPrImpact from '../../recipes/github-pr-impact/index.mjs'
+import githubMermaidSync from '../../recipes/github-mermaid-sync/index.mjs'
 import { slackVendorFactory } from './vendors/slack/factory.mjs'
 import { googleVendorFactory } from './vendors/google/factory.mjs'
 import { githubVendorFactory } from './vendors/github/factory.mjs'
 import { githubAppActions } from './vendors/github/actions.mjs'
 
 export const RECIPE_MODULES = Object.freeze([
-  githubArchitecture, githubPrImpact, // GitHub (the Slatebox GitHub App)
+  githubArchitecture, githubPrImpact, githubMermaidSync, // GitHub (the Slatebox GitHub App)
   slackDecisionLog, slackTimeline, slackConcepts, slackDigest, // Slack (one channel ledger)
   googleSheetBoard, googleDesignDoc, // Google (drive.file)
   webhookRender, projectIndex, // any system; the project itself
@@ -149,6 +150,7 @@ export function registerRecipes(api, context) {
       audit: (entry) => api.audit(auditEntry(entry), { coalesce: Boolean(entry.coalesce) }).catch?.(() => {}),
     })
     // The app tells recipes when a person loses access (removed from a team, unshared, account deleted).
-    setRecipeHooks({ ownerLostAccess: (userId, projectId = null) => started.service.ownerLostAccess(userId, projectId) })
+    // and of every slate save (a recipe's sync map: slate_saved runs, slate-saves.mjs)
+    setRecipeHooks({ ownerLostAccess: (userId, projectId = null) => started.service.ownerLostAccess(userId, projectId), slateSaved: (save) => started.slateSaves.slateSaved(save) })
   })
 }

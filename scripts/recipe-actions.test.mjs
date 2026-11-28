@@ -20,9 +20,10 @@ const build = (service = () => ({})) => createAppRegistry({ extraActions: recipe
 test('every recipes action is accepted, with the scopes recipes add', () => {
   const registry = build()
   const ours = registry.list().filter((a) => a.id.startsWith('recipes.'))
-  // 27 of the runtime, plus the switches the Recipes UI sets (project, owner, team, server) and its pickers
-  assert.equal(ours.length, 34)
-  for (const id of ['recipes.pauseProject', 'recipes.mine', 'recipes.pauseMine', 'recipes.team.get', 'recipes.team.set', 'recipes.pickerOptions', 'recipes.admin.pauseAll']) assert.ok(registry.get(id), id)
+  // 27 of the runtime, plus the switches the Recipes UI sets (project, owner, team, server) and its
+  // pickers, plus a synced slate's line and its "Save to repo now"
+  assert.equal(ours.length, 36)
+  for (const id of ['recipes.pauseProject', 'recipes.mine', 'recipes.pauseMine', 'recipes.team.get', 'recipes.team.set', 'recipes.pickerOptions', 'recipes.admin.pauseAll', 'recipes.saveNow', 'recipes.syncedOn']) assert.ok(registry.get(id), id)
   const scopes = new Set(ours.map((a) => a.scope))
   for (const scope of ENTERPRISE_ONLY_SCOPES) assert.ok(scopes.has(scope), scope)
   assert.deepEqual(registry.neededScopes().filter((s) => s.startsWith('recipes:')), [...ENTERPRISE_ONLY_SCOPES])

@@ -46,6 +46,8 @@ export function createRecipeStore(collection) {
     const { instances, runs, notes, grants, hooks, deliveries, ledger, inbox, cards } = store
     await instances.createIndex({ state: 1, nextDueAt: 1 })
     await instances.createIndex({ state: 1, debounceUntil: 1 })
+    await instances.createIndex({ state: 1, savesDueAt: 1 })
+    await instances.createIndex({ watchSlates: 1 }, { sparse: true })
     await instances.createIndex({ projectId: 1 })
     await instances.createIndex({ ownerId: 1 })
     await instances.createIndex({ 'match.github.installationId': 1 })

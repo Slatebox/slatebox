@@ -107,6 +107,17 @@ export const EVENT_TRIGGER_WORDS = Object.freeze({
   'slate.saved': 'When someone edits a kept slate',
 })
 
+export const RECIPE_EVENT_WORDS = Object.freeze({
+  'architecture.updated': 'After Living architecture changes a synced slate',
+})
+
+/** "10 minutes", "1 minute", "30 seconds": a trigger's quiet time. */
+export function quietWords(ms) {
+  const n = Number.isFinite(ms) ? ms : 0
+  if (n >= 60000) return plural(Math.round(n / 60000), 'minute')
+  return plural(Math.max(0, Math.round(n / 1000)), 'second')
+}
+
 export const CRON_PRESETS = Object.freeze([
   { id: 'every-15', label: 'Every 15 minutes', cron: '*/15 * * * *' },
   { id: 'hourly', label: 'Every hour', cron: '0 * * * *' },
@@ -168,6 +179,8 @@ export function triggerWords(trigger) {
   if (trigger.kind === 'vendor') return EVENT_TRIGGER_WORDS[trigger.event] || `On ${trigger.event}`
   if (trigger.kind === 'manual') return 'When someone clicks Run now'
   if (trigger.kind === 'inbound') return 'When a webhook calls it'
+  if (trigger.kind === 'slate_saved') return `When someone edits a synced slate (${quietWords(trigger.debounceMs)} after the last edit)`
+  if (trigger.kind === 'recipe_event') return RECIPE_EVENT_WORDS[trigger.event] || 'After another recipe changes a synced slate'
   return trigger.kind
 }
 
@@ -178,6 +191,7 @@ export function nextRunLine(instance, now = Date.now()) {
   if (instance.nextDueAt) return `Next run ${until(instance.nextDueAt, now)}`
   const vendor = (instance.triggers || []).find((t) => t.kind === 'vendor')
   if (vendor) return `Runs ${triggerWords(vendor).replace(/^On /, 'on ')}`
+  if ((instance.triggers || []).some((t) => t.kind === 'slate_saved')) return 'Runs after someone edits a synced slate'
   if ((instance.triggers || []).some((t) => t.kind === 'inbound')) return 'Runs when a webhook calls it'
   return 'Runs when someone clicks Run now'
 }
@@ -237,7 +251,8 @@ export function configFields(schema) {
   return Object.entries(props).filter(([, p]) => pickerOf(p) !== 'server').map(([key, p]) => {
     const picker = pickerOf(p)
     let kind = 'text'
-    if (picker) kind = picker
+    if (picker === 'repos' && p.type !== 'array') kind = 'repos'
+    else if (picker) kind = picker
     else if (Array.isArray(p.enum)) kind = 'select'
     else if (p.type === 'boolean') kind = 'boolean'
     else if (p.type === 'integer' || p.type === 'number') kind = 'number'
@@ -322,6 +337,35 @@ export function writePermissionText(kind, scope = {}) {
   return words ? words(scope || {}) : `Make ${kind} changes`
 }
 
+/** The paths a sync map writes: its folder (all of it) and any mapped file outside the folder. */
+export function syncPaths(config = {}) {
+  const raw = typeof config.folder === 'string' ? config.folder : 'docs/architecture/'
+  const folder = raw && !raw.endsWith('/') ? `${raw}/` : raw
+  const files = (config.maps || []).map((m) => m?.file).filter((f) => typeof f === 'string' && f && !(folder && f.startsWith(folder)))
+  return [...new Set([folder ? `${folder}**` : '**', ...files])]
+}
+
+/** "Synced with acme/api docs/architecture/checkout.mmd @ 1a2b3c4", for a synced slate. */
+export function syncedLine(s) {
+  if (!s?.repo) return ''
+  const where = [s.repo, s.path].filter(Boolean).join(' ')
+  return `Synced with ${where}${s.commit ? ` @ ${String(s.commit).slice(0, 7)}` : ''}`
+}
+
+/** What a synced slate says beside its line: changes waiting in a pull request, or the next save. */
+export function syncedState(s, now = Date.now()) {
+  if (!s) return ''
+  if (s.state !== 'active') return 'Paused: edits are not saved to the repository until it is resumed.'
+  if (s.savesDueAt) return `Your edits go to the repository ${until(s.savesDueAt, now)}.`
+  if (s.pending) return 'Changes wait in the pull request for a review.'
+  return 'Up to date with the repository.'
+}
+
+/** A file for the browser to download (a Mermaid file from a waiting change): its name and text. */
+export function downloadName(path) {
+  return String(path || 'diagram.mmd').split('/').pop().replace(/[^\w.-]+/g, '-') || 'diagram.mmd'
+}
+
 /**
  * The standing-permission rows for an instance: each kind the manifest may write, its exact scope
  * (from the config: repos, channels, paths, files), and whether it is granted. Unchecked by default.
@@ -331,13 +375,15 @@ export function permissionRows(manifest, config = {}, grants = []) {
   return (manifest?.writes || []).filter((w) => w.offered !== false).map((w) => {
     const scope = scopeFromConfig(w.kind, config)
     const grant = (grants || []).find((g) => g.kind === w.kind && !g.revokedAt)
-    return { kind: w.kind, scope, text: writePermissionText(w.kind, scope), granted: Boolean(grant), grantId: grant?._id || null, expiresAt: grant?.expiresAt || null }
+    return { kind: w.kind, scope, text: writePermissionText(w.kind, scope), granted: Boolean(grant), grantId: grant?._id || grant?.grantId || null, expiresAt: grant?.expiresAt || null }
   })
 }
 
 export function scopeFromConfig(kind, config = {}) {
   const c = config || {}
-  if (kind.startsWith('github.')) return { repos: c.repos || [], ...(kind === 'github.pull_request' && { paths: c.paths || ['docs/architecture/*.mmd'] }) }
+  // Diagrams as code: one repository, its folder and each mapped file outside it, slatebox/ branches.
+  if (kind === 'github.pull_request' && typeof c.repo === 'string') return { repos: [c.repo], branchPrefix: 'slatebox/', paths: syncPaths(c) }
+  if (kind.startsWith('github.')) return { repos: c.repos || (c.repo ? [c.repo] : []), ...(kind === 'github.pull_request' && { paths: c.paths || ['docs/architecture/*.mmd'] }) }
   if (kind === 'slack.post') return { channels: c.postChannels || c.channels || [] }
   if (kind === 'google.write_sheet') return { files: c.fileNames || c.files || [] }
   return {}
@@ -533,6 +579,9 @@ export function addRecipeSteps(manifest) {
   return steps
 }
 
+// The triggers the setup step offers as switches.
+const OPTIONAL_KINDS = Object.freeze(['vendor', 'schedule', 'slate_saved', 'recipe_event'])
+
 /**
  * The triggers a new instance starts with: the manifest's defaults, and Run now always. Inbound runs
  * come from an inbound webhook (RecipeHooks), so they are added there, not here.
@@ -540,9 +589,8 @@ export function addRecipeSteps(manifest) {
 export function defaultTriggers(manifest, tz = 'UTC') {
   const out = []
   for (const t of manifest?.triggers || []) {
-    if (t.default !== true || (t.kind !== 'vendor' && t.kind !== 'schedule')) continue
-    if (t.kind === 'schedule') out.push({ kind: 'schedule', cron: t.cron, tz })
-    else if (t.kind === 'vendor') out.push({ kind: 'vendor', event: t.event, ...(t.debounceMs && { debounceMs: t.debounceMs }) })
+    if (t.default !== true || !OPTIONAL_KINDS.includes(t.kind)) continue
+    out.push(triggerFrom(t, tz))
   }
   if ((manifest?.triggers || []).some((t) => t.kind === 'manual') || !out.length) out.push({ kind: 'manual' })
   return out
@@ -550,16 +598,42 @@ export function defaultTriggers(manifest, tz = 'UTC') {
 
 /** The optional triggers the setup step offers as switches (everything but Run now and webhooks). */
 export function optionalTriggers(manifest) {
-  return (manifest?.triggers || []).filter((t) => t.kind === 'vendor' || t.kind === 'schedule')
-    .map((t) => ({ ...t, key: t.kind === 'vendor' ? `vendor:${t.event}` : 'schedule', label: triggerWords(t) }))
+  return (manifest?.triggers || []).filter((t) => OPTIONAL_KINDS.includes(t.kind))
+    .map((t) => ({ ...t, key: triggerKey(t), label: triggerWords(t) }))
 }
 
-export const triggerKey = (t) => (t.kind === 'vendor' ? `vendor:${t.event}` : t.kind)
+// One trigger as an instance keeps it.
+export function triggerFrom(t, tz = 'UTC') {
+  if (t.kind === 'schedule') return { kind: 'schedule', cron: t.cron, tz }
+  if (t.kind === 'vendor') return { kind: 'vendor', event: t.event, ...(t.debounceMs && { debounceMs: t.debounceMs }) }
+  if (t.kind === 'slate_saved') return { kind: 'slate_saved', ...(t.debounceMs && { debounceMs: t.debounceMs }) }
+  if (t.kind === 'recipe_event') return { kind: 'recipe_event', event: t.event }
+  return { kind: t.kind }
+}
+
+export const triggerKey = (t) => (t.kind === 'vendor' || t.kind === 'recipe_event' ? `${t.kind}:${t.event}` : t.kind)
+
+/** A config as it is sent: a sync map's rows with no slate picked yet are left out. */
+export function withoutEmptyMaps(config = {}) {
+  if (!Array.isArray(config?.maps)) return config
+  return { ...config, maps: config.maps.filter((m) => m && typeof m.shareId === 'string' && m.shareId) }
+}
+
+/** recipes.create's answer as the dialog keeps it: the instance, with _id (the server says instanceId). */
+export function createdInstance(answer) {
+  const made = answer?.instance || answer?.recipe || null
+  return made ? { ...made, _id: made._id || made.instanceId } : null
+}
+
+/** recipes.get's live permissions as the permission rows read them (_id, kind). */
+export function grantsOf(got) {
+  return (got?.grants || got?.permissions || []).map((g) => ({ ...g, _id: g._id || g.grantId }))
+}
 
 /** "Living architecture · acme/api": the label and what it watches. */
 export function instanceName(manifest, config = {}) {
   const c = config || {}
-  const target = (c.repos || c.channels || []).map((x) => (typeof x === 'string' ? x : x?.name)).filter(Boolean)
+  const target = (c.repos || (c.repo ? [c.repo] : null) || c.channels || []).map((x) => (typeof x === 'string' ? x : x?.name)).filter(Boolean)
   const files = (c.files || []).map((f) => f?.name).filter(Boolean)
   const what = [...target, ...files]
   if (!what.length) return manifest?.label || 'Recipe'

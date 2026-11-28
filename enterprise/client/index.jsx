@@ -14,7 +14,7 @@ import ProjectRecipes, { AddRecipeButton, RecipesTab } from './recipes/ProjectRe
 import RecipesAdmin from './recipes/RecipesAdmin'
 import TeamRecipes from './recipes/TeamRecipes'
 import ProfileRecipes from './recipes/ProfileRecipes'
-import MaintainedNotes from './recipes/MaintainedNotes'
+import CanvasRecipes from './recipes/CanvasRecipes'
 
 export const manifest = Object.freeze({ name: 'slatebox-enterprise', features: ['agents.invite'] })
 
@@ -26,7 +26,7 @@ export function register(api, context) {
   api.fill('project.recipesTab', RecipesTab)
   api.fill('project.recipes', ProjectRecipes)
   api.fill('project.addRecipe', AddRecipeButton)
-  api.fill('canvas.recipes', MaintainedNotes)
+  api.fill('canvas.recipes', CanvasRecipes)
   api.fill('admin.recipes', RecipesAdmin)
   api.fill('team.recipes', TeamRecipes)
   api.fill('profile.recipes', ProfileRecipes)

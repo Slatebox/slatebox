@@ -42,6 +42,12 @@ const recipesApi = {
   runs: (input) => call('recipes.runs', input),
   /** @param {{runId: string}} input */
   undoRun: (input) => call('recipes.undoRun', input),
+  /** @param {{instanceId: string, shareId?: string}} input  a synced slate (or all of them) to its repository now */
+  saveNow: (input) => call('recipes.saveNow', input),
+  /** @param {{shareId: string}} input @returns {Promise<{synced: Array<{instanceId, repo, path, commit, pending, canSave, savesDueAt, state}>}>} */
+  syncedOn: (input) => call('recipes.syncedOn', input),
+  /** @param {{cardId: string, decision: 'approve'|'decline'}} input  the person the recipe runs for */
+  decideWrite: (input) => call('recipes.decideWrite', input),
   /** @param {{shareId: string}} input @returns {Promise<{instances: Array<{instanceId, agentName, ownerName, colorIndex, noteIds: string[]}>}>} */
   notesOn: (input) => call('recipes.notesOn', input),
   /** @param {{shareId: string, noteIds: string[]}} input  "Make it mine": the recipe stops changing these notes */

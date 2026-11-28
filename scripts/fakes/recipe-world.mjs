@@ -11,17 +11,20 @@ import { createInbound } from '../../enterprise/server/recipes/webhooks/inbound.
 import { createIntercepts } from '../../enterprise/server/recipes/webhooks/intercept.mjs'
 import { createHookAuthority } from '../../enterprise/server/recipes/webhooks/authority.mjs'
 import { createRecipeService } from '../../enterprise/server/recipes/service.mjs'
+import { createSlateSaveListener } from '../../enterprise/server/recipes/slate-saves.mjs'
 import { createMemoryDb } from './mongo-memory.mjs'
 import { createFakeProjectsApi } from './projects-api.mjs'
 import { createFakeSlates } from './recipe-slates.mjs'
 
-export function createRecipeWorld({ recipes = [], now = Date.UTC(2026, 10, 27, 12), via = 'cloud', vendors = {}, realVendors = {}, ai = [] } = {}) {
+export function createRecipeWorld({ recipes = [], now = Date.UTC(2026, 10, 27, 12), via = 'cloud', vendors = {}, realVendors = {}, ai = [], saveLimits } = {}) {
   const db = createMemoryDb()
   const store = createRecipeStore((name) => db[name])
   let at = now
   const clock = () => at
   const projects = createFakeProjectsApi()
-  const slates = createFakeSlates({ slates: projects.slates })
+  // Every save is told to the first pod's listener, as the app tells this server's recipes.
+  let listener = null
+  const slates = createFakeSlates({ slates: projects.slates, onSave: (save) => listener?.slateSaved(save) })
   const audits = []
   const notices = []
   const fetched = []
@@ -87,8 +90,10 @@ export function createRecipeWorld({ recipes = [], now = Date.UTC(2026, 10, 27, 1
       store, queue, clock, recipeOf, projects: projects.api, switches, vendors: vendorPlugins, slates: slates.adapter, permissions, outbound, intercepts, complete,
       audit, notify: async (u, m) => { notices.push({ to: u, ...m }) }, firstName: async (id) => (id === 'ana' ? 'Ana' : null), origin: () => 'https://app.test',
     })
+    const slateSaves = createSlateSaveListener({ store, queue, clock, ...(saveLimits && { limits: saveLimits }) })
     const service = createRecipeService({
       store, queue, runner, clock, randomId, recipeOf, catalog: () => recipes.map((r) => r.manifest), projects: projects.api, switches, permissions, outbound, sealer,
+      syncMapChanged: (shareIds) => slateSaves.forget(shareIds),
       checkHookUrl: (url) => { if (!/^https:\/\//.test(url)) throw new Error('Slatebox sends hooks only to https addresses.') },
       slateIdFor: async (principal, shareId) => {
         const slate = [...projects.slates.values()].find((s) => s.shareId === shareId)
@@ -114,10 +119,11 @@ export function createRecipeWorld({ recipes = [], now = Date.UTC(2026, 10, 27, 1
       }
       return out
     }
-    return { queue, scheduler, outbound, intercepts, permissions, runner, service, inbound, drain }
+    return { queue, scheduler, outbound, intercepts, permissions, runner, service, inbound, drain, slateSaves }
   }
 
   const pod = createPod('a')
+  listener = pod.slateSaves
   return {
     store, db, clock, advance: (ms) => { at += ms }, projects, slates, audits, notices, fetched, routes, performed, aiCalls, state, sealer,
     createPod, ...pod,
