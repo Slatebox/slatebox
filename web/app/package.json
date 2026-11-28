@@ -111,7 +111,7 @@
     "lru-cache": "^7.18.3",
     "markdown-it": "^14.1.0",
     "meteor-node-stubs": "^1.2.32",
-    "multer": "^1.4.5-lts.1",
+    "multer": "^2.5.0",
     "node-fetch": "^3.3.2",
     "oauth": "^0.10.0",
     "oauth-signature": "^1.5.0",
