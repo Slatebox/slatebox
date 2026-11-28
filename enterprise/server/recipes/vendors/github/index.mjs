@@ -156,6 +156,9 @@ export function createVendor(deps) {
       }
     },
     async perform(write, { instance, grant = null, signal = null } = {}) {
+      // Only a repository the person picked for this recipe, whatever else the installation holds
+      // or a permission's scope names.
+      if (!(instance?.match?.github?.repos || []).includes(write?.target?.repo)) return { refused: 'repo_not_picked' }
       const installationId = await installationFor(instance)
       return performWrite(clientFor(installationId, { signal, base: await apiBase() }), write, { grant })
     },

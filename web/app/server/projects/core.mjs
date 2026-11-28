@@ -564,10 +564,10 @@ export function createProjectsCore({
     }
     if (row && await projectAccess.countDocuments({ projectId: drive._id }) >= PROJECT_LIMITS.grantsPerDrive && !(await projectAccess.findOne({ _id: row._id })))
       throw invalid(`A project is shared with at most ${PROJECT_LIMITS.grantsPerDrive} people and teams.`)
-    if (row && row.kind === 'user' && row.userId) {
-      // Lowering someone's role is a loss of access too (recipes they own check it again).
+    if (row && ((row.kind === 'user' && row.userId) || row.kind === 'team')) {
+      // Lowering someone's (or a team's) role is a loss of access too (recipes they own check it again).
       const prior = await projectAccess.findOne({ _id: row._id })
-      if (prior && atLeast(prior.role, 'editor') && !atLeast(row.role, 'editor')) lost = { projectId: drive._id, userId: row.userId, orgId: null }
+      if (prior && atLeast(prior.role, 'editor') && !atLeast(row.role, 'editor')) lost = { projectId: drive._id, userId: row.userId || null, orgId: row.orgId || null }
     }
     await withTransaction(async (session) => {
       if (removeId) await projectAccess.deleteOne({ _id: removeId }, { session })

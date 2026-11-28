@@ -30,9 +30,10 @@ export class EventRefused extends Error {
 }
 
 /**
- * deps: { store, clock, fetch (createMcpFetch), sealer: { open(hookId, sealed) }, randomId, notify(ownerId, message), log }
+ * deps: { store, clock, fetch (createMcpFetch), sealer: { open(hookId, sealed) }, randomId, notify(ownerId, message), log,
+ *         hookAllowed(hook, instance) → boolean (authority.mjs) }
  */
-export function createOutbound({ store, clock = Date.now, fetch, sealer, randomId, notify = async () => {}, log = () => {}, limits = DELIVERY_LIMITS }) {
+export function createOutbound({ store, clock = Date.now, fetch, sealer, randomId, notify = async () => {}, log = () => {}, limits = DELIVERY_LIMITS, hookAllowed = async () => true }) {
   const { hooks, deliveries } = store
   const newId = randomId || (() => Math.random().toString(36).slice(2, 14))
 
@@ -42,7 +43,13 @@ export function createOutbound({ store, clock = Date.now, fetch, sealer, randomI
       direction: 'outbound', state: 'active',
       $or: [{ 'scope.instanceId': instance._id }, { 'scope.projectId': instance.projectId }],
     }, { limit: limits.hooksPerScope * 2 }).toArray()
-    return list.filter((hook) => hook.events?.includes('*') || hook.events?.includes(type))
+    const out = []
+    for (const hook of list) {
+      if (!(hook.events?.includes('*') || hook.events?.includes(type))) continue
+      // a hook whose person lost the right to add it hears nothing more (authority.mjs)
+      if (await hookAllowed(hook, instance)) out.push(hook)
+    }
+    return out
   }
 
   /**

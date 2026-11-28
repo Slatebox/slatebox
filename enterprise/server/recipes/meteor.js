@@ -43,6 +43,7 @@ import { createPermissions } from './permissions.mjs'
 import { createOutbound } from './webhooks/outbound.mjs'
 import { createInbound } from './webhooks/inbound.mjs'
 import { createIntercepts } from './webhooks/intercept.mjs'
+import { createHookAuthority } from './webhooks/authority.mjs'
 import { createRecipeService } from './service.mjs'
 import { withRecipeAI } from './metering.mjs'
 import { contentHash } from './reconcile.mjs'
@@ -214,8 +215,9 @@ export function startRecipes({ via = null, isUnlocked = () => true, projects, re
 
   const queue = createRecipeQueue({ store, clock, worker })
   const scheduler = createScheduler({ store, clock, queue })
-  const outbound = createOutbound({ store, clock, fetch: hookFetch, sealer, notify, log: (level, code, msg) => log({ kind: 'delivery', level, code, msg }) })
-  const intercepts = createIntercepts({ store, clock, fetch: hookFetch, sealer, log: (level, code, msg) => log({ kind: 'intercept', level, code, msg }) })
+  const hookAllowed = createHookAuthority({ projects })
+  const outbound = createOutbound({ store, clock, fetch: hookFetch, sealer, notify, hookAllowed, log: (level, code, msg) => log({ kind: 'delivery', level, code, msg }) })
+  const intercepts = createIntercepts({ store, clock, fetch: hookFetch, sealer, hookAllowed, log: (level, code, msg) => log({ kind: 'intercept', level, code, msg }) })
   const vendors = new Map()
   const trigger = async (selector, event, { debounceMs = 0 } = {}) => {
     const matched = await store.instances.find({ state: 'active', ...selector }, { limit: 200 }).toArray()
@@ -274,11 +276,14 @@ export function startRecipes({ via = null, isUnlocked = () => true, projects, re
     audit,
     notify,
   })
-  const inbound = createInbound({ store, clock, sealer, manifestOf: (id) => recipeOf(id)?.manifest || null, enqueue: (instance, t) => queue.enqueue(instance, t), isOn: async () => !(await switches.serverOff()) && (await switches.installEnabled()) })
+  const inbound = createInbound({ store, clock, sealer, hookAllowed, manifestOf: (id) => recipeOf(id)?.manifest || null, enqueue: (instance, t) => queue.enqueue(instance, t), isOn: async () => !(await switches.serverOff()) && (await switches.installEnabled()) })
 
   // A person's sign-in a recipe runs on stays while the recipe is live (the connectors' sweep).
   addCredentialUser(async (row) => (await store.instances.countDocuments({ ownerId: row.ownerId, state: { $in: ['active', 'paused', 'draft'] } })) > 0)
   projects.onDeleted?.((projectId) => service.onProjectDeleted(projectId))
+  // Someone unshared, lowered below editor or removed with their team: the recipes that run for them
+  // there stop now (a run under way stops at its next step), not at their next run.
+  projects.onAccessLost?.(({ projectId = null, userId = null } = {}) => service.ownerLostAccess(userId, projectId).catch((error) => console.warn('[recipes] ownerLostAccess failed', error?.message)))
 
   // The workers. Each pass checks the switches first; a pass that fails is logged and the next one runs.
   const on = async () => !(await switches.serverOff()) && (await switches.installEnabled())

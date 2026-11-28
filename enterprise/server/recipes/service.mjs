@@ -152,7 +152,8 @@ export function createRecipeService(deps) {
     },
 
     async get(principal, instanceId) {
-      const { instance } = await instanceFor(principal, instanceId)
+      const { instance, role } = await instanceFor(principal, instanceId)
+      const managing = rank(role) >= rank('manager')
       const [live, hookRows, waiting] = await Promise.all([
         permissions.liveGrants(instance._id),
         hooks.find({ 'scope.instanceId': instance._id }).toArray(),
@@ -161,7 +162,7 @@ export function createRecipeService(deps) {
       return {
         recipe: await publicInstance(instance, principal.userId),
         permissions: live.map((g) => ({ grantId: g._id, kind: g.kind, scope: g.scope, describe: g.describe, grantedAt: new Date(g.grantedAt).toISOString(), expiresAt: g.expiresAt ? new Date(g.expiresAt).toISOString() : null })),
-        hooks: hookRows.map(publicHook),
+        hooks: hookRows.map((row) => publicHook(row, { full: managing || row.ownerId === principal.userId })),
         waiting: waiting.map((c) => ({ cardId: c._id, kind: c.kind, target: c.target, created: new Date(c.created).toISOString() })),
       }
     },
@@ -348,7 +349,10 @@ export function createRecipeService(deps) {
     async hooksList(principal, { instanceId, projectId }) {
       const scope = await hookScope(principal, { instanceId, projectId }, false)
       const rows = await hooks.find(scope.instanceId ? { 'scope.instanceId': scope.instanceId } : { 'scope.projectId': scope.projectId }).toArray()
-      return { hooks: rows.map(publicHook) }
+      // A hook's address may carry its receiver's own secret (a path token): only the person who
+      // added it and the project's managers see it whole; everyone else sees its host.
+      const managing = rank(await roleIn(principal, scope.projectId)) >= rank('manager')
+      return { hooks: rows.map((row) => publicHook(row, { full: managing || row.ownerId === principal.userId })) }
     },
 
     async hooksAdd(principal, { instanceId, projectId, direction, url, events, point, failMode = 'open' }) {
@@ -545,14 +549,19 @@ export function createRecipeService(deps) {
     },
 
     /** Called when a person loses access to a project (removed from the team, unshared, account deleted). */
+    // userId null: a team lost its grant on projectId, so every recipe there is checked. Each owner's
+    // role is read again (a person unshared by name may still edit through their team).
     async ownerLostAccess(userId, projectId = null) {
-      const rows = await instances.find({ ownerId: userId, ...(projectId && { projectId }), state: { $nin: ['blocked_access'] } }).toArray()
+      if (!userId && !projectId) return { stopped: 0 }
+      const rows = await instances.find({ ...(userId && { ownerId: userId }), ...(projectId && { projectId }), state: { $nin: ['blocked_access'] } }).toArray()
+      let stopped = 0
       for (const instance of rows) {
-        const still = projectId === null ? await projects.roleFor(userId, instance.projectId) : null
+        const still = await projects.roleFor(instance.ownerId, instance.projectId)
         if (still && rank(still) >= rank('editor')) continue
         await runner.stopInstance(instance, 'blocked_access', 'access')
+        stopped += 1
       }
-      return { stopped: rows.length }
+      return { stopped }
     },
 
     /** A drive deleted (projects.onDeleted): its recipes, runs, hooks and notes go; its slates follow the drive's rule. */
@@ -601,9 +610,10 @@ export function createRecipeService(deps) {
 }
 
 /** A hook as anyone may read it: never a secret. */
-export function publicHook(hook) {
+export function publicHook(hook, { full = true } = {}) {
   return {
-    hookId: hook._id, direction: hook.direction, host: hook.url ? hostOf(hook.url) : null, url: hook.direction === 'inbound' ? `/hooks/recipes/${hook._id}` : hook.url,
+    hookId: hook._id, direction: hook.direction, host: hook.url ? hostOf(hook.url) : null,
+    url: hook.direction === 'inbound' ? `/hooks/recipes/${hook._id}` : full ? hook.url : (hook.url ? `https://${hostOf(hook.url)}/…` : null),
     events: hook.events, point: hook.point, failMode: hook.failMode, state: hook.state, failures: hook.failures || 0,
     scope: hook.scope, secrets: (hook.secrets || []).map((s) => ({ id: s.id, created: new Date(s.created).toISOString(), retiresAt: s.retiresAt ? new Date(s.retiresAt).toISOString() : null })),
     lastDelivery: hook.lastDelivery ? { at: new Date(hook.lastDelivery.at).toISOString(), status: hook.lastDelivery.status, code: hook.lastDelivery.code ?? null } : null,

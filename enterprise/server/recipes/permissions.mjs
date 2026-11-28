@@ -20,10 +20,17 @@ import { isDuplicate } from './store.mjs'
 export { WRITE_KINDS }
 
 export const HARD_LIMITS = Object.freeze({
-  'github.pull_request': (w) => (!String(w.target?.ref || w.body?.ref || '').startsWith('refs/heads/slatebox/') || w.target?.targetsDefaultBranch || w.target?.protected ? 'refused' : null),
+  // The branch a pull request comes from, as the target names it (ref or branch, as the GitHub vendor
+  // pushes to target.branch): every name given is a slatebox/ branch, and at least one is given.
+  'github.pull_request': (w) => (!slateboxBranches(w.target) || w.target?.targetsDefaultBranch || w.target?.protected ? 'refused' : null),
   'github.*': (w) => (w.body?.merge || w.body?.delete || w.target?.merge || w.target?.delete ? 'refused' : null),
   'slack.post': (w, grant) => (grant && !(grant.scope?.channels || []).includes(w.target?.channel) ? 'refused' : null),
 })
+
+function slateboxBranches(target = {}) {
+  const names = [target?.ref, target?.branch].filter((v) => v !== undefined && v !== null)
+  return names.length > 0 && names.every((v) => /^(refs\/heads\/)?slatebox\/[^\s]+$/.test(String(v)))
+}
 
 export class PermissionRefused extends Error {
   constructor(status, code, message) {
@@ -154,7 +161,14 @@ export function createPermissions({ store, clock = Date.now, audit = async () =>
   async function make(instance, write, { grant = null, run = null, signal = null, via = 'grant' } = {}) {
     const vendor = vendorOf(write.kind)
     if (!vendor?.perform) throw new PermissionRefused(409, 'vendor_missing', 'This server cannot make that change.')
-    const { ref = null } = (await vendor.perform(write, { instance, grant, signal })) || {}
+    const answer = (await vendor.perform(write, { instance, grant, signal })) || {}
+    // The vendor's own last check (a hard limit GitHub's answers showed, a repository not picked):
+    // nothing was changed, so nothing is logged as changed.
+    if (answer.refused) {
+      await emit({ type: 'writeback.declined', instance, run, data: { kind: write.kind, target: targetLine(write.target), reason: 'hard_limit' } }).catch(() => {})
+      return { ref: null, refused: String(answer.refused).slice(0, 60) }
+    }
+    const { ref = null } = answer
     await audit({ action: 'recipe.outside_write', instance, details: { kind: write.kind, instanceId: instance._id, runId: run?._id, outcome: via } })
     await emit({ type: 'writeback.done', instance, run, data: { kind: write.kind, target: targetLine(write.target), ...(ref && { ref: String(ref).slice(0, 300) }) } }).catch(() => {})
     return { ref }
@@ -184,7 +198,8 @@ export function createPermissions({ store, clock = Date.now, audit = async () =>
       }
     }
     if (decision === 'allow') {
-      const { ref } = await make(instance, { ...write, body }, { grant: decided.grant, run, signal })
+      const { ref, refused } = await make(instance, { ...write, body }, { grant: decided.grant, run, signal })
+      if (refused) return { kind: write.kind, target: targetLine(write.target), state: 'refused' }
       return { kind: write.kind, target: targetLine(write.target), state: 'done', ...(ref && { ref }) }
     }
     const card = await propose(instance, { ...write, body }, run)
@@ -210,7 +225,11 @@ export function createPermissions({ store, clock = Date.now, audit = async () =>
       return { state: 'failed' }
     }
     try {
-      const { ref } = await make(instance, write, { signal, via: 'card' })
+      const { ref, refused } = await make(instance, write, { signal, via: 'card' })
+      if (refused) {
+        await cards.updateOne({ _id: cardId }, { $set: { state: 'failed', reason: refused } })
+        return { state: 'failed' }
+      }
       await cards.updateOne({ _id: cardId }, { $set: { state: 'done', ref: ref ?? null } })
       return { state: 'done', ref }
     } catch (error) {

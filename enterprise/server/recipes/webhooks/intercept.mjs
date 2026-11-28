@@ -133,16 +133,19 @@ export function applyOutputNotes(desired, { notes }) {
 }
 
 /**
- * deps: { store, clock, fetch, sealer, randomId }
+ * deps: { store, clock, fetch, sealer, randomId, log, hookAllowed(hook, instance) → boolean (authority.mjs) }
  * call(point, { instance, run, data }) → the quarantined answer, null (no hook, or failMode open
  * after a bad answer), or throws InterceptFailed (failMode closed).
  */
-export function createIntercepts({ store, clock = Date.now, fetch, sealer, randomId, log = () => {}, limits = INTERCEPT_LIMITS }) {
+export function createIntercepts({ store, clock = Date.now, fetch, sealer, randomId, log = () => {}, limits = INTERCEPT_LIMITS, hookAllowed = async () => true }) {
   const newId = randomId || (() => Math.random().toString(36).slice(2, 14))
   async function hookFor(instance, point) {
     const list = await store.hooks.find({ direction: 'intercept', state: 'active', point, $or: [{ 'scope.instanceId': instance._id }, { 'scope.projectId': instance.projectId }] }, { limit: 4 }).toArray()
+    // a hook whose person lost the right to add it steps into no run (authority.mjs)
+    const live = []
+    for (const hook of list) if (await hookAllowed(hook, instance)) live.push(hook)
     // the instance's own hook wins over the project's
-    return list.find((h) => h.scope?.instanceId === instance._id) || list[0] || null
+    return live.find((h) => h.scope?.instanceId === instance._id) || live[0] || null
   }
   async function call(point, { instance, run = null, data = {}, signal = null }) {
     const hook = await hookFor(instance, point)
@@ -186,7 +189,11 @@ export function createIntercepts({ store, clock = Date.now, fetch, sealer, rando
       return failed('not_json')
     }
     if (validate(INTERCEPT_SCHEMAS[point], answer)) return failed('bad_answer')
-    return quarantineAnswer(point, answer)
+    const safe = quarantineAnswer(point, answer)
+    // Only the person a recipe runs for may rewrite what it changes outside Slatebox under their
+    // permission: a manager's or a project's hook may approve, veto or defer, never edit the body.
+    if (point === 'writeback.proposed' && safe.body && hook.ownerId !== instance.ownerId) delete safe.body
+    return safe
   }
   return { call, hookFor }
 }

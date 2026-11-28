@@ -140,7 +140,7 @@ curl -X POST "$SLATEBOX/hooks/recipes/$HOOK_ID" \
   -H "Slatebox-Signature: t=$T,v1=$SIG" -H "Slatebox-Delivery: ci-812" \
   -d "$BODY"
 # 202 {"runId":"…"}      the run is queued
-# 200 {"duplicate":true}  the same Slatebox-Delivery within an hour
+# 200 {"duplicate":true}  the same Slatebox-Delivery, or the same signed request sent again, within an hour
 # 400 bad_payload         with a JSON pointer to what does not match the recipe's inputSchema
 # 401 bad_signature       413 over 256 KB       429 over 30 runs an hour (Retry-After)
 ```
@@ -169,10 +169,15 @@ An intercept is called during a run at one point, with the same envelope and sig
 |---|---|---|
 | `graph.ready` | `{ add, update, drop }` graph items | Only inside the recipe's own slates; ids still come from keys |
 | `output.ready` | `{ notes: [{ key, text, link? }] }` | At most 12 notes, in the legend |
-| `writeback.proposed` | `{ decision: 'approve' \| 'veto' \| 'defer', body? }` | Never wider than the permission the owner granted |
+| `writeback.proposed` | `{ decision: 'approve' \| 'veto' \| 'defer', body? }` | Never wider than the permission the owner granted; `body` is used only from a hook the recipe's owner added |
 
 `failMode: 'open'` (the default) carries on without you when you do not answer; `'closed'` skips
 the run (`skipped: hook_failed`).
+
+A hook works only while the person who added it may still add it: on a recipe, the person it runs
+for or a manager of its project; on a project, a manager. Someone unshared or lowered keeps no hook
+that hears, feeds or steps into the project's runs. A hook's full address is shown only to the
+person who added it and the project's managers; others see its host.
 
 ## Vendor webhooks Slatebox receives
 

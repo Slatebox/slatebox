@@ -27,9 +27,10 @@ const header = (headers, name) => {
 export const pointerOf = (path) => (path ? '/' + String(path).replace(/\[(\d+)\]/g, '.$1').split('.').filter(Boolean).map((p) => p.replace(/~/g, '~0').replace(/\//g, '~1')).join('/') : '')
 
 /**
- * deps: { store, clock, sealer: { open(hookId, sealed) }, manifestOf(recipeId), enqueue(instance, trigger), isOn() }
+ * deps: { store, clock, sealer: { open(hookId, sealed) }, manifestOf(recipeId), enqueue(instance, trigger), isOn(),
+ *         hookAllowed(hook, instance) → boolean (authority.mjs) }
  */
-export function createInbound({ store, clock = Date.now, sealer, manifestOf, enqueue, isOn = async () => true, limits = INBOUND_LIMITS }) {
+export function createInbound({ store, clock = Date.now, sealer, manifestOf, enqueue, isOn = async () => true, limits = INBOUND_LIMITS, hookAllowed = async () => true }) {
   const { hooks, instances, runs, inbox } = store
 
   async function handle({ hookId, headers = {}, rawBody }) {
@@ -52,7 +53,8 @@ export function createInbound({ store, clock = Date.now, sealer, manifestOf, enq
     const extra = Object.keys(parsed).filter((key) => !['reason', 'data', 'id'].includes(key))
     if (extra.length) return answer(400, { error: { code: 'bad_payload', message: `The body holds no ${extra[0]}.`, details: { pointer: `/${extra[0]}` } } })
     const instance = await instances.findOne({ _id: hook.scope?.instanceId })
-    if (!instance) return answer(404, { error: { code: 'not_found', message: 'There is no such hook.' } })
+    // a hook whose person lost the right to add it feeds the recipe nothing (authority.mjs)
+    if (!instance || !(await hookAllowed(hook, instance))) return answer(404, { error: { code: 'not_found', message: 'There is no such hook.' } })
     const manifest = manifestOf(instance.recipeId)
     if (!manifest?.inputSchema) return answer(400, { error: { code: 'bad_payload', message: 'This recipe takes no data.', details: { pointer: '/data' } } })
     const invalid = validate(manifest.inputSchema, parsed.data)

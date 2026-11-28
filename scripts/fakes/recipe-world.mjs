@@ -9,6 +9,7 @@ import { createPermissions } from '../../enterprise/server/recipes/permissions.m
 import { createOutbound } from '../../enterprise/server/recipes/webhooks/outbound.mjs'
 import { createInbound } from '../../enterprise/server/recipes/webhooks/inbound.mjs'
 import { createIntercepts } from '../../enterprise/server/recipes/webhooks/intercept.mjs'
+import { createHookAuthority } from '../../enterprise/server/recipes/webhooks/authority.mjs'
 import { createRecipeService } from '../../enterprise/server/recipes/service.mjs'
 import { createMemoryDb } from './mongo-memory.mjs'
 import { createFakeProjectsApi } from './projects-api.mjs'
@@ -76,8 +77,9 @@ export function createRecipeWorld({ recipes = [], now = Date.UTC(2026, 10, 27, 1
   function createPod(worker = 'a') {
     const queue = createRecipeQueue({ store, clock, worker, randomId })
     const scheduler = createScheduler({ store, clock, queue })
-    const outbound = createOutbound({ store, clock, fetch, sealer, randomId, notify: async (u, m) => { notices.push({ to: u, ...m }) } })
-    const intercepts = createIntercepts({ store, clock, fetch, sealer, randomId })
+    const hookAllowed = createHookAuthority({ projects: projects.api })
+    const outbound = createOutbound({ store, clock, fetch, sealer, randomId, hookAllowed, notify: async (u, m) => { notices.push({ to: u, ...m }) } })
+    const intercepts = createIntercepts({ store, clock, fetch, sealer, randomId, hookAllowed })
     const audit = async (entry) => { audits.push(entry) }
     let runner = null
     const permissions = createPermissions({ store, clock, audit, randomId, manifestOf: (id) => recipeOf(id)?.manifest, vendorOf: (kind) => vendorPlugins.get(kind.split('.')[0]), emit: (e) => outbound.emit(e), onRevoked: (instance) => runner.stopInstance(instance, 'paused', 'grant_revoked') })
@@ -99,7 +101,7 @@ export function createRecipeWorld({ recipes = [], now = Date.UTC(2026, 10, 27, 1
       resolveMatch: async (manifest, match, ownerId) => (vendorPlugins.get(manifest.integration)?.resolveMatch ? vendorPlugins.get(manifest.integration).resolveMatch(match, ownerId) : match),
       notify: async (u, m) => { notices.push({ to: u, ...m }) },
     })
-    const inbound = createInbound({ store, clock, sealer, manifestOf: (id) => recipeOf(id)?.manifest, enqueue: (instance, trigger) => queue.enqueue(instance, trigger), isOn: async () => !state.serverOff && state.installEnabled })
+    const inbound = createInbound({ store, clock, sealer, hookAllowed, manifestOf: (id) => recipeOf(id)?.manifest, enqueue: (instance, trigger) => queue.enqueue(instance, trigger), isOn: async () => !state.serverOff && state.installEnabled })
     /** Claims and runs everything due on this pod. → the outcomes */
     async function drain(max = 20) {
       const out = []
