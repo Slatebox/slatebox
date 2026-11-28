@@ -2494,6 +2494,10 @@ declare namespace slatebox.slates {
     styles?: boolean;
     /** A Gantt chart's first day, YYYY-MM-DD (default today). */
     start?: string;
+    /** Write the canonical flowchart a repository keeps: notes, frames and lines sorted by id, note ids as names, a fixed direction, and a first-line header "%% slatebox:<shareId> rev:<n> hash:<h>" (the hash changes only when the diagram does, never when notes move). slates.importMermaid with sync reads it back. (default false) */
+    canonical?: boolean;
+    /** With canonical: the direction written. (default "LR") */
+    direction?: "LR" | "TD" | "RL" | "BT";
   }): Promise<{
     shareId: string;
     /** (at least 0) */
@@ -2509,6 +2513,11 @@ declare namespace slatebox.slates {
     lines?: number;
     subgraphs?: number;
     warnings?: string[];
+    canonical?: boolean;
+    /** With canonical: the hash of the diagram (the header's). */
+    hash?: string;
+    /** With canonical: the text after the header. */
+    body?: string;
     /** The plain-text address of a public slate's Mermaid; null otherwise. */
     publicUrl?: string | null;
     [key: string]: unknown;
@@ -2551,6 +2560,10 @@ declare namespace slatebox.slates {
     name?: string;
     /** Make the new slate in this project or folder (without shareId; you need to be an editor of it). (1–64 characters) */
     projectId?: string;
+    /** With shareId: read a flowchart back onto the slate it came from (canonical export, format names = note ids) instead of drawing it beside: new names are drawn, changed text and shapes updated, lines connected, disconnected or relabeled; nothing is moved. Notes and lines named in base that the diagram drops are deleted; notes added on the slate since are never touched. */
+    sync?: boolean;
+    /** With sync: the diagram as last synced (what the slate and the file last agreed on). Only what it names may be deleted. (1–100000 characters) */
+    base?: string;
     /** preview returns what would change and saves nothing. (default "save") */
     mode?: "save" | "preview";
   }): Promise<({
@@ -2566,6 +2579,14 @@ declare namespace slatebox.slates {
     lines: number;
     /** The ids of the notes drawn (frames first). */
     created?: string[];
+    /** With sync: the notes and lines changed. */
+    updated?: string[];
+    /** With sync: the notes removed. */
+    deleted?: string[];
+    /** With sync: the lines removed. */
+    disconnected?: string[];
+    /** With sync: notes a person changed that the diagram would have changed, left as they are. */
+    kept?: string[];
     warnings?: string[];
     message: string;
     [key: string]: unknown;

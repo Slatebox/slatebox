@@ -8290,13 +8290,15 @@
         "queryParams": [
           "format",
           "styles",
-          "start"
+          "start",
+          "canonical",
+          "direction"
         ],
         "bodyParams": []
       },
-      "index": "slates.exportMermaid({shareId,format?,styles?,start?}): To Mermaid",
+      "index": "slates.exportMermaid({shareId,format?,styles?,start?,…}): To Mermaid",
       "types": [],
-      "dts": "declare namespace slatebox.slates {\n  /** To Mermaid. Write a slate you can open as Mermaid text: notes and lines as a flowchart (direction from the layout; shapes, labels, arrow ends and dashed, thick or hidden lines kept; a note drawn behind notes it holds becomes a subgraph of them; a workshop's lanes become subgraphs of cards), a mind map as a mindmap, a launch plan as a Gantt chart (format gantt, start is its first day). Returns the text, the same as a Markdown code block, and for a public slate its plain-text address (/slates/<id>.mmd). A public slate reads without a token. What Mermaid cannot say is named in warnings: dashed lines are written as Mermaid's one broken style (dotted), a line with an arrow only at its start is written from its other end, and a line with an end on the open canvas is left out. @scope slates:read */\n  function exportMermaid(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n    /** auto: a mind map that is one tree as mindmap, anything else as flowchart. (default \"auto\") */\n    format?: \"auto\" | \"flowchart\" | \"mindmap\" | \"gantt\";\n    /** Also write each note's colors (style lines). (default false) */\n    styles?: boolean;\n    /** A Gantt chart's first day, YYYY-MM-DD (default today). */\n    start?: string;\n  }): Promise<{\n    shareId: string;\n    /** (at least 0) */\n    revision: number;\n    name?: string;\n    format: \"flowchart\" | \"mindmap\" | \"gantt\";\n    /** The formats this slate can be written as. */\n    formats?: string[];\n    mermaid: string;\n    /** The Mermaid in a ```mermaid code block. */\n    markdown: string;\n    notes?: number;\n    lines?: number;\n    subgraphs?: number;\n    warnings?: string[];\n    /** The plain-text address of a public slate's Mermaid; null otherwise. */\n    publicUrl?: string | null;\n    [key: string]: unknown;\n  }>;\n}",
+      "dts": "declare namespace slatebox.slates {\n  /** To Mermaid. Write a slate you can open as Mermaid text: notes and lines as a flowchart (direction from the layout; shapes, labels, arrow ends and dashed, thick or hidden lines kept; a note drawn behind notes it holds becomes a subgraph of them; a workshop's lanes become subgraphs of cards), a mind map as a mindmap, a launch plan as a Gantt chart (format gantt, start is its first day). Returns the text, the same as a Markdown code block, and for a public slate its plain-text address (/slates/<id>.mmd). A public slate reads without a token. What Mermaid cannot say is named in warnings: dashed lines are written as Mermaid's one broken style (dotted), a line with an arrow only at its start is written from its other end, and a line with an end on the open canvas is left out. @scope slates:read */\n  function exportMermaid(input: {\n    /** The slate ID from its address: /canvas/<shareId>. (1–80 characters) */\n    shareId: string;\n    /** auto: a mind map that is one tree as mindmap, anything else as flowchart. (default \"auto\") */\n    format?: \"auto\" | \"flowchart\" | \"mindmap\" | \"gantt\";\n    /** Also write each note's colors (style lines). (default false) */\n    styles?: boolean;\n    /** A Gantt chart's first day, YYYY-MM-DD (default today). */\n    start?: string;\n    /** Write the canonical flowchart a repository keeps: notes, frames and lines sorted by id, note ids as names, a fixed direction, and a first-line header \"%% slatebox:<shareId> rev:<n> hash:<h>\" (the hash changes only when the diagram does, never when notes move). slates.importMermaid with sync reads it back. (default false) */\n    canonical?: boolean;\n    /** With canonical: the direction written. (default \"LR\") */\n    direction?: \"LR\" | \"TD\" | \"RL\" | \"BT\";\n  }): Promise<{\n    shareId: string;\n    /** (at least 0) */\n    revision: number;\n    name?: string;\n    format: \"flowchart\" | \"mindmap\" | \"gantt\";\n    /** The formats this slate can be written as. */\n    formats?: string[];\n    mermaid: string;\n    /** The Mermaid in a ```mermaid code block. */\n    markdown: string;\n    notes?: number;\n    lines?: number;\n    subgraphs?: number;\n    warnings?: string[];\n    canonical?: boolean;\n    /** With canonical: the hash of the diagram (the header's). */\n    hash?: string;\n    /** With canonical: the text after the header. */\n    body?: string;\n    /** The plain-text address of a public slate's Mermaid; null otherwise. */\n    publicUrl?: string | null;\n    [key: string]: unknown;\n  }>;\n}",
       "tool": {
         "name": "export_mermaid",
         "title": "Read a slate as Mermaid",
@@ -8331,6 +8333,22 @@
               "type": "string",
               "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
               "description": "A Gantt chart's first day, YYYY-MM-DD (default today)."
+            },
+            "canonical": {
+              "type": "boolean",
+              "default": false,
+              "description": "Write the canonical flowchart a repository keeps: notes, frames and lines sorted by id, note ids as names, a fixed direction, and a first-line header \"%% slatebox:<shareId> rev:<n> hash:<h>\" (the hash changes only when the diagram does, never when notes move). slates.importMermaid with sync reads it back."
+            },
+            "direction": {
+              "type": "string",
+              "enum": [
+                "LR",
+                "TD",
+                "RL",
+                "BT"
+              ],
+              "default": "LR",
+              "description": "With canonical: the direction written."
             }
           },
           "required": [
@@ -8492,12 +8510,14 @@
           "mermaid",
           "shareId",
           "name",
-          "projectId"
+          "projectId",
+          "sync",
+          "base"
         ]
       },
-      "index": "slates.importMermaid({mermaid,shareId?,name?,projectId?}): Draw Mermaid",
+      "index": "slates.importMermaid({mermaid,shareId?,name?,projectId?,…}): Draw Mermaid",
       "types": [],
-      "dts": "declare namespace slatebox.slates {\n  /** Draw Mermaid. Draw a Mermaid flowchart, mind map or Gantt chart as real notes and lines, laid out in the diagram's direction (subgraphs and Gantt sections become frames). With shareId the diagram is added beside what that slate holds (it needs edit access; everyone on the slate sees it drawn); without, it becomes a new private slate of yours named name (or the diagram's title). Mermaid in a Markdown ```mermaid block is read too. Another kind of diagram is refused with 422 mermaid_unsupported; a mistake with 400 mermaid_invalid naming its line; a diagram past a slate's limits (1,000 notes counting frames, 5,000 lines, frames 50 deep, or a subgraph too big for one frame) with 422 mermaid_too_large. mode \"preview\" shows what would be drawn without saving. @scope slates:write @modes save|preview */\n  function importMermaid(input: {\n    /** Mermaid source (flowchart/graph, mindmap or gantt), or Markdown holding a ```mermaid block. (1–100000 characters) */\n    mermaid: string;\n    /** Add to this slate. Leave out to make a new private slate. (1–80 characters) */\n    shareId?: string;\n    /** The new slate's name (without shareId). (1–200 characters) */\n    name?: string;\n    /** Make the new slate in this project or folder (without shareId; you need to be an editor of it). (1–64 characters) */\n    projectId?: string;\n    /** preview returns what would change and saves nothing. (default \"save\") */\n    mode?: \"save\" | \"preview\";\n  }): Promise<({\n    ok: boolean;\n    mode: \"save\" | \"preview\";\n    shareId: string | null;\n    url?: string | null;\n    /** (at least 0) */\n    revision?: number;\n    kind: \"flowchart\" | \"mindmap\" | \"gantt\";\n    notes: number;\n    frames?: number;\n    lines: number;\n    /** The ids of the notes drawn (frames first). */\n    created?: string[];\n    warnings?: string[];\n    message: string;\n    [key: string]: unknown;\n  }) & { mode: \"save\" | \"preview\" }>;\n}",
+      "dts": "declare namespace slatebox.slates {\n  /** Draw Mermaid. Draw a Mermaid flowchart, mind map or Gantt chart as real notes and lines, laid out in the diagram's direction (subgraphs and Gantt sections become frames). With shareId the diagram is added beside what that slate holds (it needs edit access; everyone on the slate sees it drawn); without, it becomes a new private slate of yours named name (or the diagram's title). Mermaid in a Markdown ```mermaid block is read too. Another kind of diagram is refused with 422 mermaid_unsupported; a mistake with 400 mermaid_invalid naming its line; a diagram past a slate's limits (1,000 notes counting frames, 5,000 lines, frames 50 deep, or a subgraph too big for one frame) with 422 mermaid_too_large. mode \"preview\" shows what would be drawn without saving. @scope slates:write @modes save|preview */\n  function importMermaid(input: {\n    /** Mermaid source (flowchart/graph, mindmap or gantt), or Markdown holding a ```mermaid block. (1–100000 characters) */\n    mermaid: string;\n    /** Add to this slate. Leave out to make a new private slate. (1–80 characters) */\n    shareId?: string;\n    /** The new slate's name (without shareId). (1–200 characters) */\n    name?: string;\n    /** Make the new slate in this project or folder (without shareId; you need to be an editor of it). (1–64 characters) */\n    projectId?: string;\n    /** With shareId: read a flowchart back onto the slate it came from (canonical export, format names = note ids) instead of drawing it beside: new names are drawn, changed text and shapes updated, lines connected, disconnected or relabeled; nothing is moved. Notes and lines named in base that the diagram drops are deleted; notes added on the slate since are never touched. */\n    sync?: boolean;\n    /** With sync: the diagram as last synced (what the slate and the file last agreed on). Only what it names may be deleted. (1–100000 characters) */\n    base?: string;\n    /** preview returns what would change and saves nothing. (default \"save\") */\n    mode?: \"save\" | \"preview\";\n  }): Promise<({\n    ok: boolean;\n    mode: \"save\" | \"preview\";\n    shareId: string | null;\n    url?: string | null;\n    /** (at least 0) */\n    revision?: number;\n    kind: \"flowchart\" | \"mindmap\" | \"gantt\";\n    notes: number;\n    frames?: number;\n    lines: number;\n    /** The ids of the notes drawn (frames first). */\n    created?: string[];\n    /** With sync: the notes and lines changed. */\n    updated?: string[];\n    /** With sync: the notes removed. */\n    deleted?: string[];\n    /** With sync: the lines removed. */\n    disconnected?: string[];\n    /** With sync: notes a person changed that the diagram would have changed, left as they are. */\n    kept?: string[];\n    warnings?: string[];\n    message: string;\n    [key: string]: unknown;\n  }) & { mode: \"save\" | \"preview\" }>;\n}",
       "tool": {
         "name": "import_mermaid",
         "title": "Draw a mind map, flowchart or Gantt plan",
@@ -8530,6 +8550,16 @@
               "maxLength": 64,
               "pattern": "^[A-Za-z0-9_-]+$",
               "description": "Make the new slate in this project or folder (without shareId; you need to be an editor of it)."
+            },
+            "sync": {
+              "type": "boolean",
+              "description": "With shareId: read a flowchart back onto the slate it came from (canonical export, format names = note ids) instead of drawing it beside: new names are drawn, changed text and shapes updated, lines connected, disconnected or relabeled; nothing is moved. Notes and lines named in base that the diagram drops are deleted; notes added on the slate since are never touched."
+            },
+            "base": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100000,
+              "description": "With sync: the diagram as last synced (what the slate and the file last agreed on). Only what it names may be deleted."
             },
             "mode": {
               "type": "string",

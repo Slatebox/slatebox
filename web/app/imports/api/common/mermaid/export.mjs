@@ -5,6 +5,7 @@
 // chart. Export needs no renderer: this is plain text work, safe on the server and the client.
 import { MermaidError } from './parse.mjs'
 import { encodeLabel, idNamer, quoted } from './text.mjs'
+import { canonicalGraph, writeCanonical } from './canonical.mjs'
 
 export const MERMAID_FORMATS = ['auto', 'flowchart', 'mindmap', 'gantt']
 
@@ -239,7 +240,8 @@ export function mermaidFormats(slate) {
  * options.styles: also write each note's colours. options.start: a Gantt chart's first day
  * (YYYY-MM-DD; default today, from options.now).
  */
-export function slateToMermaid(slate, { format = 'auto', styles = false, start, now = Date.now } = {}) {
+export function slateToMermaid(slate, { format = 'auto', styles = false, start, now = Date.now, canonical = false, direction = 'LR', shareId, revision, exclude = null } = {}) {
+  if (canonical) return canonicalMermaid(slate, { direction, shareId, revision, exclude })
   if (!MERMAID_FORMATS.includes(format)) throw new MermaidError('mermaid_invalid', `Choose one of ${MERMAID_FORMATS.join(', ')}.`)
   const graph = slateGraph(slate)
   const workshop = workshopOf(slate)
@@ -266,6 +268,31 @@ export function slateToMermaid(slate, { format = 'auto', styles = false, start, 
     ...counts,
     formats: mermaidFormats(slate),
     warnings: [...graph.warnings, ...(counts.warnings || [])],
+  }
+}
+
+/**
+ * The slate as canonical Mermaid (canonical.mjs): sorted by id, note ids as names, a fixed
+ * direction and a header naming the slate, its revision and the body's hash. Moving notes never
+ * changes it. Always a flowchart.
+ */
+function canonicalMermaid(slate, { direction, shareId, revision, exclude }) {
+  const graph = canonicalGraph(slate, { exclude })
+  const { text, body, hash } = writeCanonical(graph, { shareId: shareId ?? slate?.shareId, revision: revision ?? slate?.revision ?? 0, direction })
+  const warnings = [...graph.warnings]
+  if (slate?.creative?.model?.kind === 'workshop') warnings.push('A board\'s lanes and cards are not part of a synced diagram; they are left out.')
+  return {
+    format: 'flowchart',
+    canonical: true,
+    mermaid: text,
+    body,
+    hash,
+    markdown: '```mermaid\n' + text + '```\n',
+    notes: graph.nodes.length,
+    lines: graph.edges.length,
+    subgraphs: graph.frames.length,
+    formats: mermaidFormats(slate),
+    warnings,
   }
 }
 

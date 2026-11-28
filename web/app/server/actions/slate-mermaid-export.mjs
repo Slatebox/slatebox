@@ -35,6 +35,12 @@ export default defineAction({
       },
       styles: { type: 'boolean', default: false, description: 'Also write each note\'s colors (style lines).' },
       start: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'A Gantt chart\'s first day, YYYY-MM-DD (default today).' },
+      canonical: {
+        type: 'boolean',
+        default: false,
+        description: 'Write the canonical flowchart a repository keeps: notes, frames and lines sorted by id, note ids as names, a fixed direction, and a first-line header "%% slatebox:<shareId> rev:<n> hash:<h>" (the hash changes only when the diagram does, never when notes move). slates.importMermaid with sync reads it back.',
+      },
+      direction: { type: 'string', enum: ['LR', 'TD', 'RL', 'BT'], default: 'LR', description: 'With canonical: the direction written.' },
     },
     required: ['shareId'],
     additionalProperties: false,
@@ -53,6 +59,9 @@ export default defineAction({
       lines: { type: 'integer' },
       subgraphs: { type: 'integer' },
       warnings: { type: 'array', items: { type: 'string' } },
+      canonical: { type: 'boolean' },
+      hash: { type: 'string', description: 'With canonical: the hash of the diagram (the header\'s).' },
+      body: { type: 'string', description: 'With canonical: the text after the header.' },
       publicUrl: { type: ['string', 'null'], description: 'The plain-text address of a public slate\'s Mermaid; null otherwise.' },
     },
     required: ['shareId', 'revision', 'format', 'mermaid', 'markdown'],
@@ -62,7 +71,9 @@ export default defineAction({
   handler(principal, input, { deps, resource: slate }) {
     let out
     try {
-      out = slateToMermaid(slate, { format: input.format, styles: input.styles, start: input.start })
+      out = input.canonical
+        ? slateToMermaid(slate, { canonical: true, direction: input.direction, shareId: slate.shareId, revision: slate.revision ?? 0 })
+        : slateToMermaid(slate, { format: input.format, styles: input.styles, start: input.start })
     } catch (error) {
       throw mermaidProblem(error)
     }

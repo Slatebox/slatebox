@@ -6,7 +6,7 @@ import { mermaidProblem } from './slate-mermaid-export.mjs'
 import { sharedSaveConditions } from '../methods/native-slate-save.mjs'
 import { privateSlateDocument } from '../private-slate-document.mjs'
 import { slatePreview } from '../../imports/api/common/slate-preview.mjs'
-import { diagramPlans, importOrigin, lastNoteLook, parseMermaid, MERMAID_MAX_LENGTH } from '../../imports/api/common/mermaid/index.mjs'
+import { canonicalFromModel, diagramPlans, importOrigin, lastNoteLook, parseMermaid, MERMAID_MAX_LENGTH } from '../../imports/api/common/mermaid/index.mjs'
 import { runExpiry } from '../../imports/api/common/slate-operation-runs.mjs'
 
 const USER_MESSAGE = 'Import Mermaid'
@@ -54,13 +54,47 @@ const summary = (drawn) => ({
   message: `Imported a Mermaid ${{ flowchart: 'flowchart', mindmap: 'mind map', gantt: 'Gantt chart' }[drawn.kind]}: ${drawn.notes} note${drawn.notes === 1 ? '' : 's'}, ${drawn.lines} line${drawn.lines === 1 ? '' : 's'}${drawn.frames ? `, ${drawn.frames} frame${drawn.frames === 1 ? '' : 's'}` : ''}.`,
 })
 
+const syncSummary = (drawn) => ({
+  ok: true,
+  kind: 'flowchart',
+  notes: drawn.created.length,
+  frames: 0,
+  lines: drawn.connected.length,
+  created: drawn.created,
+  updated: drawn.updated,
+  deleted: drawn.deleted,
+  disconnected: drawn.disconnected,
+  kept: drawn.kept,
+  warnings: drawn.warnings,
+  message: drawn.plans[0]?.message ?? 'The slate already says what the diagram says.',
+})
+
+// Sync: the diagram read back onto this slate, changing only what it changed (mermaid/sync.mjs).
+// Notes named in base (the diagram as last synced) that the diagram drops are deleted; nothing is moved.
+function syncDrawn(slate, model, input) {
+  let base = null
+  if (input.base !== undefined) {
+    try {
+      base = canonicalFromModel(parseMermaid(input.base))
+    } catch (error) {
+      throw mermaidProblem(error)
+    }
+  }
+  try {
+    return diagramPlans(model, { sync: { current: slate, base } })
+  } catch (error) {
+    if (error?.code === 'mermaid_unsupported') throw problem(422, 'mermaid_unsupported', error.message)
+    throw error
+  }
+}
+
 async function importInto(principal, input, model, { deps, mode, now, idempotencyKey }) {
   const slate = await editableSlate(principal, input.shareId, deps)
   // A workshop's lanes and cards are drawn beside the slate's own notes; other kinds keep their own drawing.
   if (slate.creative?.model && slate.creative.model.kind !== 'workshop')
     throw problem(400, 'invalid_operation_plan', 'This type of slate keeps its own drawing. Import Mermaid into an ordinary slate or a new one.')
   const drawnNow = slatePreview(slate).nodes
-  const drawn = diagramPlans(model, {
+  const drawn = input.sync ? syncDrawn(slate, model, input) : diagramPlans(model, {
     existingIds: drawnNow.map((node) => node?.options?.id).filter((id) => typeof id === 'string'),
     existingConnectorIds: drawnNow.flatMap((node) => (node?.relationships?.associations || []).map((a) => a.id).filter(Boolean)),
     origin: importOrigin(drawnNow),
@@ -68,9 +102,10 @@ async function importInto(principal, input, model, { deps, mode, now, idempotenc
     noteStyle: lastNoteLook(slate.nodes),
   })
   const url = new URL('/canvas/' + slate.shareId, deps.appOrigin()).href
-  if (mode === 'preview') {
+  const told = input.sync ? syncSummary : summary
+  if (mode === 'preview' || (input.sync && !drawn.plans.length)) {
     applyAll(deps, slate, drawn.plans)
-    return { status: 200, body: { ...summary(drawn), shareId: slate.shareId, url, revision: slate.revision ?? 0 } }
+    return { status: 200, body: { ...told(drawn), shareId: slate.shareId, url, revision: slate.revision ?? 0 } }
   }
   let result
   let saved
@@ -109,7 +144,7 @@ async function importInto(principal, input, model, { deps, mode, now, idempotenc
       expiresAt: runExpiry(at + index),
     })
   }
-  return { status: 201, body: { ...summary(drawn), shareId: slate.shareId, url, revision: saved.revision } }
+  return { status: 201, body: { ...told(drawn), shareId: slate.shareId, url, revision: saved.revision } }
 }
 
 async function importNew(principal, input, model, { deps, mode, now }) {
@@ -159,6 +194,12 @@ export default defineAction({
       shareId: { ...shareIdInput, description: 'Add to this slate. Leave out to make a new private slate.' },
       name: { type: 'string', minLength: 1, maxLength: 200, description: 'The new slate\'s name (without shareId).' },
       projectId: { type: 'string', minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$', description: 'Make the new slate in this project or folder (without shareId; you need to be an editor of it).' },
+      sync: {
+        type: 'boolean',
+        description:
+          'With shareId: read a flowchart back onto the slate it came from (canonical export, format names = note ids) instead of drawing it beside: new names are drawn, changed text and shapes updated, lines connected, disconnected or relabeled; nothing is moved. Notes and lines named in base that the diagram drops are deleted; notes added on the slate since are never touched.',
+      },
+      base: { type: 'string', minLength: 1, maxLength: MERMAID_MAX_LENGTH, description: 'With sync: the diagram as last synced (what the slate and the file last agreed on). Only what it names may be deleted.' },
     },
     required: ['mermaid'],
     additionalProperties: false,
@@ -176,6 +217,10 @@ export default defineAction({
       frames: { type: 'integer' },
       lines: { type: 'integer' },
       created: { type: 'array', items: { type: 'string' }, description: 'The ids of the notes drawn (frames first).' },
+      updated: { type: 'array', items: { type: 'string' }, description: 'With sync: the notes and lines changed.' },
+      deleted: { type: 'array', items: { type: 'string' }, description: 'With sync: the notes removed.' },
+      disconnected: { type: 'array', items: { type: 'string' }, description: 'With sync: the lines removed.' },
+      kept: { type: 'array', items: { type: 'string' }, description: 'With sync: notes a person changed that the diagram would have changed, left as they are.' },
       warnings: { type: 'array', items: { type: 'string' } },
       message: { type: 'string' },
     },
@@ -192,6 +237,9 @@ export default defineAction({
     } catch (error) {
       throw mermaidProblem(error)
     }
+    if (input.shareId === undefined && (input.sync || input.base !== undefined))
+      throw problem(400, 'invalid_request', 'sync reads a diagram back onto the slate it came from: give that slate\'s shareId.')
+    if (input.base !== undefined && !input.sync) throw problem(400, 'invalid_request', 'base goes with sync: true.')
     return input.shareId === undefined ? importNew(principal, input, model, ctx) : importInto(principal, input, model, ctx)
   },
 })

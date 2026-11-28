@@ -380,3 +380,32 @@ test('a workshop slate takes an import beside its lanes; a slate that keeps its 
   assert.equal(gallery.status, 400)
   assert.equal(gallery.body.error.code, 'invalid_operation_plan')
 })
+
+// ─── Canonical export and sync import (a repository keeps the diagram) ──
+
+test('canonical export reads back with sync: a relabel and a new line change only those, nothing moves', async (t) => {
+  const call = await serve(t, world.build(), world.authenticate)
+  const { token } = await world.mint()
+  const out = await call('/api/v1/slates/demo/mermaid?canonical=true', { token })
+  assert.equal(out.status, 200)
+  assert.equal(out.body.canonical, true)
+  assert.match(out.body.mermaid, /^%% slatebox:demo rev:0 hash:[0-9a-f]{16}\n/)
+  assert.match(out.body.mermaid, /\n {2}a\["Plan"\]\n {2}b\["Ship #quot;it#quot;"\]\n {2}a -->\|"then"\| b\n/)
+  const before = world.demo.nodes.map((n) => [n.options.id, n.options.xPos, n.options.yPos])
+  const edited = out.body.mermaid.replace('"Plan"', '"Plan it"') + '  b --> a\n'
+  const same = await call('/api/v1/slates/mermaid', { token, method: 'POST', body: { shareId: 'demo', mermaid: out.body.mermaid, sync: true, base: out.body.mermaid } })
+  assert.equal(same.status, 200, 'the same diagram is no change and no save')
+  assert.equal(world.demo.revision, 0)
+  const synced = await call('/api/v1/slates/mermaid', { token, method: 'POST', body: { shareId: 'demo', mermaid: edited, sync: true, base: out.body.mermaid } })
+  assert.equal(synced.status, 201)
+  assert.deepEqual(synced.body.updated, ['a'])
+  assert.deepEqual(synced.body.created, [])
+  assert.equal(synced.body.lines, 1)
+  assert.equal(world.demo.nodes.find((n) => n.options.id === 'a').options.text, 'Plan it')
+  assert.deepEqual(world.demo.nodes.map((n) => [n.options.id, n.options.xPos, n.options.yPos]), before)
+  assert.equal(world.runs.at(-1).plan.operations.length, 2, 'open canvases replay the two changes')
+  const dropped = await call('/api/v1/slates/mermaid', { token, method: 'POST', body: { shareId: 'demo', mermaid: 'flowchart LR\n  a["Plan it"]\n', sync: true, base: edited } })
+  assert.deepEqual(dropped.body.deleted, ['b'])
+  const refused = await call('/api/v1/slates/mermaid', { token, method: 'POST', body: { mermaid: edited, sync: true } })
+  assert.equal(refused.status, 400)
+})

@@ -9044,7 +9044,9 @@
         "queryParams": [
           "format",
           "styles",
-          "start"
+          "start",
+          "canonical",
+          "direction"
         ],
         "bodyParams": [],
         "idempotencyKey": "none"
@@ -9079,6 +9081,22 @@
             "type": "string",
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
             "description": "A Gantt chart's first day, YYYY-MM-DD (default today)."
+          },
+          "canonical": {
+            "type": "boolean",
+            "default": false,
+            "description": "Write the canonical flowchart a repository keeps: notes, frames and lines sorted by id, note ids as names, a fixed direction, and a first-line header \"%% slatebox:<shareId> rev:<n> hash:<h>\" (the hash changes only when the diagram does, never when notes move). slates.importMermaid with sync reads it back."
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "LR",
+              "TD",
+              "RL",
+              "BT"
+            ],
+            "default": "LR",
+            "description": "With canonical: the direction written."
           }
         },
         "required": [
@@ -9135,6 +9153,17 @@
             "items": {
               "type": "string"
             }
+          },
+          "canonical": {
+            "type": "boolean"
+          },
+          "hash": {
+            "type": "string",
+            "description": "With canonical: the hash of the diagram (the header's)."
+          },
+          "body": {
+            "type": "string",
+            "description": "With canonical: the text after the header."
           },
           "publicUrl": {
             "type": [
@@ -9194,7 +9223,9 @@
           "mermaid",
           "shareId",
           "name",
-          "projectId"
+          "projectId",
+          "sync",
+          "base"
         ],
         "idempotencyKey": "optional"
       },
@@ -9226,6 +9257,16 @@
             "maxLength": 64,
             "pattern": "^[A-Za-z0-9_-]+$",
             "description": "Make the new slate in this project or folder (without shareId; you need to be an editor of it)."
+          },
+          "sync": {
+            "type": "boolean",
+            "description": "With shareId: read a flowchart back onto the slate it came from (canonical export, format names = note ids) instead of drawing it beside: new names are drawn, changed text and shapes updated, lines connected, disconnected or relabeled; nothing is moved. Notes and lines named in base that the diagram drops are deleted; notes added on the slate since are never touched."
+          },
+          "base": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100000,
+            "description": "With sync: the diagram as last synced (what the slate and the file last agreed on). Only what it names may be deleted."
           },
           "mode": {
             "type": "string",
@@ -9294,6 +9335,34 @@
               "type": "string"
             },
             "description": "The ids of the notes drawn (frames first)."
+          },
+          "updated": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "With sync: the notes and lines changed."
+          },
+          "deleted": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "With sync: the notes removed."
+          },
+          "disconnected": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "With sync: the lines removed."
+          },
+          "kept": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "With sync: notes a person changed that the diagram would have changed, left as they are."
           },
           "warnings": {
             "type": "array",
