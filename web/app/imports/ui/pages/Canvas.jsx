@@ -1382,22 +1382,31 @@ export default function Canvas() {
   }, [phoneView, boardLoaded, viewOnly, commentOnly])
   // Turning to the phone view mid-selection: the selection's handles go with it.
   React.useEffect(() => { if (phoneView) slate.current?.v2?.clearSelection?.() }, [phoneView])
-  // Controls fixed to the canvas's corner (quick add) keep clear of the panel and the bar.
+  // Controls fixed to the canvas's corner (quick add) keep clear of the panel and the bar. The rows a
+  // board docks under the canvas on a phone (its "View only" strip, Print / Export PDF) sit inside the
+  // canvas's area: their height is --sb-board-footer, so the presence pill rises above them (cornerPlace).
   const canvasArea = React.useRef(null)
+  const canvasBody = React.useRef(null)
   React.useLayoutEffect(() => {
     const area = canvasArea.current
     if (!area) return undefined
     const root = document.documentElement.style
     const place = () => {
       const box = area.getBoundingClientRect()
+      const body = canvasBody.current?.getBoundingClientRect()
       root.setProperty('--sb-canvas-right', Math.max(0, Math.round(innerWidth - box.right)) + 'px')
       root.setProperty('--sb-canvas-bottom', Math.max(0, Math.round(innerHeight - box.bottom)) + 'px')
+      root.setProperty('--sb-board-footer', `${Math.max(0, Math.round(body ? box.bottom - body.bottom : 0))}px`)
     }
     place()
     const watch = new ResizeObserver(place)
     watch.observe(area)
+    if (canvasBody.current) watch.observe(canvasBody.current)
     addEventListener('resize', place)
-    return () => { watch.disconnect(); removeEventListener('resize', place); root.removeProperty('--sb-canvas-right'); root.removeProperty('--sb-canvas-bottom') }
+    return () => {
+      watch.disconnect(); removeEventListener('resize', place)
+      for (const name of ['--sb-canvas-right', '--sb-canvas-bottom', '--sb-board-footer']) root.removeProperty(name)
+    }
   }, [])
   // Ask Slatebox or the settings opening or closing changes the canvas's size in this same commit
   // (on a phone, closing the chat gives the board the screen back). The engine's view box takes the
@@ -1462,7 +1471,7 @@ export default function Canvas() {
       <Grid size={12} sx={{ display: 'flex', height: '100%', minHeight: 0, flexDirection: 'column', '@media (min-width:1000px)': { flexDirection: 'row' } }}>
         <div ref={canvasArea} data-creative-revision={workshopSlate && workshop.ready ? workshop.revision : undefined}
           style={{ position: 'relative', flex: '1 1 0', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ position: 'relative', flex: '1 1 0', minWidth: 0, minHeight: 0, display: 'flex' }}>
+          <div ref={canvasBody} style={{ position: 'relative', flex: '1 1 0', minWidth: 0, minHeight: 0, display: 'flex' }}>
             <div id={containerId} ref={canvasRef} style={{ position: 'relative', flex: '1 1 0', minWidth: 0, minHeight: 0, overflow: 'hidden',
               ...(overlayKind && { visibility: 'hidden', pointerEvents: 'none' }) }} />
             {/* An empty slate's welcome, in the middle of the canvas, until its first note or board. Not on a slate that

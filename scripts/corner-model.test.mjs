@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
-import { agentChanges, cornerModel, initialsOf, namesText } from '../web/app/imports/api/common/corner-model.mjs'
+import { agentChanges, cornerModel, cornerPlace, initialsOf, namesText } from '../web/app/imports/api/common/corner-model.mjs'
 
 const you = { key: 'you', name: 'You', you: true }
 const PEOPLE = [you, ...['Ana Ruiz', 'Ben Ott', 'Chen Li', 'Dee Park', 'Eli Moss'].map((name) => ({ key: name, name }))]
@@ -129,7 +129,9 @@ test('the corner is one pill: no full-width strip, no hard border, no floating I
   assert.match(corner, /role="group"/)
   assert.match(corner, /aria-label="On this slate"/)
   assert.match(corner, /var\(--sb-undo-redo-end/)
-  assert.match(corner, /var\(--sb-canvas-bottom/)
+  // Where it sits (on the canvas's foot, --sb-canvas-bottom) is cornerPlace's, tested below.
+  assert.match(corner, /\.\.\.place, display/)
+  assert.match(cornerPlace(true).bottom + cornerPlace(false).bottom, /^(?:.*var\(--sb-canvas-bottom.*){2}$/)
   const menu = src('web/app/imports/ui/components/presence/AgentsMenu.jsx')
   // A real menu (MUI Menu: arrow keys, Escape, focus back to the trigger) holding every agent control.
   assert.match(menu, /<Menu id=\{id\}/)
@@ -154,4 +156,31 @@ test('the corner is one pill: no full-width strip, no hard border, no floating I
   const canvas = src('web/app/imports/ui/pages/Canvas.jsx')
   assert.match(canvas, /<CornerPresence/)
   assert.doesNotMatch(canvas, /<AgentTasksPanel/)
+})
+
+test('on a phone the pill rises above a board\'s docked rows ("View only"), with the zoom control', () => {
+  const phone = cornerPlace(true)
+  const wide = cornerPlace(false)
+  for (const place of [phone, wide]) {
+    assert.match(place.left, /var\(--sb-undo-redo-end/)
+    assert.match(place.bottom, /var\(--sb-canvas-bottom, 0px\)/)
+    // The docked rows' height, kept by the canvas page: never a fixed number of pixels for them.
+    assert.match(place.bottom, /var\(--sb-board-footer, 0px\)/)
+  }
+  assert.match(phone.bottom, /var\(--slatebox-zoom-offset, 0px\)/)
+  assert.doesNotMatch(wide.bottom, /--slatebox-zoom-offset/)
+  // With no docked rows and no cookie notice it sits where it always did.
+  const resolve = (css, vars) => css.replace(/var\((--[a-z-]+), ([0-9]+)px\)/g, (_, name, fallback) => String(vars[name] ?? fallback) + 'px')
+  const px = (css) => Function('return ' + css.replace(/^calc\(/, '(').replace(/px/g, ''))()
+  assert.equal(px(resolve(phone.bottom, {})), 12)
+  assert.equal(px(resolve(wide.bottom, {})), 21)
+  // A 41px "View only" strip docked under a phone's canvas, and a cookie notice's room: above both.
+  assert.equal(px(resolve(phone.bottom, { '--sb-board-footer': 41, '--slatebox-zoom-offset': 56 })), 41 + 56 + 12)
+  const corner = src('web/app/imports/ui/components/presence/CornerPresence.jsx')
+  assert.match(corner, /cornerPlace\(narrow\)/)
+  // The canvas page measures the docked rows (the canvas's area less its body) into --sb-board-footer.
+  const canvas = src('web/app/imports/ui/pages/Canvas.jsx')
+  assert.match(canvas, /setProperty\('--sb-board-footer', /)
+  assert.match(canvas, /<div ref=\{canvasBody\}/)
+  assert.match(canvas, /<WorkshopStatus docked/)
 })

@@ -105,6 +105,20 @@ export function cornerModel({
   }
 }
 
+/**
+ * Where the pill sits, as CSS for `left` and `bottom` (position: fixed). Beside Undo and Redo
+ * (UndoRedoControls keeps where it ends in --sb-undo-redo-end), on the zoom control's baseline at the
+ * foot of the canvas (--sb-canvas-bottom, kept by the canvas page). The rows a board docks under the
+ * canvas on a phone (its "View only" strip, Print / Export PDF) are inside the canvas's area, so the
+ * pill also rises by their height (--sb-board-footer, kept by the canvas page; 0 with none) and never
+ * covers them. On a phone it follows the zoom control up past a cookie notice (--slatebox-zoom-offset).
+ */
+export function cornerPlace(narrow) {
+  return narrow
+    ? { left: 'calc(var(--sb-undo-redo-end, 4px) + 8px)', bottom: 'calc(var(--sb-canvas-bottom, 0px) + var(--sb-board-footer, 0px) + var(--slatebox-zoom-offset, 0px) + 12px)' }
+    : { left: 'calc(var(--sb-undo-redo-end, 8px) + 8px)', bottom: 'calc(var(--sb-canvas-bottom, 0px) + var(--sb-board-footer, 0px) + 21px)' }
+}
+
 /** "Google Drive joined" / "Google Drive left", for the polite announcement as agents come and go. */
 export function agentChanges(before, after) {
   const was = new Map(before.map((a) => [a.key, a.name]))

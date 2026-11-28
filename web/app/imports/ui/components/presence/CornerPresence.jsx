@@ -21,7 +21,7 @@ import { agentOrigin } from 'slateboxjs'
 import { collaborationUsers, huddleSpeaking } from '../../jotai/atoms'
 import { AgentDetails, inviteAvailableAtom, inviteRequestAtom, openAgentAtom, togglePaused, useRosterAgents } from '../AgentPresenceListener'
 import AgentTasksPanel, { agentTasksOpenAtom, useAgentTasks } from '../AgentTasksPanel'
-import { agentChanges, cornerModel } from '../../../api/common/corner-model.mjs'
+import { agentChanges, cornerModel, cornerPlace } from '../../../api/common/corner-model.mjs'
 import { pillColors, triggerSx } from './marks'
 import PeopleStack from './PeopleStack'
 import AgentStack, { AgentMarks } from './AgentStack'
@@ -136,11 +136,8 @@ export default function CornerPresence({ slate, localCollaborator = null, canEdi
       setMenuOpen(false)
     }
   }
-  // Beside Undo and Redo (UndoRedoControls keeps where it ends in --sb-undo-redo-end), on the zoom
-  // control's baseline at the foot of the canvas (--sb-canvas-bottom, kept by the canvas page).
-  const place = narrow
-    ? { left: 'calc(var(--sb-undo-redo-end, 4px) + 8px)', bottom: 'calc(var(--sb-canvas-bottom, 0px) + var(--slatebox-zoom-offset, 0px) + 12px)' }
-    : { left: 'calc(var(--sb-undo-redo-end, 8px) + 8px)', bottom: 'calc(var(--sb-canvas-bottom, 0px) + 21px)' }
+  // Beside Undo and Redo, on the zoom control's baseline, above a board's docked rows (cornerPlace).
+  const place = cornerPlace(narrow)
   const divider = <Box component="span" aria-hidden="true" sx={{ width: '1px', height: 20, bgcolor: colors.border, mx: 0.5, flex: 'none' }} />
   return (
     <>
