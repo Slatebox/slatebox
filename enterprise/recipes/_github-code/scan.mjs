@@ -22,7 +22,12 @@ export async function factsAt(github, repo, sha, { config = {}, stored = null } 
   const configKey = scanConfigKey(config)
   if (stored && stored.sha === sha && stored.configKey === configKey) return { ...stored, mode: 'same', changed: [], commits: [], skipped: [] }
   if (stored?.sha && stored.configKey === configKey) {
-    const cmp = await github.compare(repo, stored.sha, sha)
+    // A commit GitHub no longer has (history rewritten): a full scan instead.
+    const cmp = await github.compare(repo, stored.sha, sha).catch((error) => {
+      if (error?.code === 'not_found') return null
+      throw error
+    })
+    if (!cmp) return { ...(await fullScan(github, repo, sha, config)), configKey, commits: [], changed: [] }
     const relevant = cmp.files.filter((f) => wantedPath(f.path, config) || (f.previous && wantedPath(f.previous, config)))
     let context = stored.context
     const contextFiles = relevant.filter((f) => contextPath(f.path) || (f.previous && contextPath(f.previous)))

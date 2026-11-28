@@ -114,7 +114,8 @@ async function pullRequest(client, write) {
   if (Array.isArray(open) && open.length) {
     number = open[0].number
     if (open[0].title !== title || open[0].body !== body) await client.updatePull(repo, number, { title, body })
-  } else if (changed.length || existing) {
+  } else if (changed.length) {
+    // A pull request a person closed is not opened again for the same files: only for new changes.
     const made = await client.createPull(repo, { title, head: branch, base: info.default_branch, body, maintainer_can_modify: true })
     number = made.number
     opened = true
