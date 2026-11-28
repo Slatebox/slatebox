@@ -30,7 +30,7 @@ Meteor.methods({
     const owned = await Slates.find({ userId: memberId, orgId }, { fields: { _id: 1, shareId: 1, 'options.name': 1 } }).fetchAsync()
     const ids = owned.map(slate => slate._id)
     // The activity log keeps who was removed and each slate that went with them (there is no restore).
-    const removed = await Meteor.users.findOneAsync({ _id: memberId, orgId }, { fields: { profile: 1, emails: 1 } })
+    const removed = await Meteor.users.findOneAsync({ _id: memberId, orgId }, { fields: { profile: 1, emails: 1, createdAt: 1 } })
     await audit.record({ action: 'member.removed', orgId, target: { type: 'person', id: memberId, name: personLabel(removed) }, details: { count: ids.length } })
     for (const slate of owned) {
       await audit.record({ action: 'slate.deleted', orgId, target: { type: 'slate', id: slate.shareId || slate._id, name: slate.options?.name || 'Untitled slate' }, slateId: slate.shareId || slate._id, details: { reason: 'member removed' } })
@@ -48,7 +48,6 @@ Meteor.methods({
     await removePersonalData(memberId)
     // their tokens, presentations, AI keys and choices and passkeys, as users.delete does
     await removeAccountRows(memberId)
-    const removed = await Meteor.users.findOneAsync({ _id: memberId, orgId }, { fields: { _id: 1, createdAt: 1 } })
     await Meteor.users.removeAsync({ _id: memberId, orgId })
     // their uploaded files, in the background; one a team slate that stays still shows is kept (upload-removal.js)
     if (removed) await removeUploadsOfAccount(removed)
