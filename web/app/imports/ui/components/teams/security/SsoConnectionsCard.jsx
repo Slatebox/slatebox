@@ -195,7 +195,7 @@ export default function SsoConnectionsCard({ view, act, origin, noun }) {
       {view.connections.length === 0 && (
         <Box sx={card}>
           <Typography variant="body2">
-            {`Let ${noun} members sign in with your company's identity provider: Okta, Microsoft Entra ID, Google Workspace, or any OpenID Connect or SAML 2.0 provider. Free for every ${noun}.`}
+            {`Let ${noun} members sign in with your company's identity provider: Okta, Microsoft Entra ID, Google Workspace, or any OpenID Connect or SAML 2.0 provider.`}
           </Typography>
           {canAdd && <Box><Button variant="contained" disableElevation onClick={() => setDialog({ open: true, editing: null })} data-testid="sso-add">Connect an identity provider</Button></Box>}
         </Box>

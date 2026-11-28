@@ -449,6 +449,8 @@ test('Team settings has a Sign-in & security section for admins, and the sign-in
     assert.doesNotMatch(text, /\bAI\b/, `${file}: "agent", not "AI"`)
     assert.doesNotMatch(text, /\b(colour|organisation|behaviour|licence)\b/i, `${file}: US spelling`)
     assert.doesNotMatch(text, /\$\d|per month|subscription|upgrade/i, `${file}: no payment words`)
+    // Business on Cloud, free on self-host (owner 2026-11-27): the card never promises it free; BusinessGate says where it comes from
+    assert.doesNotMatch(text, /free for every/i, `${file}: no "free for every team" beside the Business notice`)
   }
   assert.equal(model.requireBlocker({ enabled: true, domains: [] }), 'Verify a domain first: single sign-on is required for the addresses of verified domains.')
   assert.deepEqual(model.SESSION_CHOICES.map((c) => c.hours), connections.SESSION_HOURS)
