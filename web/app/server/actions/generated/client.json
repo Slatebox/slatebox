@@ -7253,7 +7253,7 @@
       "name": "projects.slates",
       "id": "projects.slates",
       "title": "List project slates",
-      "summary": "List the slates in a project or folder, newest first, with each one's link: the folder's own and, unless nested is false, those in its folders too. Anyone with a role in the project may. Filter by name with q.",
+      "summary": "List the slates in a project or folder, newest first, with each one's link: the folder's own and, unless nested is false, those in its folders too. Anyone with a role in the project may, a drive link's holder too (linkKey, the part after /p/). Filter by name with q.",
       "kind": "read",
       "readOnly": true,
       "destructive": false,
@@ -7271,17 +7271,18 @@
         "queryParams": [
           "nested",
           "q",
-          "limit"
+          "limit",
+          "linkKey"
         ],
         "bodyParams": []
       },
-      "index": "projects.slates({projectId,nested?,q?,limit?}): List project slates",
+      "index": "projects.slates({projectId,nested?,q?,limit?,linkKey?}): List project slates",
       "types": [],
-      "dts": "declare namespace slatebox.projects {\n  /** List project slates. List the slates in a project or folder, newest first, with each one's link: the folder's own and, unless nested is false, those in its folders too. Anyone with a role in the project may. Filter by name with q. @scope projects:read */\n  function slates(input: {\n    /** A project (a drive) or one of its folders. (1–64 characters) */\n    projectId: string;\n    /** Include the slates in its folders. (default true) */\n    nested?: boolean;\n    /** Part of the slate name. (1–200 characters) */\n    q?: string;\n    /** (1 to 100, default 50) */\n    limit?: number;\n  }): Promise<{\n    slates: Array<{\n      shareId: string;\n      name: string;\n      description?: string;\n      visibility?: \"private\" | \"unlisted\" | \"public\";\n      owner: \"you\" | \"someone\";\n      projectId: string;\n      updated?: string | null;\n      url: string;\n      [key: string]: unknown;\n    }>;\n    [key: string]: unknown;\n  }>;\n}",
+      "dts": "declare namespace slatebox.projects {\n  /** List project slates. List the slates in a project or folder, newest first, with each one's link: the folder's own and, unless nested is false, those in its folders too. Anyone with a role in the project may, a drive link's holder too (linkKey, the part after /p/). Filter by name with q. @scope projects:read */\n  function slates(input: {\n    /** A project (a drive) or one of its folders. (1–64 characters) */\n    projectId: string;\n    /** Include the slates in its folders. (default true) */\n    nested?: boolean;\n    /** Part of the slate name. (1–200 characters) */\n    q?: string;\n    /** (1 to 100, default 50) */\n    limit?: number;\n    /** The key of a link to the project (/p/<key>). Not used by tokens. (16–64 characters) */\n    linkKey?: string;\n  }): Promise<{\n    slates: Array<{\n      shareId: string;\n      name: string;\n      description?: string;\n      visibility?: \"private\" | \"unlisted\" | \"public\";\n      owner: \"you\" | \"someone\";\n      projectId: string;\n      updated?: string | null;\n      url: string;\n      [key: string]: unknown;\n    }>;\n    [key: string]: unknown;\n  }>;\n}",
       "tool": {
         "name": "list_project_slates",
         "title": "List the slates in a project",
-        "description": "List the slates in one of the person's projects or folders, newest first, with each one's link.\n\nList project slates. List the slates in a project or folder, newest first, with each one's link: the folder's own and, unless nested is false, those in its folders too. Anyone with a role in the project may. Filter by name with q.",
+        "description": "List the slates in one of the person's projects or folders, newest first, with each one's link.\n\nList project slates. List the slates in a project or folder, newest first, with each one's link: the folder's own and, unless nested is false, those in its folders too. Anyone with a role in the project may, a drive link's holder too (linkKey, the part after /p/). Filter by name with q.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -7308,6 +7309,13 @@
               "minimum": 1,
               "maximum": 100,
               "default": 50
+            },
+            "linkKey": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "The key of a link to the project (/p/<key>). Not used by tokens."
             }
           },
           "required": [

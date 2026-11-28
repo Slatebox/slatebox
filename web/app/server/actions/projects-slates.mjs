@@ -7,7 +7,7 @@ export default defineAction({
   id: 'projects.slates',
   title: 'List project slates',
   description:
-    'List the slates in a project or folder, newest first, with each one\'s link: the folder\'s own and, unless nested is false, those in its folders too. Anyone with a role in the project may. Filter by name with q.',
+    'List the slates in a project or folder, newest first, with each one\'s link: the folder\'s own and, unless nested is false, those in its folders too. Anyone with a role in the project may, a drive link\'s holder too (linkKey, the part after /p/). Filter by name with q.',
   toolset: 'projects',
   kind: 'read',
   scope: 'projects:read',
@@ -20,6 +20,7 @@ export default defineAction({
       nested: { type: 'boolean', default: true, description: 'Include the slates in its folders.' },
       q: { type: 'string', minLength: 1, maxLength: 200, description: 'Part of the slate name.' },
       limit: { type: 'integer', minimum: 1, maximum: 100, default: 50 },
+      linkKey: { type: 'string', minLength: 16, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$', description: 'The key of a link to the project (/p/<key>). Not used by tokens.' },
     },
     required: ['projectId'],
     additionalProperties: false,
@@ -49,7 +50,7 @@ export default defineAction({
   },
   tool: { name: 'list_project_slates', title: 'List the slates in a project', description: 'List the slates in one of the person\'s projects or folders, newest first, with each one\'s link.' },
   async handler(principal, input, { deps }) {
-    const rows = await projectsOf(deps).listSlates(principal, input.projectId, { nested: input.nested !== false, limit: input.limit ?? 50, q: input.q })
+    const rows = await projectsOf(deps).listSlates(principal, input.projectId, { nested: input.nested !== false, limit: input.limit ?? 50, q: input.q, linkKey: input.linkKey || null })
     const origin = deps.appOrigin()
     return {
       slates: rows.map((row) => ({

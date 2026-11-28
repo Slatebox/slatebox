@@ -166,7 +166,7 @@ export async function getSlatesForUser(opts, user) {
     throw new Meteor.Error('invalid-argument', 'A slate is opened by its share id.')
   }
   // A drive link's key (/canvas/<id>?p=<key>) and a project list's project are strings too.
-  for (const key of ['projectKey', 'projectId']) {
+  for (const key of ['projectKey', 'linkKey', 'projectId']) {
     if (opts[key] !== undefined && opts[key] !== null && (typeof opts[key] !== 'string' || opts[key].length > 128)) {
       throw new Meteor.Error('invalid-argument', `${key} is a string.`)
     }
@@ -200,12 +200,16 @@ export async function getSlatesForUser(opts, user) {
     }
   } else if (user?._id) {
     // A project's slates (its page): the project, or with nested its folders too, for anyone with a
-    // role in it. No role: an empty list, as for a project that does not exist.
+    // role in it, a drive link's holder included: the project page sends the link's key as linkKey
+    // (DisplaySlates, as projects.get takes it), a canvas address as projectKey (?p=<key>). No role:
+    // an empty list, as for a project that does not exist.
     let projectIds
     if (opts.type === 'project') {
-      const role = opts.projectId ? await projectAccess.roleFor(user, opts.projectId, { linkKey: opts.projectKey || null }) : null
-      if (!role) return { slates: [], counts: { total: 0 } }
-      projectIds = await projectAccess.folderIds(opts.projectId, { nested: opts.nested === true })
+      projectIds = await projectAccess.listableProjectIds(user, opts.projectId, {
+        linkKey: opts.linkKey || opts.projectKey || null,
+        nested: opts.nested === true,
+      })
+      if (!projectIds.length) return { slates: [], counts: { total: 0 } }
     }
     const sFilter = await slateFilter({
       type: opts.type,

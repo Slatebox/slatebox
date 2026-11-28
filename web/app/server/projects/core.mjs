@@ -390,9 +390,11 @@ export function createProjectsCore({
     return { projectId, deleted: true, folders: childFolders.length, deletedSlates: 0, returnedSlates: 0, movedSlates: childSlates }
   }
 
-  async function listSlates(principal, projectId, { nested = true, limit = 50, q } = {}) {
+  // linkKey: a drive link's key (/p/<key>): its holder lists the drive's slates at the link's role,
+  // as projects.get opens the drive for them (never for a token).
+  async function listSlates(principal, projectId, { nested = true, limit = 50, q, linkKey = null } = {}) {
     const who = await caller(principal)
-    await withRole(who, projectId, 'open')
+    await withRole(who, projectId, 'open', linkKey)
     const ids = await folderIds(projectId, { nested })
     const selector = { projectId: { $in: ids } }
     if (q) selector['options.name'] = { $regex: escapeRegex(q), $options: 'i' }

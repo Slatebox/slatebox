@@ -78,10 +78,10 @@ const projectsApi = {
   update: async (input) => toProject(await call('projects.update', input)),
   /** @param {{projectId: string, moveContentsTo?: string}} input */
   remove: (input) => call('projects.delete', input),
-  /** @param {{projectId: string, folders?: boolean}} input
+  /** @param {{projectId: string, folders?: boolean, linkKey?: string}} input  linkKey: a drive link's key (/p/<key>)
    *  @returns {Promise<{slates: Array<{shareId: string, name: string, userId: string|null, lastSaved: string|null, projectId: string, url: string}>}>} */
-  slates: async ({ projectId, folders = true } = {}) => {
-    const answer = await call('projects.slates', { projectId, nested: folders !== false, limit: 100 })
+  slates: async ({ projectId, folders = true, linkKey = null } = {}) => {
+    const answer = await call('projects.slates', { projectId, nested: folders !== false, limit: 100, ...(linkKey && { linkKey }) })
     const me = Meteor.userId()
     return { slates: (answer?.slates || []).map((s) => ({ ...s, _id: s.shareId, userId: s.owner === 'you' ? me : null, lastSaved: s.updated })) }
   },

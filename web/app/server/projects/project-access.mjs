@@ -1,3 +1,4 @@
+/* eslint-disable no-underscore-dangle */
 // Loads the project input to the slate rule, once per question. Meteor-free, with injected stores
 // (raw MongoDB driver collections, or anything with findOne and find().toArray()):
 //   projects       the 'projects' collection (drives and folders)
@@ -45,21 +46,33 @@ export function createProjectAccess({ projects, projectAccess, users, isTeamAdmi
     return resolveProjectRole(drive, user?._id ? user : null, grants, { linkKey: token ? null : linkKey, memberOrgIds: orgIds, teamAdmin })
   }
 
+  // The project and, nested, every folder under it: the projects a list of its slates covers.
+  async function folderIds(projectId, { nested = true } = {}) {
+    if (!isId(projectId)) return []
+    const project = await projects.findOne({ _id: projectId }, { projection: { _id: 1, rootId: 1 } })
+    if (!project) return []
+    if (!nested) return [project._id]
+    const tree = await projects.find({ rootId: project.rootId }, { projection: { _id: 1, parentId: 1 } }).toArray()
+    const out = [project._id]
+    for (let i = 0; i < out.length; i += 1) for (const row of tree) if (row.parentId === out[i]) out.push(row._id)
+    return out
+  }
+
   return {
     driveOf,
-    // The project and, nested, every folder under it: the projects a list of its slates covers.
-    async folderIds(projectId, { nested = true } = {}) {
-      if (!isId(projectId)) return []
-      const project = await projects.findOne({ _id: projectId }, { projection: { _id: 1, rootId: 1 } })
-      if (!project) return []
-      if (!nested) return [project._id]
-      const tree = await projects.find({ rootId: project.rootId }, { projection: { _id: 1, parentId: 1 } }).toArray()
-      const out = [project._id]
-      for (let i = 0; i < out.length; i += 1) for (const row of tree) if (row.parentId === out[i]) out.push(row._id)
-      return out
-    },
+    folderIds,
     async roleFor(user, projectId, options = {}) {
       return roleIn(await driveOf(projectId), user, options)
+    },
+    // The projects a list of this project's slates covers for this person (the slates.get project
+    // page), or [] when they have no role in it. A drive link's key (/p/<key>) gives its holder the
+    // link's role, and so the drive's slates: a project role opens every slate in the drive on top
+    // of the slate's own sharing (methods/slate-role.mjs resolveSlateRole).
+    async listableProjectIds(user, projectId, { linkKey = null, token = false, nested = false } = {}) {
+      if (!user?._id || !isId(projectId)) return []
+      const role = await roleIn(await driveOf(projectId), user, { linkKey: typeof linkKey === 'string' && linkKey ? linkKey : null, token })
+      if (!role) return []
+      return folderIds(projectId, { nested })
     },
     // The role the slate's drive gives this person (null when the slate is in no drive).
     async slateProjectRole(board, user, { linkKey = null, token = false } = {}) {

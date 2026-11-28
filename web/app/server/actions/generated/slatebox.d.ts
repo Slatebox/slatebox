@@ -2107,7 +2107,7 @@ declare namespace slatebox.projects {
 }
 
 declare namespace slatebox.projects {
-  /** List project slates. List the slates in a project or folder, newest first, with each one's link: the folder's own and, unless nested is false, those in its folders too. Anyone with a role in the project may. Filter by name with q. @scope projects:read */
+  /** List project slates. List the slates in a project or folder, newest first, with each one's link: the folder's own and, unless nested is false, those in its folders too. Anyone with a role in the project may, a drive link's holder too (linkKey, the part after /p/). Filter by name with q. @scope projects:read */
   function slates(input: {
     /** A project (a drive) or one of its folders. (1–64 characters) */
     projectId: string;
@@ -2117,6 +2117,8 @@ declare namespace slatebox.projects {
     q?: string;
     /** (1 to 100, default 50) */
     limit?: number;
+    /** The key of a link to the project (/p/<key>). Not used by tokens. (16–64 characters) */
+    linkKey?: string;
   }): Promise<{
     slates: Array<{
       shareId: string;
