@@ -32,6 +32,7 @@ import ListItemText from '@mui/material/ListItemText'
 import DashboardIcon from '@mui/icons-material/Dashboard'
 import LibraryBooksIcon from '@mui/icons-material/LibraryBooks'
 import HubOutlinedIcon from '@mui/icons-material/HubOutlined'
+import FolderSpecialOutlinedIcon from '@mui/icons-material/FolderSpecialOutlined'
 import PaletteIcon from '@mui/icons-material/Palette'
 
 import SettingsIcon from '@mui/icons-material/Settings'
@@ -81,6 +82,7 @@ import { enterpriseState } from '../api/common/edition.mjs'
 import MoveToCloudButton from './components/selfhost/MoveToCloudButton'
 import usePhoneView from './common/usePhoneView'
 import MovedBanner from './components/selfhost/MovedBanner'
+import ProjectsNav from './components/projects/ProjectsNav'
 // logo color: #0F4C75
 const shrunkDrawerWidth = '50px !important'
 
@@ -280,6 +282,14 @@ export default function Main() {
       show: true,
     },
     {
+      // Projects: drives of slates, with folders, shared like a drive. The open menu lists them under it.
+      title: 'Projects',
+      path: '/projects',
+      icon: <FolderSpecialOutlinedIcon />,
+      show: signedIn && !loadedUser?.isAnonymous,
+      nested: (onNavigate) => <ProjectsNav key="projects-nav" onNavigate={onNavigate} />,
+    },
+    {
       // The shared library: smart components, slates and presentations anyone can use, signed in or not.
       title: 'Library',
       path: '/library',
@@ -341,13 +351,15 @@ export default function Main() {
             disableElevation startIcon={item.icon} sx={{ borderRadius: 6, py: 1, fontWeight: 700 }}>{item.title}</Button>
         </Box>
       }
-      return <Box component="li" key={item.path} sx={{ listStyle: 'none' }}><Tooltip placement="right" title={collapsed ? item.title : ''}>
+      const link = <Box component="li" key={item.path} sx={{ listStyle: 'none' }}><Tooltip placement="right" title={collapsed ? item.title : ''}>
         <ListItemButton component={Link} onClick={onNavigate} to={item.path} selected={isSelected}
           aria-current={isSelected ? 'page' : undefined} sx={rowSx}>
           <ListItemIcon sx={{ color: 'inherit' }}>{item.icon}</ListItemIcon>
           <ListItemText primary={item.title} sx={{ ml: -2, color: 'inherit' }} />
         </ListItemButton>
       </Tooltip></Box>
+      // A row with its own list under it (Projects: the person's drives), when the menu is open.
+      return item.nested && !collapsed ? [link, item.nested(onNavigate)] : link
     }
     const groups = [...new Set(drawerItems.filter((item) => item.group).map((item) => item.group))]
     return <List aria-label="Pages">

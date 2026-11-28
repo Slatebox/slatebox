@@ -45,6 +45,10 @@ const SimulateUrlAction = lazy(() => import('./components/SimulateUrlAction'))
 // The shared library: the public gallery and an item's page (signed out too), your own items, and the review queue.
 const Library = lazy(() => import('./pages/Library'))
 const Integrations = lazy(() => import('./pages/Integrations'))
+// Projects: every drive the person has, one project (or a folder in it), and a project's link.
+const Projects = lazy(() => import('./pages/Projects'))
+const Project = lazy(() => import('./pages/Project'))
+const ProjectLink = lazy(() => import('./pages/ProjectLink'))
 const LibraryItem = lazy(() => import('./pages/LibraryItem'))
 const MyLibrary = lazy(() => import('./pages/MyLibrary'))
 const LibraryReview = lazy(() => import('./pages/LibraryReview'))
@@ -153,6 +157,12 @@ function CanvasForSlate() {
   return <Canvas key={id} />
 }
 
+// A folder or another project opens afresh (its own list, paging and tab).
+function ProjectFor() {
+  const { projectId, folderId } = useParams()
+  return <Project key={`${projectId}/${folderId || ''}`} />
+}
+
 // /business?plan=monthly|yearly: the site's "Get Slatebox Business". The team page with the sheet
 // preselected; the team page asks a visitor to sign in or make a team first (pay-url.mjs).
 function GetBusiness() {
@@ -174,6 +184,9 @@ export default function SBRoutes() {
       />
       <Route path="/profile" element={<ProfileRoute />} />
       <Route path="/integrations" element={<PrivateRoute><Integrations /></PrivateRoute>} />
+      <Route path="/projects" element={<PrivateRoute><Projects /></PrivateRoute>} />
+      <Route path="/projects/:projectId/:folderId?" element={<PrivateRoute><ProjectFor /></PrivateRoute>} />
+      <Route path="/p/:accessKey" element={<ProjectLink />} />
       <Route path="/pro" element={<GetPro />} />
       <Route path="/business" element={<GetBusiness />} />
       <Route

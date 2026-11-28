@@ -44,6 +44,7 @@ import {
 } from '../jotai/atoms'
 import { Slates } from '../../api/common/models'
 import { Box } from '@mui/material'
+import { slatePathInProject } from './projects/projectsModel.mjs'
 import AppPage, { PAGE_SPACE } from '../common/AppPage'
 
 export default function DisplaySlates({
@@ -54,6 +55,14 @@ export default function DisplaySlates({
   cols,
   cellHeight,
   showDescription,
+  // type 'project': the drive or folder to list (projectId), the drive's link key when it was opened
+  // by its link, the project page's own title row (header), what an empty project offers (empty),
+  // and whether this person may add slates there (canAdd; the page's own Add a slate does it).
+  projectId = null,
+  linkKey = null,
+  projectRole = null,
+  header = null,
+  empty: projectEmpty = null,
 }) {
   const history = useNavigate()
   const location = useLocation()
@@ -101,6 +110,7 @@ export default function DisplaySlates({
     cols,
     cellHeight,
     showDescription,
+    projectId,
   ])
 
   useEffect(() => {
@@ -117,7 +127,8 @@ export default function DisplaySlates({
           limit: slateFilter.slateRecordsPerPage,
           type,
           filterString: slateFilter.filterString,
-          private: slateFilter.privateOnly,
+          private: type === 'project' ? false : slateFilter.privateOnly,
+          ...(type === 'project' && { projectId, ...(linkKey && { linkKey }) }),
         },
         (err, nextSlates) => {
           if (nextSlates) {
@@ -281,6 +292,12 @@ export default function DisplaySlates({
       subHeaderMessage = getTranslation('slates', 'teamSlatesSubHeader')
       break
     }
+    case 'project': {
+      // The project page draws its own title (ProjectHeader): the row here keeps search and paging.
+      headerMessage = ''
+      subHeaderMessage = ''
+      break
+    }
     default:
       break
   }
@@ -320,6 +337,7 @@ export default function DisplaySlates({
       data-slates-page={type}
       header={(
         <Box
+          data-slates-header=""
           sx={{
             position: 'sticky',
             top: 0,
@@ -329,9 +347,10 @@ export default function DisplaySlates({
             borderColor: 'divider',
           }}
         >
+          {header}
           <Title
             key={titleKey}
-            showAdd={!phoneView}
+            showAdd={!phoneView && type !== 'project'}
             showSearch
             searchOptions={tags.map((t) => t.tag)}
             // New, among slates already made: a blank slate (the first run is for Create slate before any).
@@ -392,6 +411,8 @@ export default function DisplaySlates({
             <Typography variant="body1" color="text.secondary">{SLATES_FAILED_COPY.line}</Typography>
             <Button size="small" onClick={() => setRerender(Random.id())}>{SLATES_FAILED_COPY.retry}</Button>
           </Box>
+        ) : view === 'empty' && type === 'project' && projectEmpty && !slateFilter.filterString ? (
+          projectEmpty
         ) : view === 'empty' ? (
           <EmptyState variant="empty" title={empty.title} body={empty.body} action={empty.action}
             secondary={empty.secondary} onClear={empty.clear ? clearFilter : undefined} />
@@ -412,7 +433,7 @@ export default function DisplaySlates({
               const name = slate.options?.name || t('slates.defaultNewSlateName')
               function openSlate() {
                 setMainDrawerOpen(false)
-                history(`/canvas/${slate.shareId}`)
+                history(type === 'project' ? slatePathInProject(slate.shareId, linkKey) : `/canvas/${slate.shareId}`)
               }
               return (
                 <Box component="li" key={slate.shareId} sx={{ minWidth: 0, listStyle: 'none', pb: 1 }}>
@@ -438,8 +459,8 @@ export default function DisplaySlates({
                       </Typography>
                     </Box>
                     {/* A phone views slates: no Delete, privacy or selection on its cards (phoneView.mjs). */}
-                    {!phoneView && <SlateMenu slate={slate} />}
-                    {type !== 'team' && !phoneView && (
+                    {!phoneView && <SlateMenu slate={slate} projectRole={projectRole} />}
+                    {type === 'mine' && !phoneView && (
                       <Checkbox size="small" checked={isSlateChecked(slate.options?.id)} inputProps={{ 'aria-label': `Select ${name}` }}
                         onChange={e => addSlateToChecked(slate, e.target.checked)} />
                     )}

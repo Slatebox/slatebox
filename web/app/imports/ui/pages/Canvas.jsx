@@ -1697,6 +1697,11 @@ export default function Canvas() {
           readSelection={() => selectedOwnNotes().map((n) => n.options?.id).filter(Boolean)}
           readView={() => visibleCanvasArea(slate.current, canvasArea.current)} chatOpen={Boolean(sheetOpen)} />
       )}
+      {/* Notes recipes keep up to date on this slate, and Make it mine (enterprise code; nothing elsewhere). */}
+      {slate.current && !asEmbed && Meteor.userId() && (
+        <EnterpriseSlot name="canvas.recipes" slate={slate.current} canEdit={!viewOnly && !commentOnly}
+          readSelection={() => selectedOwnNotes().map((n) => n.options?.id).filter(Boolean)} />
+      )}
     </Grid>
   )
 }

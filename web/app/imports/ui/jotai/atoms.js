@@ -97,6 +97,8 @@ export const currentPresentation = atom({
 })
 
 export const slateRererender = atom(null)
+// Bumped after a project is made, renamed, shared or deleted: the sidebar and project pages ask again.
+export const projectsVersion = atom(0)
 
 // canvas
 export const onCanvas = atom(false)

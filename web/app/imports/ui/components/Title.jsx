@@ -98,7 +98,8 @@ export default function Title({
         <Grid size={{ xs: 'grow', md: showAdd ? 3 : 5 }} sx={{ minWidth: 0 }}>
           <Grid container alignItems="center" justifyContent="flex-start" sx={{ minWidth: 0 }}>
             <Grid sx={{ minWidth: 0, maxWidth: '100%' }}>
-              <Typography variant="h5" component="h1" noWrap sx={{ fontWeight: 700, letterSpacing: '-.01em' }}>{headerMessage || ''}</Typography>
+              {/* A page that draws its own title (a project) passes none: no empty heading. */}
+              {headerMessage && <Typography variant="h5" component="h1" noWrap sx={{ fontWeight: 700, letterSpacing: '-.01em' }}>{headerMessage}</Typography>}
             </Grid>
             {subHeaderMessage?.trim() && (
               <Grid size={12}>

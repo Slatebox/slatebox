@@ -44,7 +44,8 @@ const linkButton = (item, variant) => (
     sx={{ borderRadius: 6, px: 3 }}>{item.label}</Button>
 )
 
-export default function EmptyState({ variant = 'empty', title, body, action, secondary, onClear, headingLevel = 'h2', fill = false }) {
+// `children`: the page's own buttons beside the links (a project's Move slates here opens a dialog).
+export default function EmptyState({ variant = 'empty', title, body, action, secondary, onClear, headingLevel = 'h2', fill = false, children = null }) {
   return (
     <Box role={fill ? undefined : 'status'} sx={{
       display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 1.5,
@@ -56,11 +57,12 @@ export default function EmptyState({ variant = 'empty', title, body, action, sec
         {title}
       </Typography>
       {body && <Typography sx={{ color: 'text.secondary', fontSize: 16, lineHeight: 1.5, maxWidth: 440 }}>{body}</Typography>}
-      {(action || secondary || onClear) && (
+      {(action || secondary || onClear || children) && (
         <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 1.25, mt: 1.5 }}>
           {action && linkButton(action, 'contained')}
           {secondary && linkButton(secondary, 'outlined')}
           {onClear && <Button variant="outlined" color="primary" size="large" sx={{ borderRadius: 6, px: 3 }} onClick={onClear}>Clear the filter</Button>}
+          {children}
         </Box>
       )}
     </Box>
@@ -77,4 +79,5 @@ EmptyState.propTypes = {
   onClear: PropTypes.func,
   headingLevel: PropTypes.string,
   fill: PropTypes.bool,
+  children: PropTypes.node,
 }

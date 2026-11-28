@@ -79,7 +79,8 @@ const saveSlate = async (opts) => {
         try {
           await Meteor.callAsync(
             CONSTANTS.methods.slates.update,
-            { slate, guestCollaboratorId }
+            // projectId: a new slate's first save only, made from a project (createSlate.js)
+            { slate, guestCollaboratorId, ...(uopts.projectId && { projectId: uopts.projectId }) }
           )
           // uopts.pkg.dated = results
           // Collaboration.insert(uopts.pkg)
